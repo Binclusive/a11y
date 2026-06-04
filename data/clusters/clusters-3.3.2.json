@@ -1,0 +1,64 @@
+{
+  "sc": "3.3.2",
+  "clusters": [
+    {
+      "id": "3.3.2-input-no-visible-label",
+      "wcag": ["3.3.2"],
+      "component": "form input",
+      "failureShape": "A form input (search box, text field, combobox) has no visible, programmatically associated label and relies on a placeholder for its name, so the label disappears on input and is unreliable for assistive tech.",
+      "fix": "Give every input a persistent visible <label> associated by id, or an aria-label when a visible label isn't possible. Never use placeholder text as the only label.",
+      "journeyTags": ["form-submission", "search", "registration"]
+    },
+    {
+      "id": "3.3.2-instructions-or-constraint-missing",
+      "wcag": ["3.3.2"],
+      "component": "constrained input",
+      "failureShape": "An input with a format or length constraint (a 9-digit account number, a phone number split into single-digit boxes) provides no instructions or per-field labels, so users don't know the required format and error correction is hard.",
+      "fix": "Provide visible instructions and constraints for the input (expected format, length), label each sub-field if the input is split, and prefer a single field that accepts the whole value to support autofill and easy correction.",
+      "journeyTags": ["form-submission", "registration", "checkout"]
+    },
+    {
+      "id": "3.3.2-label-not-unique-or-wrong",
+      "wcag": ["3.3.2"],
+      "component": "form input label",
+      "failureShape": "Two inputs share the same accessible name, or a label contains a typo, so screen-reader users can't distinguish the fields or get a confusing name.",
+      "fix": "Give each input a unique, descriptive, correctly spelled label (e.g. \"Origin city\" vs \"Destination city\") so fields are distinguishable.",
+      "journeyTags": ["form-submission", "booking", "search"]
+    },
+    {
+      "id": "3.3.2-required-state-not-indicated",
+      "wcag": ["3.3.2"],
+      "component": "required / optional field",
+      "failureShape": "A field's required (or optional) state isn't conveyed to assistive tech — a mandatory consent checkbox lacks a required indication — so users don't know which fields they must complete.",
+      "fix": "Mark required fields with the required attribute / aria-required=\"true\" and indicate the requirement in the visible label. Label optional fields explicitly when the default expectation is unclear.",
+      "journeyTags": ["registration", "consent", "form-submission"]
+    }
+  ],
+  "assignments": {
+    "avt_01knj1m9cv1pwwmpna2qs1rf7g": "3.3.2-input-no-visible-label",
+    "avt_01knmfgwske8ye4weckkyx5e2v": "3.3.2-instructions-or-constraint-missing",
+    "avt_01knmfgxs15q6dtzyc040c5ka1": "3.3.2-input-no-visible-label",
+    "avt_01knmg6fahgdb1hdrs9dgf688b": "3.3.2-input-no-visible-label",
+    "avt_01kp682wvh5k2e6sb1r09k86qj": "3.3.2-input-no-visible-label",
+    "avt_01kp6zd8ftxy49rhpqj0e3q0jt": "3.3.2-input-no-visible-label",
+    "avt_01kp84b97pypqkns17dzmtben0": "3.3.2-input-no-visible-label",
+    "avt_01kpdt5k483z1w3mp1345kw0jd": "3.3.2-input-no-visible-label",
+    "avt_01kpg5a8pfps84deqh5sx1v94m": "3.3.2-input-no-visible-label",
+    "avt_01kpqrgvyf9b3x20c15qqz42nb": "3.3.2-input-no-visible-label",
+    "avt_01kpv17fg16a5n8kntxczj9s0c": "3.3.2-label-not-unique-or-wrong",
+    "avt_01kq6zyhgtsk89tqqsk0hdh4px": "3.3.2-input-no-visible-label",
+    "avt_01kq76zv66gzcz2rsnnhe8wyvq": "3.3.2-label-not-unique-or-wrong",
+    "avt_01kq7703ht5tyd8681rt5gr4c6": "3.3.2-instructions-or-constraint-missing",
+    "avt_01kq98vxabhz915jvsdf3vebdp": "3.3.2-instructions-or-constraint-missing",
+    "avt_01kr1b16ar6gk499ktcx4s2bra": "3.3.2-input-no-visible-label",
+    "avt_01kr4anykxa89wgja5vzqvrm5d": "3.3.2-input-no-visible-label",
+    "avt_01krgdhyhny9z2nypwj3bwf4v3": "3.3.2-input-no-visible-label",
+    "avt_01krhr3q27atyn8v14bwxbc42e": "3.3.2-instructions-or-constraint-missing",
+    "avt_01kryjxpyxfwh662qyanth8792": "3.3.2-input-no-visible-label",
+    "avt_01ks6tha25hvdsgb0v02fjsqmb": "3.3.2-input-no-visible-label",
+    "avt_01ks6wrtjv3vw1snmzdf8xg7jx": "3.3.2-input-no-visible-label",
+    "avt_01ks6ydcvpn0y82wcy7egrwscg": "3.3.2-required-state-not-indicated",
+    "avt_01ks6z04nkarmv299ys8q15yvc": "3.3.2-required-state-not-indicated",
+    "avt_01ks6z0jwjv6bqzqtbty898x2w": "3.3.2-required-state-not-indicated"
+  }
+}

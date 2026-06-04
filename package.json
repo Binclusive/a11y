@@ -1,0 +1,37 @@
+{
+  "name": "@binclusive/a11y-checker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local accessibility checker for React/TSX, grounded in a real-world audit corpus. Runs entirely on your machine — no network, no upload.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "bin": {
+    "a11y-checker": "./src/cli.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "scan": "tsx ./src/cli.ts check",
+    "mcp": "tsx ./src/mcp.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.26.0",
+    "@typescript-eslint/parser": "^8.21.0",
+    "eslint": "^9.18.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "tsx": "^4.21.0",
+    "typescript": "5.8.3",
+    "zod": "4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.5",
+    "vitest": "3.0.7"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}

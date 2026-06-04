@@ -1,0 +1,73 @@
+{
+  "_meta": {
+    "note": "ANONYMIZED, English, k>=3-org distilled patterns from Binclusive's dynamic-audit corpus. Failure-shapes clustered offline by LLM (frozen in data/clusters/), gated k>=3-distinct-org and anonymized by deterministic code. Contains NO customer identifiers (org/project ids, elements, urls stripped; frequency as tier only). Regenerate by re-running the distiller.",
+    "scope": ["1.3.1"],
+    "corpusFindings": 647,
+    "corpusOrgs": 27
+  },
+  "patterns": [
+    {
+      "id": "1.3.1-form-control-no-programmatic-label",
+      "wcag": ["1.3.1"],
+      "component": "form input",
+      "failureShape": "A form input (text field, combobox, date picker, textarea) has no programmatically associated label — it relies on a placeholder or nearby visual text — so assistive tech announces it without a name or with the wrong name.",
+      "fix": "Associate every input with a real label: a <label for> matching the input id, or aria-label / aria-labelledby. Never rely on placeholder as the accessible name. For custom comboboxes, also link the visible label to the widget.",
+      "frequencyTier": "very-common",
+      "journeyTags": ["browse-discovery", "sign-in", "checkout", "search"]
+    },
+    {
+      "id": "1.3.1-heading-structure-broken",
+      "wcag": ["1.3.1"],
+      "component": "page headings",
+      "failureShape": "The page's top-level heading structure is wrong: no H1, multiple H1s, the page starts at H2, or visually prominent headings are not marked up as headings at all — so screen-reader users get no reliable map of the page.",
+      "fix": "Give each page exactly one H1 that names its main topic, mark every visual heading with a real heading tag, and reserve lower levels (H2–H6) for subsections. Don't use multiple H1s for sibling sections.",
+      "frequencyTier": "very-common",
+      "journeyTags": ["browse-discovery", "product-detail", "form-submission", "checkout"]
+    },
+    {
+      "id": "1.3.1-content-not-in-a11y-tree",
+      "wcag": ["1.3.1"],
+      "component": "main content region",
+      "failureShape": "Content that is visible on screen (article text, cards, list items, prices, navigation) is missing from the accessibility tree, so screen-reader users cannot reach or hear it — often because a wrapper carries aria-hidden=\"true\", display is mismanaged on injected content, or dynamic content never renders into the tree.",
+      "fix": "Make sure meaningful content is exposed to assistive tech: never put aria-hidden=\"true\" on a container that holds real content, render route-changed/dynamically loaded content into the DOM and accessibility tree, and verify the main region is reachable in screen-reader browse mode. Manage focus to newly revealed content.",
+      "frequencyTier": "common",
+      "journeyTags": ["browse-discovery", "form-submission", "checkout", "search"]
+    },
+    {
+      "id": "1.3.1-skipped-heading-levels",
+      "wcag": ["1.3.1"],
+      "component": "heading hierarchy",
+      "failureShape": "Heading levels are non-sequential — the page jumps levels (e.g. H1 to H3, H2 to H6) or nests them out of order, so the heading outline misrepresents the document structure.",
+      "fix": "Nest headings sequentially without skipping levels (H1 then H2 then H3…). Pick the level by the section's place in the outline, not by its visual size; use CSS for sizing.",
+      "frequencyTier": "common",
+      "journeyTags": ["browse-discovery", "registration", "consent", "account-management"]
+    },
+    {
+      "id": "1.3.1-list-not-marked-up",
+      "wcag": ["1.3.1"],
+      "component": "list of items",
+      "failureShape": "A visual list (navigation groups, benefits, cards, track lists) is built from generic elements instead of list markup, so screen-reader users don't hear it as a list or get an item count.",
+      "fix": "Mark up lists with <ul>/<ol> and <li> so assistive tech announces the list and its length. Group each repeated item in its own <li>.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["account-management", "browse-discovery", "search", "content-consumption"]
+    },
+    {
+      "id": "1.3.1-missing-landmarks",
+      "wcag": ["1.3.1"],
+      "component": "page landmarks",
+      "failureShape": "The page lacks landmark regions (no <main>, <nav>, <header>, or <footer>), so screen-reader users can't jump to the primary content or navigate by region.",
+      "fix": "Wrap major page sections in HTML5 landmarks: <main> for primary content, <nav> for navigation, <header>/<footer> (banner/contentinfo) for the page chrome. One main landmark per page.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["navigation", "checkout", "browse-discovery", "form-submission"]
+    },
+    {
+      "id": "1.3.1-tabular-data-no-table",
+      "wcag": ["1.3.1"],
+      "component": "tabular data",
+      "failureShape": "Tabular data (prices, rates, schedules, comparisons) is built from <div>s or plain text instead of a real table, or a table lacks header semantics, so screen-reader users can't tie a value to its row/column header.",
+      "fix": "Mark up tabular data with a semantic <table>: <thead> with <th scope> header cells, <tbody> with <td> data cells, and a <caption> naming the table's purpose. Don't fake tables with divs.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["product-detail", "content-consumption", "browse-discovery"]
+    }
+  ]
+}

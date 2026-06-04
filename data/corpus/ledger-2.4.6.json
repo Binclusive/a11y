@@ -1,0 +1,17 @@
+{
+  "unmappableCriterion": 2,
+  "unclassified": 0,
+  "belowK": [
+    {
+      "id": "2.4.6-heading-misused-for-paragraph",
+      "orgs": 1,
+      "findings": 1
+    },
+    {
+      "id": "2.4.6-non-descriptive-heading",
+      "orgs": 1,
+      "findings": 1
+    }
+  ],
+  "scOutOfScope": 638
+}

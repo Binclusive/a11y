@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      // Own-source alias: `@app/...` maps INTO this repo's own `src/`.
+      // It must be treated as own code, NOT a third-party design system.
+      "@app/*": ["src/*"],
+      // A re-pointer to an installed package — NOT own source, left alone.
+      "@vendor/*": ["node_modules/@vendor/*"]
+    }
+  }
+}

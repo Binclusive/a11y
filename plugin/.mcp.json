@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "binclusive-a11y": {
+      "command": "npx",
+      "args": ["-y", "@binclusive/a11y", "mcp"]
+    }
+  }
+}

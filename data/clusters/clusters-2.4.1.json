@@ -1,0 +1,44 @@
+{
+  "sc": "2.4.1",
+  "clusters": [
+    {
+      "id": "2.4.1-skip-link-missing",
+      "wcag": ["2.4.1"],
+      "component": "skip link",
+      "failureShape": "The page has no \"skip to main content\" link (or other bypass mechanism), so keyboard and screen-reader users must tab through the entire navigation/header on every page to reach the main content.",
+      "fix": "Add a \"Skip to main content\" link as the first focusable element on the page, targeting the id of the main content region. Make it visible on focus.",
+      "journeyTags": ["navigation", "browse-discovery"]
+    },
+    {
+      "id": "2.4.1-skip-link-broken",
+      "wcag": ["2.4.1"],
+      "component": "skip link target",
+      "failureShape": "A \"skip to main content\" link exists but doesn't move focus when activated — focus stays on the link — so the bypass doesn't actually work.",
+      "fix": "Point the skip link's href at the id of the main content container and give that target tabindex=\"-1\" so the browser moves focus into it on activation.",
+      "journeyTags": ["navigation", "browse-discovery"]
+    },
+    {
+      "id": "2.4.1-skip-link-not-first",
+      "wcag": ["2.4.1"],
+      "component": "skip link order",
+      "failureShape": "The skip link is present but not the first focusable element — it's preceded by cookie-banner buttons or a third-party tool — so users tab through other controls before reaching the bypass.",
+      "fix": "Place the skip link first in the DOM/tab order, ahead of cookie banners and injected widgets, so it's the very first thing a keyboard user reaches.",
+      "journeyTags": ["navigation", "consent"]
+    }
+  ],
+  "assignments": {
+    "avt_01kngsdn9xteke0xa9v0mm601z": "2.4.1-skip-link-missing",
+    "avt_01kngx2azx03tv2ramy6229s9m": "2.4.1-skip-link-missing",
+    "avt_01knpvet5d0ebb98pwasva6hpt": "2.4.1-skip-link-missing",
+    "avt_01kp6zfayr883kgtw3jmxxg8cy": "2.4.1-skip-link-missing",
+    "avt_01kq70svr0xw7m959nv9akcg6b": "2.4.1-skip-link-broken",
+    "avt_01kq99ebd6h22bfkhgsm5ypn9v": "2.4.1-skip-link-broken",
+    "avt_01kqacvywfdbsf90vqttyn1j9g": "2.4.1-skip-link-broken",
+    "avt_01krey2y4ytr19q75vck59m6q8": "2.4.1-skip-link-missing",
+    "avt_01krg9qnekffa2jfecqnbn966t": "2.4.1-skip-link-missing",
+    "avt_01krjccf242tkevyrtrczgw2yj": "2.4.1-skip-link-broken",
+    "avt_01krjdbht0zpq0w9eg4qfr99ce": "2.4.1-skip-link-not-first",
+    "avt_01kryjtcez3nqj30s3r55825t8": "2.4.1-skip-link-missing",
+    "avt_01ksf41xeqcrh6tv1h5h6ap76v": "2.4.1-skip-link-broken"
+  }
+}

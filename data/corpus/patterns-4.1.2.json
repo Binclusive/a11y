@@ -1,0 +1,118 @@
+{
+  "_meta": {
+    "note": "ANONYMIZED, English, k>=3-org distilled patterns from Binclusive's dynamic-audit corpus. Failure-shapes clustered offline by LLM (frozen in data/clusters/), gated k>=3-distinct-org and anonymized by deterministic code. Contains NO customer identifiers (org/project ids, elements, urls stripped; frequency as tier only). Regenerate by re-running the distiller.",
+    "scope": ["4.1.2"],
+    "corpusFindings": 647,
+    "corpusOrgs": 27
+  },
+  "patterns": [
+    {
+      "id": "4.1.2-button-no-name",
+      "wcag": ["4.1.2"],
+      "component": "icon-only button",
+      "failureShape": "A button (often icon-only or with only visual content) exposes no accessible name, so assistive tech announces it as an unlabeled \"button\".",
+      "fix": "Give every button discernible text: visible text content, or an aria-label / aria-labelledby for icon-only buttons. Prefer a native <button> over a clickable <div>/<span>.",
+      "frequencyTier": "common",
+      "journeyTags": ["browse-discovery", "checkout", "registration", "search"]
+    },
+    {
+      "id": "4.1.2-decorative-icon-announced",
+      "wcag": ["4.1.2"],
+      "component": "decorative icon / glyph",
+      "failureShape": "Decorative icons, icon-font glyphs, or raw unicode characters are announced literally (as character codes or symbol names), polluting a control's accessible name or the reading order.",
+      "fix": "Mark decorative icons and separator glyphs aria-hidden=\"true\". Replace raw unicode used as icons with a properly labeled icon element, and give any meaningful icon a text alternative.",
+      "frequencyTier": "common",
+      "journeyTags": ["browse-discovery", "search", "product-detail", "form-submission"]
+    },
+    {
+      "id": "4.1.2-form-control-no-name",
+      "wcag": ["4.1.2"],
+      "component": "custom form control",
+      "failureShape": "A form control (custom select, combobox, switch, radio, checkbox, slider, date picker, quantity stepper) has no programmatic name, or relies on its current value/placeholder, so assistive tech announces it without a label.",
+      "fix": "Give every form control a programmatic name: a <label> associated by id (not placeholder-only), or aria-label / aria-labelledby. For custom controls, also expose the correct role and state.",
+      "frequencyTier": "common",
+      "journeyTags": ["checkout", "form-submission", "product-detail", "registration"]
+    },
+    {
+      "id": "4.1.2-link-no-name",
+      "wcag": ["4.1.2"],
+      "component": "icon-only link",
+      "failureShape": "A link exposes no accessible name (icon-only, logo, image-only, or empty), so its purpose and destination are not conveyed.",
+      "fix": "Give every link discernible text or an aria-label that names the destination. For image links, the image needs alt text that describes where the link goes. Remove empty placeholder links.",
+      "frequencyTier": "common",
+      "journeyTags": ["product-detail", "registration", "navigation", "checkout"]
+    },
+    {
+      "id": "4.1.2-selected-or-current-state-missing",
+      "wcag": ["4.1.2"],
+      "component": "custom tab / toggle / current item",
+      "failureShape": "A custom tab, toggle, slider indicator, or current navigation/language item does not expose its selected/pressed/current state programmatically, so assistive tech can't tell which item is active.",
+      "fix": "Expose state on custom widgets: aria-selected=\"true\" on the active tab, aria-pressed on toggles, or aria-current=\"page\"/\"true\" on the current nav, language, or slide. Keep the attribute in sync as the active item changes.",
+      "frequencyTier": "common",
+      "journeyTags": ["checkout", "browse-discovery", "form-submission", "promotion"]
+    },
+    {
+      "id": "4.1.2-wrong-role-for-control",
+      "wcag": ["4.1.2"],
+      "component": "clickable element with no interactive role",
+      "failureShape": "An interactive control is built from a non-interactive element (a link, div, span, image, or heading acting as a button, tab, or toggle), so assistive tech announces the wrong role — or none — and keyboard users can't operate it.",
+      "fix": "Use the right element for the behavior: a native <button> for actions, real tabs (role=\"tablist\"/\"tab\"/\"tabpanel\"), or at minimum the correct role plus keyboard handling and tabindex. Prefer native HTML over re-roled divs/links.",
+      "frequencyTier": "common",
+      "journeyTags": ["browse-discovery", "checkout", "registration", "booking"]
+    },
+    {
+      "id": "4.1.2-aria-hidden-hides-focusable",
+      "wcag": ["4.1.2"],
+      "component": "container with aria-hidden",
+      "failureShape": "A container is marked aria-hidden=\"true\" but still contains focusable/interactive descendants (often the page chrome behind an open modal), so keyboard and screen-reader users reach controls that are supposed to be hidden.",
+      "fix": "Never put aria-hidden=\"true\" on an element that contains focusable content. When a modal is open, mark sibling regions inert (which also removes them from the tab order) rather than aria-hidden alone, or remove the focusable children from the tab order.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["product-detail", "browse-discovery", "search", "navigation"]
+    },
+    {
+      "id": "4.1.2-control-not-in-a11y-tree",
+      "wcag": ["4.1.2"],
+      "component": "interactive control",
+      "failureShape": "An interactive control (search icon, language switcher, listing, menu toggle) is missing from the accessibility tree and tab order entirely, so it cannot be detected or operated by screen-reader or keyboard users — sometimes due to a server block or severe performance issues.",
+      "fix": "Ensure interactive controls render as real <button>/<a> elements present in the DOM and accessibility tree, reachable in browse mode and the tab order. Don't gate critical UI behind aria-hidden, role=\"presentation\", or scripts that never expose semantics.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["browse-discovery", "registration", "navigation"]
+    },
+    {
+      "id": "4.1.2-expanded-state-missing",
+      "wcag": ["4.1.2"],
+      "component": "disclosure / menu / accordion trigger",
+      "failureShape": "A trigger that shows/hides content (menu, dropdown, accordion, disclosure, \"show more\") does not expose its expanded/collapsed state or that it has a popup, so users don't know it's openable or whether it's open.",
+      "fix": "Put aria-expanded=\"true|false\" on the trigger and toggle it on open/close; add aria-haspopup for menus/dialogs. Associate the trigger with the controlled region via aria-controls. Use a native <button> as the trigger.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["navigation", "search", "sign-in", "promotion"]
+    },
+    {
+      "id": "4.1.2-invalid-role-or-aria",
+      "wcag": ["4.1.2"],
+      "component": "custom widget with wrong ARIA",
+      "failureShape": "A custom widget uses an invalid or contradictory role/ARIA: role=\"presentation\" on an interactive iframe, multiple tabs marked aria-selected at once, a concatenated or wrong accessible name, a dialog with no name, or state attributes leaking between controls.",
+      "fix": "Use roles and ARIA attributes only as the spec allows: pick the correct role, keep exactly one selected tab, name dialogs with aria-labelledby, and don't let one control inherit another's value. Prefer native HTML, which carries correct semantics for free.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["product-detail", "account-management", "promotion", "registration"]
+    },
+    {
+      "id": "4.1.2-landmark-no-unique-name",
+      "wcag": ["4.1.2"],
+      "component": "navigation landmark",
+      "failureShape": "Multiple navigation landmarks lack unique accessible names (or a landmark is named after its first child), so screen-reader users can't distinguish primary navigation from secondary navigation when listing landmarks.",
+      "fix": "Give each repeated navigation landmark a unique, descriptive aria-label or aria-labelledby (e.g. \"Main navigation\", \"Language switcher\") that reflects the whole region, not one child item.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["browse-discovery", "product-detail", "booking", "form-submission"]
+    },
+    {
+      "id": "4.1.2-status-not-announced",
+      "wcag": ["4.1.2"],
+      "component": "dynamic status / value",
+      "failureShape": "A dynamic status, loading state, autocomplete suggestions, validation error, or value change is not exposed to assistive tech (no live region / stale aria-invalid / no value text), so screen-reader users miss the update.",
+      "fix": "Announce dynamic changes with a live region (aria-live=\"polite\", or role=\"status\"/\"alert\"); keep aria-invalid and error messages in sync; use the combobox pattern (aria-expanded/aria-controls/aria-activedescendant) for autocomplete. For value widgets keep aria-valuenow/valuetext current.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["search", "checkout", "registration", "browse-discovery"]
+    }
+  ]
+}

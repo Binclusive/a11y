@@ -1,0 +1,31 @@
+{
+  "sc": "1.4.3",
+  "clusters": [
+    {
+      "id": "1.4.3-insufficient-contrast",
+      "wcag": ["1.4.3"],
+      "component": "text / foreground color",
+      "failureShape": "Text doesn't meet the WCAG AA minimum contrast ratio against its background, so low-vision users struggle to read it.",
+      "fix": "Ensure text meets AA contrast: at least 4.5:1 for normal text and 3:1 for large text (and UI components). Darken/lighten the foreground or background until the ratio passes.",
+      "journeyTags": ["content-consumption", "browse-discovery"]
+    }
+  ],
+  "assignments": {
+    "avt_01kngsbjfv2rfwwc1t915sp8zk": "1.4.3-insufficient-contrast",
+    "avt_01kngsbkfx4emp0qtcdw439j3s": "1.4.3-insufficient-contrast",
+    "avt_01kngsd9pq7rhyd8p075e6mfbz": "1.4.3-insufficient-contrast",
+    "avt_01kngsdajnm9qq1jr0dnccr27w": "1.4.3-insufficient-contrast",
+    "avt_01kngsdbjaedcyr1kqpra7cn3h": "1.4.3-insufficient-contrast",
+    "avt_01kngsdbjaedcyr1kqpra7cn3j": "1.4.3-insufficient-contrast",
+    "avt_01kngsdcpjg59qtkj67hfhqg6b": "1.4.3-insufficient-contrast",
+    "avt_01kngsdcpjg59qtkj67hfhqg6c": "1.4.3-insufficient-contrast",
+    "avt_01kngsdcpjg59qtkj67hfhqg6d": "1.4.3-insufficient-contrast",
+    "avt_01kngsddx7rveeey0b7a59204t": "1.4.3-insufficient-contrast",
+    "avt_01kngsddx7rveeey0b7a59204v": "1.4.3-insufficient-contrast",
+    "avt_01kngsddx7rveeey0b7a59204w": "1.4.3-insufficient-contrast",
+    "avt_01kngsdm99wyfkvf2v2q0rg38d": "1.4.3-insufficient-contrast",
+    "avt_01knj1h64cnabwrct6j28gfv11": "1.4.3-insufficient-contrast",
+    "avt_01knmfd85p4scq5v9pd0rxwshy": "1.4.3-insufficient-contrast",
+    "avt_01kp6zd05m0qxp79rh0v5d8ycf": "1.4.3-insufficient-contrast"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "_meta": {
+    "note": "ANONYMIZED, English, k>=3-org distilled patterns from Binclusive's dynamic-audit corpus. Failure-shapes clustered offline by LLM (frozen in data/clusters/), gated k>=3-distinct-org and anonymized by deterministic code. Contains NO customer identifiers (org/project ids, elements, urls stripped; frequency as tier only). Regenerate by re-running the distiller.",
+    "scope": ["4.1.3"],
+    "corpusFindings": 647,
+    "corpusOrgs": 27
+  },
+  "patterns": [
+    {
+      "id": "4.1.3-error-not-announced",
+      "wcag": ["4.1.3"],
+      "component": "error / failure message",
+      "failureShape": "An error or failure message (invalid input, failed submission, \"not found\", captcha required) appears visually but is not in a live region, so screen-reader users are never told the action failed.",
+      "fix": "Render error messages inside a live region — role=\"alert\" (or aria-live=\"assertive\") — so they're announced the moment they appear, without moving focus.",
+      "frequencyTier": "common",
+      "journeyTags": ["sign-in", "search", "checkout", "registration"]
+    },
+    {
+      "id": "4.1.3-status-not-announced",
+      "wcag": ["4.1.3"],
+      "component": "status / result update",
+      "failureShape": "A success, result count, or calculated value update (added to cart, search results, computed total) appears without a live region, so screen-reader users aren't notified the operation succeeded or what changed.",
+      "fix": "Announce non-error status changes with role=\"status\" or aria-live=\"polite\", including result counts and confirmation messages, so users hear the update without losing their place.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["product-detail", "browse-discovery", "search"]
+    }
+  ]
+}

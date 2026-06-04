@@ -1,0 +1,19 @@
+{
+  "_meta": {
+    "note": "ANONYMIZED, English, k>=3-org distilled patterns from Binclusive's dynamic-audit corpus. Failure-shapes clustered offline by LLM (frozen in data/clusters/), gated k>=3-distinct-org and anonymized by deterministic code. Contains NO customer identifiers (org/project ids, elements, urls stripped; frequency as tier only). Regenerate by re-running the distiller.",
+    "scope": ["1.4.3"],
+    "corpusFindings": 647,
+    "corpusOrgs": 27
+  },
+  "patterns": [
+    {
+      "id": "1.4.3-insufficient-contrast",
+      "wcag": ["1.4.3"],
+      "component": "text / foreground color",
+      "failureShape": "Text doesn't meet the WCAG AA minimum contrast ratio against its background, so low-vision users struggle to read it.",
+      "fix": "Ensure text meets AA contrast: at least 4.5:1 for normal text and 3:1 for large text (and UI components). Darken/lighten the foreground or background until the ratio passes.",
+      "frequencyTier": "occasional",
+      "journeyTags": ["product-detail", "checkout", "registration", "browse-discovery"]
+    }
+  ]
+}

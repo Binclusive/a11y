@@ -1,0 +1,71 @@
+{
+  "sc": "2.4.3",
+  "clusters": [
+    {
+      "id": "2.4.3-focus-not-moved-to-content",
+      "wcag": ["2.4.3"],
+      "component": "modal / dialog / overlay",
+      "failureShape": "When a modal, dialog, panel, or menu overlay opens, keyboard focus stays on the trigger instead of moving into the new content, so screen-reader and keyboard users don't know it opened and tab through the background page first.",
+      "fix": "On open, move focus to the dialog container (or its first focusable element / heading) and trap focus inside it. On close, return focus to the trigger.",
+      "journeyTags": ["sign-in", "checkout", "form-submission"]
+    },
+    {
+      "id": "2.4.3-focus-not-managed-on-nav",
+      "wcag": ["2.4.3"],
+      "component": "route / page transition",
+      "failureShape": "After a navigation or step change (detail page, OTP/verification screen, multi-step form), focus and the screen-reader virtual cursor stay on the old DOM, so the user never reaches — or even hears — the new content.",
+      "fix": "On each navigation or step change, move focus to the new view's heading or first control so assistive tech follows the transition. Announce the new page title.",
+      "journeyTags": ["sign-in", "registration", "navigation"]
+    },
+    {
+      "id": "2.4.3-anchor-no-focus-move",
+      "wcag": ["2.4.3"],
+      "component": "in-page anchor / jump link",
+      "failureShape": "An in-page anchor or scroll-to-section link scrolls the page visually but doesn't move focus to the target section, so screen-reader users have to hunt for the content they jumped to.",
+      "fix": "After activating an in-page link, move focus to the target section (give it tabindex=\"-1\") so the reading position follows the jump.",
+      "journeyTags": ["navigation", "browse-discovery"]
+    },
+    {
+      "id": "2.4.3-focus-not-returned",
+      "wcag": ["2.4.3"],
+      "component": "dismissed overlay",
+      "failureShape": "When a temporary region (search, modal) closes, focus isn't returned to the control that opened it, dropping the keyboard user at an unexpected place.",
+      "fix": "On close, programmatically return focus to the triggering element so the keyboard user resumes where they left off.",
+      "journeyTags": ["search", "navigation"]
+    },
+    {
+      "id": "2.4.3-duplicate-tab-stops",
+      "wcag": ["2.4.3"],
+      "component": "hidden responsive variant",
+      "failureShape": "Visually hidden responsive variants of an element (duplicate CTAs, responsive H1s) keep tabindex=\"0\" and remain in the tab order, so keyboard users hit the same control several times.",
+      "fix": "Remove hidden duplicates from the tab order: drop tabindex on hidden variants and mark them aria-hidden=\"true\" (or render only the active variant).",
+      "journeyTags": ["navigation", "browse-discovery"]
+    }
+  ],
+  "assignments": {
+    "avt_01kp2wfm4tmb59wj5t3makaw8j": "2.4.3-anchor-no-focus-move",
+    "avt_01kp2wfydbvpwsxv73618ss6ww": "2.4.3-focus-not-moved-to-content",
+    "avt_01kp2ykv32tcec34fyah1fqy0g": "2.4.3-focus-not-moved-to-content",
+    "avt_01kp8b9hcbde2tqqsn8m856dc5": "2.4.3-focus-not-moved-to-content",
+    "avt_01kpzky09w16sxfb1ea2m69hhg": "2.4.3-focus-not-moved-to-content",
+    "avt_01kqat8kkyv52wt2bjkkh670rh": "2.4.3-focus-not-moved-to-content",
+    "avt_01kr3hv7a5yhvqnt1y0fnn70wt": "2.4.3-focus-not-moved-to-content",
+    "avt_01krbc0pw1g5fvfqttb14qveaw": "2.4.3-focus-not-moved-to-content",
+    "avt_01krdgzrevggx6z0ks0ax7m75d": "2.4.3-focus-not-returned",
+    "avt_01krdj22yy8wa1n8x366kzrtja": "2.4.3-focus-not-moved-to-content",
+    "avt_01krg1zfqmmcbep4hbqzqf958b": "2.4.3-focus-not-managed-on-nav",
+    "avt_01krg5s1dwja91wk0vpbc6hsmr": "2.4.3-focus-not-moved-to-content",
+    "avt_01krjd927jw4nfag7xpr1ypn2x": "2.4.3-anchor-no-focus-move",
+    "avt_01krk8s8rxavg14fysktgwsrx5": "2.4.3-focus-not-moved-to-content",
+    "avt_01kryjxkr5x4tdjzy9t6ej8z4n": "2.4.3-focus-not-moved-to-content",
+    "avt_01ks220302s3vzjysf1f647ma0": "2.4.3-duplicate-tab-stops",
+    "avt_01ks2b4h3w81ayaw89rc1smhqj": "2.4.3-duplicate-tab-stops",
+    "avt_01ks6vdddkyx1snyz7cq7tn9mq": "2.4.3-focus-not-moved-to-content",
+    "avt_01ks6xhcehsvz8r1560x850n6j": "2.4.3-focus-not-managed-on-nav",
+    "avt_01ks7bpzetsmmkck09fesy11h2": "2.4.3-focus-not-returned",
+    "avt_01ks83g60rh5pbm5rk55m9v2vt": "2.4.3-focus-not-managed-on-nav",
+    "avt_01ks83r6f6dnjf5scke0r6910w": "2.4.3-focus-not-managed-on-nav",
+    "avt_01ksf0e271rx454e0w8ccj9bxv": "2.4.3-focus-not-moved-to-content",
+    "avt_01ksfbvc07s1860g43tap501ee": "2.4.3-focus-not-moved-to-content"
+  }
+}

@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en" data-theme="customer">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>a11y-checker — accessible from the first line of code</title>
+  <meta name="description" content="a11y-checker: a local accessibility checker that works inside your AI coding tools, grounded in real audits." />
+  <link rel="stylesheet" href="deck.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to current slide</a>
+  <div class="sr-only" role="status" aria-live="polite" data-live></div>
+
+  <main class="deck" id="main">
+
+    <!-- 1 · TITLE -->
+    <section class="slide slide--title" data-title="Accessible from the first line of code" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">a11y-checker</span>
+        <span class="slide__top-right"><span>by Binclusive</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="title-mark reveal"><b>Binclusive</b></p>
+        <h1 class="headline reveal">Accessible from the<br />first line of <em>code</em>.</h1>
+        <p class="subhead reveal">Audits find what shipped. The checker stops it shipping.</p>
+      </div>
+      <footer class="slide__foot">
+        <span>Press <b>→</b> to advance · <b>O</b> for contents</span>
+        <span><b data-counter-current>01</b> / <span data-counter-total>11</span></span>
+      </footer>
+    </section>
+
+    <!-- 2 · WHAT IT IS -->
+    <section class="slide" data-title="What it is, in one sentence" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">What it is</span>
+        <span class="slide__top-right"><span>in one sentence</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">the shortest version</p>
+        <h2 class="title-2 reveal">A local accessibility checker that works inside your AI coding tools.</h2>
+        <p class="spoken reveal">a11y-checker runs on your machine, plugs into Claude Code, Cursor, and Copilot, and reads every interface file your AI touches. The moment the AI writes something that's going to fail an audit, the checker feeds that back into the AI's context so the next edit fixes it.</p>
+        <p class="spoken reveal">The code arrives accessible. Not <span class="amber">"made accessible later"</span> — accessible the first time it lands in the file.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>02</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 3 · THE PROBLEM TODAY -->
+    <section class="slide" data-title="Found months after they're written" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">The problem today</span>
+        <span class="slide__top-right"><span>the slow loop</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">how a11y gets checked today</p>
+        <h2 class="title-2 reveal">Most accessibility problems are found months after they're written.</h2>
+        <p class="spoken reveal">Today the loop is slow. A developer writes code and it ships. Weeks or months later an audit runs, finds issues, and files a ticket — back to a developer who has long since moved on to something else. The fix costs more than the original would have, and the same mistakes turn up in the next audit because nothing in the writing moment changed.</p>
+        <p class="spoken reveal">The best time to fix an accessibility issue isn't at audit time. It's <strong>the second the code is written</strong>, while the person — or the AI — writing it still has the whole picture in their head.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>03</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 4 · WHY A LINTER ISN'T ENOUGH -->
+    <section class="slide" data-title="Linters can't see your components" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">Why not a linter</span>
+        <span class="slide__top-right"><span>two gaps</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">the tool you already know</p>
+        <h2 class="title-2 reveal">Linters can't see the components your team actually ships.</h2>
+        <p class="spoken reveal">Standard linters work on plain HTML and a fixed set of rules. The moment your code uses your own component library — your buttons, your modals, your design-system pieces — the linter treats those as trusted and moves on. So a <span class="amber">real bug, hidden inside a component the linter calls fine</span>, ships untouched.</p>
+        <p class="spoken reveal">There's a second gap too. A linter has no sense of what actually matters. A rare edge case and an everyday failure get the same red squiggle, so developers tune the whole thing out. You need real-world signal to know what to prioritize, and a linter doesn't have any.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>04</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 5 · THE CORPUS -->
+    <section class="slide" data-title="The corpus: grounded in real audits" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">What's different</span>
+        <span class="slide__top-right"><span>the corpus</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">the difference</p>
+        <h2 class="title-2 reveal">Grounded in real audits, not a generic ruleset.</h2>
+        <p class="spoken reveal">Binclusive runs accessibility audits across real companies. We take what we find, strip every identifying detail, and turn it into a corpus of failure patterns — what tends to break, in what kinds of components, how often.</p>
+        <p class="spoken reveal">That means the checker doesn't just say "this is wrong." It says: <strong>this is wrong, it's one of the most common ways accessibility breaks on real sites, and here's the fix that worked.</strong> A regular linter can't do that — it has never seen a real site, only a rulebook.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>05</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 6 · IN YOUR DAY -->
+    <section class="slide" data-title="How it shows up in your day" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">In your workflow</span>
+        <span class="slide__top-right"><span>a fast loop, not a magic fixer</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">how it feels day to day</p>
+        <h2 class="title-2 reveal">Your AI writes the code; the checker corrects course in the same breath.</h2>
+        <p class="spoken reveal">The setup is a hook plus a small server. When your AI assistant edits an interface file, the checker reads it, finds any accessibility problems, and feeds them straight back into the AI's context as part of the same task. The AI rewrites — usually before you've even reviewed the first version — and what shows up in your diff is already clean.</p>
+        <p class="spoken reveal">You still review the diff. <strong>The checker isn't a magic fixer; it's a fast loop.</strong> But that loop runs hundreds of times a day in the background, on every interface file your team touches, and the result is that the audit-time pile of issues stops growing.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>06</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 7 · WHY COMMON -->
+    <section class="slide" data-title="Why 'common' is the magic word" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">Priority</span>
+        <span class="slide__top-right"><span>why "common" matters</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">the magic word</p>
+        <h2 class="title-2 reveal">Frequency turns a long list of issues into a short list of priorities.</h2>
+        <p class="spoken reveal">A first pass on a real site usually surfaces a long list of findings. Most teams look at the list, freeze, and fix the easy ones. The hard ones sit. We've all seen this.</p>
+        <p class="spoken reveal">When every finding carries a frequency signal from real audits, the list re-sorts itself. A handful of patterns show up across nearly every site we look at — <strong>those are the ones to fix first</strong>, because fixing them once removes a class of problems forever. The long tail of rare findings can wait. That's the difference between a list that gets worked and a list that gets ignored.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>07</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 8 · PRIVACY -->
+    <section class="slide" data-title="Your data stays yours" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">Privacy</span>
+        <span class="slide__top-right"><span>local by default</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">a fair question, answered</p>
+        <h2 class="title-2 reveal">Local by default. The corpus is shapes, not code.</h2>
+        <p class="spoken reveal">Your code never leaves your machine. The checker runs locally — that's not a privacy promise on a marketing page, it's how it's built. There's no upload step, because there's nothing to upload.</p>
+        <p class="spoken reveal">A pattern only enters the shared corpus when at least three different companies have hit it independently, with every identifying detail stripped. <strong>We learn the shape of the problem; we never learn whose problem it was.</strong> That's the rule the system runs on, not the rule we ask you to trust.</p>
+        <div class="pills reveal">
+          <span class="pill"><b>local</b> · code never uploaded</span>
+          <span class="pill"><b>3+</b> companies before a pattern ships</span>
+          <span class="pill"><b>anonymized</b> · shapes, not code</span>
+        </div>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>08</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 9 · FLYWHEEL -->
+    <section class="slide" data-title="The flywheel" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">The flywheel</span>
+        <span class="slide__top-right"><span>it compounds</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">the loop</p>
+        <h2 class="title-2 reveal" style="margin-bottom:var(--gap)">Every audit makes the checker smarter. Everyone benefits.</h2>
+        <div class="loop reveal" role="img" aria-label="The flywheel: audits find patterns, patterns enter the anonymized corpus, the checker catches them at write-time, cleaner code ships, audits get easier and find newer patterns.">
+          <span class="loop__node">audits find patterns</span>
+          <span class="loop__arr">→</span>
+          <span class="loop__node loop__node--accent">corpus · anonymized</span>
+          <span class="loop__arr">→</span>
+          <span class="loop__node">caught at write-time</span>
+          <span class="loop__arr">→</span>
+          <span class="loop__node">cleaner code ships</span>
+          <span class="loop__arr">↺</span>
+        </div>
+        <p class="spoken reveal" style="margin-top:var(--gap)">It compounds. Customers who join early benefit from every audit Binclusive has ever run, and every audit going forward sharpens the tool for everyone using it.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>09</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 10 · WHERE IT FITS -->
+    <section class="slide" data-title="Where it fits next to your audits" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">Where it fits</span>
+        <span class="slide__top-right"><span>the other half of the audit</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">not a replacement</p>
+        <h2 class="title-2 reveal">This is the other half of the audit — not a replacement.</h2>
+        <p class="spoken reveal">Audits find what already shipped. The checker stops it from shipping. They are two halves of the same job, and you need both. An audit without a write-time tool means the same bugs keep arriving. A write-time tool without audits means nobody is watching the long tail or the edge cases that automation can't catch.</p>
+        <p class="spoken reveal">Together, they close the loop. The checker keeps the everyday stuff out of the audit. The audit catches what the checker can't, and feeds that back into the corpus. <strong>That's the integration.</strong></p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>10</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 11 · CLOSE -->
+    <section class="slide slide--title" data-title="How the code is written" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">Close</span>
+        <span class="slide__top-right"><span>thank you</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">the whole idea</p>
+        <h2 class="title-1 reveal">Accessibility should be how the code is <em>written</em> — not a thing you check at the end.</h2>
+        <p class="spoken reveal">Every accessibility tool that came before this one assumed the code was already written. That's why the loop is so slow, and why the same issues keep coming back. We think the moment to get accessibility right is the moment the code is being written — whether a person writes it or an AI does.</p>
+        <p class="callout reveal">If you want the code to arrive accessible, that's what a11y-checker is for.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>11</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+  </main>
+
+  <!-- contents overlay -->
+  <div class="contents" role="dialog" aria-modal="true" aria-labelledby="contents-title">
+    <h2 class="title-2" id="contents-title">Contents</h2>
+    <ol data-contents-list></ol>
+  </div>
+
+  <!-- chrome -->
+  <div class="deck-progress" data-progress aria-hidden="true"></div>
+  <p class="overview-hint" aria-hidden="true"><kbd>O</kbd> contents · <kbd>←</kbd><kbd>→</kbd> move</p>
+  <nav class="deck-nav" aria-label="Slide navigation">
+    <button type="button" data-prev aria-label="Previous slide">←</button>
+    <span class="deck-counter"><b data-counter-current>01</b>/<span data-counter-total>11</span></span>
+    <button type="button" data-next aria-label="Next slide">→</button>
+    <button type="button" data-menu aria-label="Open contents">☰</button>
+  </nav>
+
+  <script src="deck.js"></script>
+</body>
+</html>

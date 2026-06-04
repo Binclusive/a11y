@@ -1,0 +1,12 @@
+{
+  "unmappableCriterion": 2,
+  "unclassified": 0,
+  "belowK": [
+    {
+      "id": "2.4.7-skip-link-not-visible-on-focus",
+      "orgs": 1,
+      "findings": 1
+    }
+  ],
+  "scOutOfScope": 641
+}
