@@ -21,6 +21,8 @@ That's the whole thing. It scans every `.tsx` under the folder and prints a cove
 
 No clone handy? Point it at this repo's own test fixtures: `pnpm scan ./test/fixtures`.
 
+> **Using your own design system?** (Almost everyone is.) A cold scan will leave most of your components in `declare` — *that's expected, not a failure.* The checker is honest about what it can't see yet, and teaching it your library is a ~10-minute step that turns on its best trick (finding bugs *inside* your own components). The full on-ramp is **[WALKTHROUGH.md](WALKTHROUGH.md)** — read it before judging a cold run.
+
 ---
 
 ## What you'll see
@@ -66,6 +68,7 @@ A generic linter can't do 2 or 3. The deeper story (and why the corpus is a moat
 
 | If you want… | Open / read |
 |---|---|
+| **Adopt it with your own design system** | **`WALKTHROUGH.md`** |
 | The pitch + the moat, with numbers | `docs/decks/numbers.html` |
 | Real findings on real OSS projects | `docs/decks/showcase.html` |
 | How the machine works, conceptually | `docs/decks/engineering.html` |
