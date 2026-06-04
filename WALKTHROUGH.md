@@ -59,7 +59,9 @@ It detected the stack (including that `@acme/ui` is the dominant design system) 
 
 ## Step 2 — declare your design system (the one real step)
 
-The `declare` bucket from Step 0 already handed Acme the lines. They add the **leaf primitives** — the components that really are *one* HTML element — to `binclusive.json`:
+> **Shortcut — don't hand-write this.** Run `a11y-checker init --suggest` and it scaffolds the whole `components` block for you: it guesses a host for each of your design-system primitives, marks the uncertain ones with `⚠ verify`, and leaves composites in `declare`. You just **review ~12 lines** (fix the `⚠`s) instead of authoring config from scratch. Everything below is what `--suggest` produces — shown the manual way so you can see what it's doing.
+
+The `declare` bucket from Step 0 already handed Acme the lines. They add (or `--suggest` pre-fills) the **leaf primitives** — the components that really are *one* HTML element — to `binclusive.json`:
 
 ```jsonc
 {

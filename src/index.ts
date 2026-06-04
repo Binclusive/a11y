@@ -14,6 +14,7 @@ export {
   type DriftEntry,
   type GenResult,
   gen,
+  type InitOptions,
   type InitResult,
   init,
   type LearnInput,
@@ -61,7 +62,6 @@ export {
 export {
   detectDesignSystem,
   detectStack,
-  packageNameOf,
 } from "./detect-stack";
 export {
   type DistilledPattern,
@@ -83,6 +83,11 @@ export {
   type EnforceContext,
   enforceContent,
 } from "./enforce";
+export {
+  isFrameworkPrimitive,
+  isOwnModule,
+  packageNameOf,
+} from "./module-scope";
 export {
   GUARANTEED_LIBRARIES,
   type GuaranteedLibrary,
@@ -109,5 +114,12 @@ export {
   type TraceResult,
   traceComponent,
 } from "./source-trace";
+export {
+  type ComponentSuggestion,
+  type SuggestConfidence,
+  type SuggestOptions,
+  type SuggestResult,
+  suggestComponentMap,
+} from "./suggest";
 export { RULE_ID_TO_WCAG, wcagForRuleId } from "./wcag-map";
 export { resolveWorkspaceImport } from "./workspace-resolve";

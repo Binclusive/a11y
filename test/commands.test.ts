@@ -128,6 +128,78 @@ describe("init / learn / gen (IO) against a temp repo", () => {
     expect(onDisk.declarations.ignore).toEqual(["**/legacy/**", "alt-text"]);
   });
 
+  it("plain init writes NO components map and no suggestions (default unchanged)", async () => {
+    await writeFile(
+      join(dir, "page.tsx"),
+      'import { Button } from "@acme/ui";\nexport default () => <Button>x</Button>;\n',
+    );
+    const r = await init(dir);
+    expect(r.suggestions).toBeNull();
+    expect(r.contract.declarations.components).toEqual({});
+    // The serialized contract omits an empty components map entirely.
+    const text = await readFile(join(dir, CONTRACT_FILE), "utf8");
+    expect(text).not.toContain('"components"');
+  });
+
+  it("init --suggest scaffolds the components map and reports the guesses", async () => {
+    // A page using external @acme/ui leaf primitives + a composite + a toggle.
+    await writeFile(
+      join(dir, "page.tsx"),
+      [
+        'import { Button, TextField, Select, Modal, Checkbox } from "@acme/ui";',
+        "export default () => (",
+        "  <Modal>",
+        "    <Button>x</Button>",
+        '    <TextField label="n" />',
+        "    <Select />",
+        "    <Checkbox />",
+        "  </Modal>",
+        ");",
+      ].join("\n"),
+    );
+
+    const r = await init(dir, { suggest: true });
+    expect(r.suggestions).not.toBeNull();
+
+    // Confident leaf hosts are merged into the written contract.
+    expect(r.contract.declarations.components.Button).toBe("button");
+    expect(r.contract.declarations.components.TextField).toBe("input");
+    expect(r.contract.declarations.components.Select).toBe("select");
+    // Composite + toggle are NOT mapped — they stay in declare.
+    expect(r.contract.declarations.components.Modal).toBeUndefined();
+    expect(r.contract.declarations.components.Checkbox).toBeUndefined();
+
+    // The map round-trips to disk so the user can review/edit it before commit.
+    const onDisk = parseContract(JSON.parse(await readFile(join(dir, CONTRACT_FILE), "utf8")));
+    expect(onDisk.declarations.components).toMatchObject({
+      Button: "button",
+      TextField: "input",
+      Select: "select",
+    });
+
+    // The suggestion report flags Select for review and leaves Modal in declare.
+    const select = r.suggestions?.suggestions.find((s) => s.name === "Select");
+    expect(select?.confidence).toBe("verify");
+    expect(r.suggestions?.skipped).toContain("Modal");
+  });
+
+  it("init --suggest never overrides a manually-declared host", async () => {
+    await writeFile(
+      join(dir, "page.tsx"),
+      'import { Button } from "@acme/ui";\nexport default () => <Button>x</Button>;\n',
+    );
+    // Customer already declared Button as a div — the guess must not clobber it.
+    await init(dir);
+    const before = parseContract(JSON.parse(await readFile(join(dir, CONTRACT_FILE), "utf8")));
+    await writeFile(
+      join(dir, CONTRACT_FILE),
+      `${JSON.stringify({ ...before, components: { Button: "div" } }, null, 2)}\n`,
+    );
+
+    const r = await init(dir, { suggest: true });
+    expect(r.contract.declarations.components.Button).toBe("div");
+  });
+
   it("a malformed declarations field is dropped, the rest of the contract still loads", async () => {
     await init(dir);
     const before = parseContract(JSON.parse(await readFile(join(dir, CONTRACT_FILE), "utf8")));
