@@ -164,7 +164,10 @@ interface Recognized {
  * box) cannot be PROVEN nameless and would be a false positive. Inputs are only
  * recognized via a real input HOST (registry/resolved), never by name.
  */
-const NAME_HEURISTICS: ReadonlyArray<{ readonly type: ControlType; readonly keyword: string }> = [
+export const NAME_HEURISTICS: ReadonlyArray<{
+  readonly type: ControlType;
+  readonly keyword: string;
+}> = [
   { type: "icon-button", keyword: "ActionIcon" },
   { type: "icon-button", keyword: "IconButton" },
   { type: "button", keyword: "Button" },
@@ -194,7 +197,7 @@ const HOST_TO_TYPE: Readonly<Record<string, ControlType>> = {
  * skip" — the enforce check does NOT verify toggles at all. (The structural
  * jsx-a11y pass still checks the ones it can resolve.) Matched on the LEAF name.
  */
-const TOGGLE_NAMES: ReadonlySet<string> = new Set([
+export const TOGGLE_NAMES: ReadonlySet<string> = new Set([
   "Checkbox",
   "Switch",
   "Radio",
@@ -204,7 +207,7 @@ const TOGGLE_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /** The leaf of a JSX tag name (`NS.Member` -> `Member`, else the name). */
-function leafName(name: string): string {
+export function leafName(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot === -1 ? name : name.slice(dot + 1);
 }
@@ -214,7 +217,7 @@ function leafName(name: string): string {
  * the keyword or ends with it (suffix), so design-system aliases resolve. First
  * match in {@link NAME_HEURISTICS} wins (icon-button before button, etc.).
  */
-function typeFromName(name: string): ControlType | null {
+export function typeFromName(name: string): ControlType | null {
   const leaf = leafName(name);
   for (const { type, keyword } of NAME_HEURISTICS) {
     if (leaf === keyword || leaf.endsWith(keyword)) {

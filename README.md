@@ -21,7 +21,13 @@ That's the whole thing. It scans every `.tsx` under the folder and prints a cove
 
 No clone handy? Point it at this repo's own test fixtures: `pnpm scan ./test/fixtures`.
 
-> **Using your own design system?** (Almost everyone is.) A cold scan will leave most of your components in `declare` — *that's expected, not a failure.* The checker is honest about what it can't see yet, and teaching it your library is a ~10-minute step that turns on its best trick (finding bugs *inside* your own components). The full on-ramp is **[WALKTHROUGH.md](WALKTHROUGH.md)** — read it before judging a cold run.
+> **Using your own design system?** (Almost everyone is.) A cold scan leaves most of your components in `declare` — *that's expected, not a failure.* To turn on its best trick (finding bugs *inside* your own components), it needs to know which of your components are buttons, inputs, etc. You don't write that by hand:
+>
+> ```bash
+> pnpm a11y-checker init --suggest    # scaffolds the config for you
+> ```
+>
+> It guesses a host for each of your design-system primitives, flags the uncertain ones with `⚠`, and leaves composites alone — so adoption is a **~2-minute review**, not hand-written config. Full on-ramp: **[WALKTHROUGH.md](WALKTHROUGH.md)** — read it before judging a cold run.
 
 ---
 

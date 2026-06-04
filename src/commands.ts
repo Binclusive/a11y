@@ -23,6 +23,9 @@ import {
 } from "./contract";
 import { corpusCriteria, corpusPatterns } from "./corpus";
 import { detectStack } from "./detect-stack";
+import { resolveComponents } from "./resolve-components";
+import { type SuggestResult, suggestComponentMap } from "./suggest";
+import { ownAliasMatcherFor } from "./tsconfig-aliases";
 
 /** The committed contract file name, and the two managed-block targets. */
 export const CONTRACT_FILE = "binclusive.json";
@@ -103,12 +106,31 @@ async function writeBlockTargets(dir: string, contract: Contract): Promise<strin
   return written;
 }
 
+/** Options for {@link init}. */
+export interface InitOptions {
+  /**
+   * When `true` (the `--suggest` flag), scaffold the `components` map: guess a
+   * host for each unresolved design-system wrapper from its NAME and merge the
+   * guesses into the written contract for the user to review. Absent/`false` →
+   * plain `init`: no guessed map, behavior byte-for-byte unchanged.
+   */
+  readonly suggest?: boolean;
+}
+
 /** The result of `init`, for the CLI to report. */
 export interface InitResult {
   readonly contract: Contract;
   readonly contractPath: string;
   readonly blockPaths: readonly string[];
   readonly preservedLearned: number;
+  /**
+   * The component-map suggestions, present ONLY when `init` ran with
+   * `suggest: true` (the `--suggest` flag). `null` for a plain `init`, so the
+   * default behavior — and its output — is byte-for-byte unchanged. When
+   * present, the guessed hosts are ALSO merged into the written contract's
+   * `declarations.components` (existing manual entries win on conflict).
+   */
+  readonly suggestions: SuggestResult | null;
 }
 
 /**
@@ -125,17 +147,42 @@ export interface InitResult {
  * repo yields a stable stack. (Manual stack overrides survive because they are
  * the detector's own output; a re-init re-derives identical values.)
  */
-export async function init(dir: string): Promise<InitResult> {
+export async function init(dir: string, opts: InitOptions = {}): Promise<InitResult> {
   const tsxFiles = await collectTsx(dir);
   const stack = detectStack(dir, tsxFiles);
 
   const existing = await loadContract(dir);
+  const baseDeclarations = existing?.declarations ?? emptyDeclarations();
+
+  // `--suggest` scaffolds the `components` map: guess a host for each genuine
+  // unknown (declare-bucket) wrapper from its name, for the user to review. The
+  // guessed hosts are merged UNDER any the customer already declared — a manual
+  // entry always wins (it was a deliberate decision; a guess is not).
+  let suggestions: SuggestResult | null = null;
+  let declarations = baseDeclarations;
+  if (opts.suggest === true) {
+    // Resolve against the EXISTING declared map so already-declared wrappers
+    // don't reappear as declare-bucket candidates to re-suggest.
+    const { resolutions } = resolveComponents(tsxFiles, baseDeclarations.components);
+    suggestions = suggestComponentMap(resolutions, {
+      isOwnAlias: ownAliasMatcherFor(dir).isOwnAlias,
+      designSystem: stack.designSystem,
+    });
+    const guessed: Record<string, string> = {};
+    for (const s of suggestions.suggestions) guessed[s.name] = s.host;
+    declarations = {
+      ...baseDeclarations,
+      // Manual entries last so they OVERRIDE a guess for the same name.
+      components: { ...guessed, ...baseDeclarations.components },
+    };
+  }
+
   const contract: Contract = {
     version: 1,
     stack: mergeStack(stack, existing?.stack),
     enforcement: existing?.enforcement ?? corpusDefaultEnforcement(),
     learned: existing?.learned ?? [],
-    declarations: existing?.declarations ?? emptyDeclarations(),
+    declarations,
   };
 
   const contractPath = join(dir, CONTRACT_FILE);
@@ -147,6 +194,7 @@ export async function init(dir: string): Promise<InitResult> {
     contractPath,
     blockPaths,
     preservedLearned: existing?.learned.length ?? 0,
+    suggestions,
   };
 }
 
