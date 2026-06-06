@@ -16,7 +16,9 @@ set -u
 
 # --- locate the repo (this script lives in <repo>/demo/demo.sh) ---------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+# The `a11y` alias + REPO resolution live in _a11y.sh — ONE definition, shared
+# with demo.tape (the recorded build). Sourcing it defines `a11y` and REPO.
+source "$SCRIPT_DIR/_a11y.sh"
 cd "$REPO"
 
 SAMPLE="demo/sample-app"
@@ -55,11 +57,7 @@ pe() {
   echo
 }
 
-# a11y(...) — the on-screen alias so typed commands read clean. Resolves to the
-# real CLI under the hood; the audience sees `a11y scan ...`, not the tsx path.
-a11y() { pnpm exec tsx "$REPO/src/cli.ts" "$@"; }
-export -f a11y
-export REPO
+# (the `a11y` alias and REPO are defined by demo/_a11y.sh, sourced above)
 
 # --- idempotency: wipe any live-generated config at start AND on exit ---------
 clean_generated() {
