@@ -17,6 +17,9 @@
     "mcp": "tsx ./src/mcp.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "demo:lint": "tsx demo/demo-kit.ts lint demo/scenario.json",
+    "demo:play": "tsx demo/demo-kit.ts play demo/scenario.json",
+    "demo:record": "tsx demo/demo-kit.ts record demo/scenario.json",
     "matrix:discover": "tsx experiments/stack-matrix/discover.ts",
     "matrix:run": "tsx experiments/stack-matrix/run.ts",
     "matrix:report": "tsx experiments/stack-matrix/report.ts"

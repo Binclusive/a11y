@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://binclusive.io/a11y-checker/demo/scenario.schema.json",
+  "title": "Declarative terminal-demo scenario",
+  "description": "A single self-verifying spec that drives three modes over one demo: `demo-kit lint` (run every step in isolation and assert its output), `demo-kit play` (drive it live, waiting on each assertion), and `demo-kit record` (regenerate a VHS tape and render a GIF/MP4). Authoring a demo as data means the live walk-through and the recorded video can never drift, and every step is proven before it is shown.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "title", "acts"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Machine-friendly slug for this scenario."
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable title shown on the recording's title card."
+    },
+    "terminal": {
+      "type": "object",
+      "description": "Presentation knobs for record mode (mapped onto VHS `Set` directives) and shared by play mode where applicable.",
+      "additionalProperties": false,
+      "properties": {
+        "width": { "type": "integer", "minimum": 1, "description": "Terminal width in pixels (VHS `Set Width`)." },
+        "height": { "type": "integer", "minimum": 1, "description": "Terminal height in pixels (VHS `Set Height`)." },
+        "theme": { "type": "string", "description": "VHS color theme name, e.g. \"Catppuccin Mocha\"." },
+        "fontSize": { "type": "integer", "minimum": 1, "description": "Font size in points (VHS `Set FontSize`)." },
+        "typingSpeed": { "type": "string", "pattern": "^[0-9]+(ms|s)$", "description": "Per-character typing delay, e.g. \"45ms\". Used by VHS `Set TypingSpeed` and as the char-by-char delay in play mode." },
+        "padding": { "type": "integer", "minimum": 0, "description": "Window padding in pixels (VHS `Set Padding`)." }
+      }
+    },
+    "workdir": {
+      "type": "string",
+      "default": ".",
+      "description": "Repo-relative working directory for every command. Defaults to \".\". Note: the `a11y` shell function uses `pnpm exec`, which requires a package.json on the path, so the repo root is usually correct."
+    },
+    "shellInit": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Lines sourced before every command (e.g. \"source demo/_a11y.sh\"). Hidden from the screen in record/play; sourced in a Hidden block in the generated tape.",
+      "default": []
+    },
+    "isolation": {
+      "type": "object",
+      "description": "Optional fixture isolation. The runner exposes the fixture path as an env var named by `as`. In `lint`, that var points at a per-run TEMP COPY of `fixture` so mutating steps cannot race other processes or dirty the repo. In `play`/`record`, it points at the real `fixture` path so on-screen commands read clean.",
+      "additionalProperties": false,
+      "required": ["fixture", "as"],
+      "properties": {
+        "fixture": { "type": "string", "description": "Repo-relative path to the fixture directory to isolate (e.g. \"demo/sample-app\")." },
+        "as": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "Env var name the runner binds to the fixture path (e.g. \"FIX\"). Commands reference it as \"$FIX\"." }
+      }
+    },
+    "setup": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/step" },
+      "description": "Hidden housekeeping steps run once before the acts.",
+      "default": []
+    },
+    "teardown": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/step" },
+      "description": "Hidden housekeeping steps run once after the acts (and on play-mode exit).",
+      "default": []
+    },
+    "acts": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The body of the demo, grouped into titled acts.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "steps"],
+        "properties": {
+          "title": { "type": "string", "description": "Act title (shown as an on-screen comment / section header)." },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/step" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run"],
+      "description": "One demo beat: optional dim narration, a typed-and-executed command, and optional output assertions.",
+      "properties": {
+        "say": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Dim narration lines printed before the command is typed.",
+          "default": []
+        },
+        "run": {
+          "type": "string",
+          "description": "The shell command typed on screen and executed. May reference the isolation env var (e.g. \"$FIX\")."
+        },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Assertions evaluated against the captured stdout+stderr and exit code. Any failing assertion makes `lint` fail the step and exit non-zero; `play` waits until they are all satisfied (or times out).",
+          "properties": {
+            "exit": { "type": "integer", "description": "Required exit code." },
+            "stdoutContains": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Substrings that MUST all appear in the combined output."
+            },
+            "stdoutNotContains": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Substrings that MUST NOT appear in the combined output (e.g. \"ENOENT\")."
+            },
+            "stdoutRegex": {
+              "type": "string",
+              "description": "A regular expression (JS syntax) the combined output MUST match."
+            }
+          }
+        },
+        "read": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Seconds to pause after output, for pacing. In record mode this is added to a scan allowance to derive the VHS `Sleep`."
+        },
+        "hidden": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, the step runs but is not shown on screen (housekeeping inside an act)."
+        }
+      }
+    }
+  }
+}

@@ -220,6 +220,11 @@ of the box (no `init`, no manual declarations). A few headline rows:
 
 ## How to run the live demo
 
+> **Superseded by `demo-kit play`.** This same flow is now authored as data in
+> `demo/scenario.json` and driven by `pnpm demo:play` (live), `pnpm demo:lint`
+> (self-verifying), and `pnpm demo:record` (GIF/MP4). See `demo/README.md`. The
+> hand-driven `demo.sh` below is kept for reference.
+
 The presenter script types each command for you and waits for Enter:
 
 ```sh
