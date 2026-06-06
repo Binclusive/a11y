@@ -1,0 +1,7 @@
+[
+  { "repo": "kamp-us/phoenix", "designSystem": "baseui" },
+  { "repo": "horizon-ui/horizon-ui-chakra", "designSystem": "chakra" },
+  { "repo": "mantinedev/vite-template", "designSystem": "mantine" },
+  { "repo": "shadcn-ui/taxonomy", "designSystem": "radix" },
+  { "repo": "steven-tey/precedent", "designSystem": "radix" }
+]

@@ -16,7 +16,10 @@
     "scan": "tsx ./src/cli.ts check",
     "mcp": "tsx ./src/mcp.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "matrix:discover": "tsx experiments/stack-matrix/discover.ts",
+    "matrix:run": "tsx experiments/stack-matrix/run.ts",
+    "matrix:report": "tsx experiments/stack-matrix/report.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.26.0",
