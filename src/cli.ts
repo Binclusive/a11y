@@ -145,9 +145,116 @@ export function formatOpaqueHint(r: ComponentResolution): string {
 /** The interactive host primitives a wrapper most often resolves to. */
 const HOST_OPTIONS = "button|a|input|textarea|select|label|div";
 
-async function runCheck(dir: string): Promise<void> {
+// ---------------------------------------------------------------------------
+// JSON report contract
+// ---------------------------------------------------------------------------
+
+export interface JsonFinding {
+  readonly id: string;
+  readonly file: string;
+  readonly line: number;
+  readonly ruleId: string;
+  readonly enforcement: "block" | "warn";
+  readonly provenance: "jsx-a11y" | "enforce";
+  readonly wcag: readonly string[];
+  readonly corpus: { readonly tier: string; readonly sc: string | null; readonly orgs: number | null };
+  readonly message: string;
+}
+
+export interface JsonReport {
+  readonly tool: "a11y-checker";
+  readonly root: string;
+  readonly filesScanned: number;
+  readonly coverage: {
+    readonly checked: number;
+    readonly trusted: number;
+    readonly declare: number;
+    readonly icons: number;
+    readonly structural: number;
+    readonly total: number;
+  };
+  readonly findings: readonly JsonFinding[];
+  readonly summary: {
+    readonly findings: number;
+    readonly blocking: number;
+    readonly warning: number;
+    readonly byTier: Record<"very-common" | "common" | "occasional" | "unknown", number>;
+  };
+}
+
+export function buildJsonReport(
+  root: string,
+  filesScanned: number,
+  coverage: Coverage,
+  findings: readonly EnrichedFinding[],
+): JsonReport {
+  const checked = coverage.declared + coverage.registry + coverage.traced;
+  const blocking = findings.filter((f) => f.enforcement === "block").length;
+  const warning = findings.length - blocking;
+
+  const byTier: Record<"very-common" | "common" | "occasional" | "unknown", number> = {
+    "very-common": 0,
+    common: 0,
+    occasional: 0,
+    unknown: 0,
+  };
+  for (const f of findings) {
+    byTier[f.corpus.tier] += 1;
+  }
+
+  const jsonFindings: JsonFinding[] = findings.map((f) => ({
+    id: `${f.ruleId}|${relative(root, f.file)}|${f.line}|${f.wcag.join(",")}`,
+    file: relative(root, f.file),
+    line: f.line,
+    ruleId: f.ruleId,
+    enforcement: f.enforcement,
+    provenance: f.provenance,
+    wcag: f.wcag,
+    corpus: { tier: f.corpus.tier, sc: f.corpus.sc, orgs: f.corpus.orgs },
+    message: f.message,
+  }));
+
+  return {
+    tool: "a11y-checker",
+    root,
+    filesScanned,
+    coverage: {
+      checked,
+      trusted: coverage.trusted,
+      declare: coverage.declare,
+      icons: coverage.icons,
+      structural: coverage.structural,
+      total: coverage.total,
+    },
+    findings: jsonFindings,
+    summary: {
+      findings: findings.length,
+      blocking,
+      warning,
+      byTier,
+    },
+  };
+}
+
+async function runCheck(dir: string, json = false): Promise<void> {
   const root = resolve(dir);
   const files = await collectTsx(root);
+
+  if (json) {
+    if (files.length === 0) {
+      const report = buildJsonReport(root, 0, { total: 0, declared: 0, registry: 0, traced: 0, opaque: 0, trusted: 0, icons: 0, structural: 0, declare: 0 }, []);
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+    const result = await scan(files);
+    const findings = enrichAll(result.findings);
+    const report = buildJsonReport(root, files.length, result.coverage, findings);
+    console.log(JSON.stringify(report, null, 2));
+    const blocking = findings.filter((f) => f.enforcement === "block").length;
+    process.exitCode = blocking > 0 ? 1 : 0;
+    return;
+  }
+
   if (files.length === 0) {
     console.log(`No .tsx files under ${root}`);
     return;
@@ -317,7 +424,7 @@ async function runGen(args: readonly string[]): Promise<void> {
 }
 
 const USAGE = `usage:
-  a11y-checker check <dir>                       scan .tsx for a11y findings
+  a11y-checker check <dir> [--json]              scan .tsx for a11y findings (--json: machine-readable output)
   a11y-checker init [dir]                        detect stack, write binclusive.json + AGENTS/CLAUDE block
   a11y-checker learn "<rule>" [--wcag a,b] [--fix "..."] [--source "..."] [dir]
   a11y-checker gen [--check] [dir]               regenerate the block (--check exits non-zero on drift)
@@ -340,13 +447,14 @@ async function main(): Promise<void> {
     case "hook":
       return runHookCli();
     case "check": {
-      const dir = parseArgs(rest, []).positionals[0];
+      const parsed = parseArgs(rest, []);
+      const dir = parsed.positionals[0];
       if (dir === undefined) {
-        console.error("usage: a11y-checker check <dir>");
+        console.error("usage: a11y-checker check <dir> [--json]");
         process.exitCode = 2;
         return;
       }
-      return runCheck(dir);
+      return runCheck(dir, parsed.bools.has("json"));
     }
     default: {
       // Back-compat: bare `a11y-checker <dir>` still runs check.
