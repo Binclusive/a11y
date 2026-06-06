@@ -134,16 +134,20 @@ function trustedLibraries(resolutions: readonly ComponentResolution[]): string {
 
 /**
  * Turn one DECLARE-bucket component into a copy-paste config to-do. We can't
- * know the host — that's why it's unresolved — so we present the `components`
- * field with the realistic host options for the customer to pick. This is the
- * line that turns a genuine unknown from a dead end into an actionable entry.
+ * know the host — that's why it's unresolved — so we list the realistic host
+ * options and tell the customer to pick ONE. This is the line that turns a
+ * genuine unknown from a dead end into an actionable entry.
  */
 export function formatOpaqueHint(r: ComponentResolution): string {
-  return `${r.name} (from ${r.module}) — unrecognized. Declare it: binclusive.json → "components": { "${r.name}": "${HOST_OPTIONS}" }`;
+  return (
+    `${r.name} (from ${r.module}) — unrecognized. ` +
+    `Declare it: binclusive.json → "components": { "${r.name}": "<host>" } ` +
+    `— pick ONE of: ${HOST_OPTIONS}`
+  );
 }
 
 /** The interactive host primitives a wrapper most often resolves to. */
-const HOST_OPTIONS = "button|a|input|textarea|select|label|div";
+const HOST_OPTIONS = "button | a | input | textarea | select | label | div";
 
 // ---------------------------------------------------------------------------
 // JSON report contract

@@ -5,6 +5,7 @@ import {
   emptyDeclarations,
   parseContract,
   serializeContract,
+  validateDeclaredHosts,
 } from "../src/contract";
 
 const valid: Contract = {
@@ -134,6 +135,77 @@ describe("parseContract: optional escape-hatch declarations", () => {
   it("a contract with no declarations parses to empty declarations", () => {
     const d = parseContract(baseDoc).declarations;
     expect(d).toEqual({ components: {}, injectsChildren: [], ignore: [] });
+  });
+});
+
+describe("validateDeclaredHosts: pure diagnostic helper", () => {
+  it("returns no diagnostics for valid single-tag hosts", () => {
+    expect(validateDeclaredHosts({ Button: "button", Link: "a", Field: "input" })).toEqual([]);
+  });
+
+  it("diagnoses the pasted declare-hint placeholder (value contains |)", () => {
+    const diags = validateDeclaredHosts({
+      Button: "button|a|input|textarea|select|label|div",
+    });
+    expect(diags).toHaveLength(1);
+    expect(diags[0]).toContain('"Button"');
+    expect(diags[0]).toContain("un-edited declare hint");
+    expect(diags[0]).toContain('pick ONE host');
+  });
+
+  it("diagnoses hosts with spaces or uppercase (not a valid tag token)", () => {
+    const diags = validateDeclaredHosts({ Widget: "Button", Wrap: "my element" });
+    expect(diags).toHaveLength(2);
+    expect(diags.every((d) => d.includes("not a valid intrinsic tag"))).toBe(true);
+  });
+
+  it("valid host 'button' produces no diagnostic, bad host is excluded", () => {
+    // Only the bad entry gets a diagnostic; the valid one is silent.
+    const diags = validateDeclaredHosts({
+      Good: "button",
+      Bad: "button|a|input|textarea|select|label|div",
+    });
+    expect(diags).toHaveLength(1);
+    expect(diags[0]).toContain('"Bad"');
+  });
+});
+
+describe("parseContract: invalid host values are filtered at load time", () => {
+  const baseDoc = {
+    version: 1,
+    stack: { framework: "next", router: "app", designSystem: "@acme/ui", language: "ts" },
+    enforcement: { block: [], warn: [] },
+    learned: [],
+  };
+
+  it("pasted declare-hint placeholder is NOT applied as a host mapping", () => {
+    const d = parseContract({
+      ...baseDoc,
+      components: {
+        Button: "button|a|input|textarea|select|label|div",
+        Link: "a",
+      },
+    }).declarations;
+    // Invalid entry is stripped — only the valid one remains.
+    expect(d.components).not.toHaveProperty("Button");
+    expect(d.components.Link).toBe("a");
+  });
+
+  it("host with spaces or uppercase is NOT applied", () => {
+    const d = parseContract({
+      ...baseDoc,
+      components: { Widget: "Button", Valid: "button" },
+    }).declarations;
+    expect(d.components).not.toHaveProperty("Widget");
+    expect(d.components.Valid).toBe("button");
+  });
+
+  it("a valid host is applied silently and the count is correct", () => {
+    const d = parseContract({
+      ...baseDoc,
+      components: { Btn: "button", FancyLink: "a" },
+    }).declarations;
+    expect(d.components).toEqual({ Btn: "button", FancyLink: "a" });
   });
 });
 

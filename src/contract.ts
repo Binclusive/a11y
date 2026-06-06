@@ -161,6 +161,39 @@ export function emptyDeclarations(): Declarations {
   return { components: {}, injectsChildren: [], ignore: [] };
 }
 
+/** Valid intrinsic tag token: a single lowercase tag like `button` or `a`. */
+const VALID_HOST_RE = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * Validate a raw `components` map (before it is filtered by the parser).
+ * Returns one human-readable diagnostic string per invalid host entry; an
+ * empty array means all hosts are valid. A valid host is a single lowercase
+ * intrinsic tag token (`/^[a-z][a-z0-9-]*$/` — no `|`, no spaces, no upper).
+ *
+ * Pure helper — does NOT mutate the map and does NOT print anything. Used by
+ * tests to assert the diagnostic messages without invoking the parser.
+ * In production the same checks run inside `parseComponentsLenient` and print
+ * via `warnContract` (stderr) during contract loading.
+ */
+export function validateDeclaredHosts(
+  components: Readonly<Record<string, string>>,
+): string[] {
+  const diagnostics: string[] = [];
+  for (const [name, host] of Object.entries(components)) {
+    if (VALID_HOST_RE.test(host)) continue;
+    if (host.includes("|")) {
+      diagnostics.push(
+        `binclusive.json: "${name}" host "${host}" is the un-edited declare hint — pick ONE host, e.g. "${name}": "button".`,
+      );
+    } else {
+      diagnostics.push(
+        `binclusive.json: "${name}" host "${host}" is not a valid intrinsic tag (must be a single lowercase tag like "button" or "a") — entry ignored.`,
+      );
+    }
+  }
+  return diagnostics;
+}
+
 /**
  * Emit a non-fatal warning for a malformed OPTIONAL field. Optional fields are
  * the escape hatch — a bad entry degrades gracefully (skip it, keep the rest)
@@ -173,8 +206,10 @@ function warnContract(message: string): void {
 
 /**
  * Parse the optional `components` map leniently: keep only `string -> string`
- * entries, drop (with a warning) any whose key or value isn't a string. A
- * non-object value for the whole field is dropped entirely. Absent → `{}`.
+ * entries where the value is a valid intrinsic tag token. Drops (with a
+ * warning) any entry whose value isn't a string, is empty, or isn't a single
+ * lowercase tag. A non-object value for the whole field is dropped entirely.
+ * Absent → `{}`.
  */
 function parseComponentsLenient(v: unknown): Record<string, string> {
   if (v === undefined) return {};
@@ -186,6 +221,18 @@ function parseComponentsLenient(v: unknown): Record<string, string> {
   for (const [name, host] of Object.entries(v)) {
     if (typeof host !== "string" || host === "") {
       warnContract(`components["${name}"] must be a non-empty host string`);
+      continue;
+    }
+    if (!VALID_HOST_RE.test(host)) {
+      if (host.includes("|")) {
+        warnContract(
+          `"${name}" host "${host}" is the un-edited declare hint — pick ONE host, e.g. "${name}": "button"`,
+        );
+      } else {
+        warnContract(
+          `"${name}" host "${host}" is not a valid intrinsic tag (must be a single lowercase tag like "button" or "a")`,
+        );
+      }
       continue;
     }
     out[name] = host;
