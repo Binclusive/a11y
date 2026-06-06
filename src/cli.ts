@@ -65,7 +65,11 @@ function formatFinding(f: EnrichedFinding, root: string): string {
  * STRUCTURE, but the content the customer passes (names, labels, alt) is checked
  * in a follow-up pass.
  */
-function formatCoverage(coverage: Coverage, resolutions: readonly ComponentResolution[]): string {
+function formatCoverage(
+  coverage: Coverage,
+  resolutions: readonly ComponentResolution[],
+  unresolvedPackages: readonly string[] = [],
+): string {
   const checked = coverage.declared + coverage.registry + coverage.traced;
   const lines = [
     "a11y coverage:",
@@ -111,6 +115,16 @@ function formatCoverage(coverage: Coverage, resolutions: readonly ComponentResol
   if (coverage.trusted > 0) {
     lines.push(
       "  note: trusted = the library guarantees the structure; the content YOU pass (names, labels, alt) is checked by the call-site content check.",
+    );
+  }
+
+  // Cold-scan signal: components that are declare-opaque because their package
+  // isn't installed on disk (no node_modules). This is NOT a false declare — the
+  // component is genuinely unresolved — but the ROOT CAUSE is missing deps, not
+  // a missing declaration. Tell the user so they can act.
+  if (unresolvedPackages.length > 0) {
+    lines.push(
+      `  note: ${coverage.declare} component(s) are opaque because their package isn't resolved on disk (${unresolvedPackages.join(", ")}) — install dependencies for deeper tracing.`,
     );
   }
 
@@ -270,7 +284,7 @@ async function runCheck(dir: string, json = false): Promise<void> {
   console.log(`a11y-checker — scanned ${files.length} .tsx file(s) under ${root}\n`);
 
   // Coverage first — it frames how much of the codebase the findings cover.
-  console.log(formatCoverage(result.coverage, result.resolved.resolutions));
+  console.log(formatCoverage(result.coverage, result.resolved.resolutions, result.resolved.unresolvedPackages));
   console.log("");
 
   if (findings.length === 0) {

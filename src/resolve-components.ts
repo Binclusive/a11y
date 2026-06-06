@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import ts from "typescript";
 import {
   isIconLibrary,
@@ -6,7 +8,7 @@ import {
   lookupGuaranteed,
   lookupRegistry,
 } from "./registry";
-import { collectLocalImports, traceComponent } from "./source-trace";
+import { collectLocalImports, resolveRoute, traceComponent } from "./source-trace";
 
 /**
  * Resolve, for a set of scanned files, every wrapper component used in JSX to
@@ -144,6 +146,14 @@ export interface ResolvedComponents {
   readonly coverage: Coverage;
   /** Full per-component detail, incl. opaque ones, for reporting. */
   readonly resolutions: readonly ComponentResolution[];
+  /**
+   * Distinct bare-package specifiers (e.g. `@base-ui/react`) for components
+   * that landed in the `declare` bucket AND cannot be resolved to any file on
+   * disk. Sorted. An empty array means all declare-bucket components came from
+   * resolvable sources (composite wrappers, etc.) — no package install note
+   * needed. Non-empty signals the cold-scan blind spot: "install deps to trace".
+   */
+  readonly unresolvedPackages: readonly string[];
 }
 
 /** A capitalized JSX name used in a file, with its local-import context. */
@@ -245,6 +255,104 @@ const UNMAPPABLE_HOSTS: ReadonlySet<string> = new Set(["label"]);
  * scanned file actually USES are silently ignored — coverage reflects the code,
  * not the config — so a stale declaration never inflates the tally.
  */
+/**
+ * The npm package NAME of a bare specifier, or `null` if the specifier is not a
+ * syntactically valid bare package import.
+ *
+ * Rejects (returns null) — these are NOT packages, so they can never be a
+ * "missing dependency":
+ *   - relative (`.`/`..`), absolute (`/`), and subpath-imports (`#internal`)
+ *   - path aliases that LOOK bare but aren't valid package names: a leading `~`
+ *     (`~/components/card`), and an empty-scope `@/...` (an `@` not followed by a
+ *     scope segment, the Next/Vite default alias). These are the exact shapes
+ *     that leaked into the unresolved-package note before the deps cross-check.
+ *
+ * For a real bare import it returns the package id: `pkg` or `@scope/pkg`,
+ * stripping any `/subpath` (`@base-ui/react/Dialog` → `@base-ui/react`).
+ */
+function packageNameOf(specifier: string): string | null {
+  if (
+    specifier === "" ||
+    specifier.startsWith(".") ||
+    specifier.startsWith("/") ||
+    specifier.startsWith("#") ||
+    specifier.startsWith("~")
+  ) {
+    return null;
+  }
+  const parts = specifier.split("/");
+  if (specifier.startsWith("@")) {
+    // Scoped: must be `@scope/name` — reject empty-scope (`@/...`) and a bare
+    // `@scope` with no name segment.
+    const scope = parts[0];
+    const name = parts[1];
+    if (scope === undefined || scope === "@" || name === undefined || name === "") return null;
+    return `${scope}/${name}`;
+  }
+  const name = parts[0];
+  return name === undefined || name === "" ? null : name;
+}
+
+/** Per-directory cache of the nearest package.json's declared-dependency set. */
+const declaredDepsCache = new Map<string, ReadonlySet<string>>();
+
+/** The dependency buckets whose union counts as a "declared dependency". */
+const DEP_FIELDS = [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+  "optionalDependencies",
+] as const;
+
+/**
+ * The union of every declared dependency in the nearest `package.json` at or
+ * above `fromFile`. This is the real gate for the unresolved-package note: a
+ * specifier is only reported as an uninstalled package when it IS a declared
+ * dependency (so "install dependencies" is always correct advice) — path aliases
+ * and ad-hoc bare strings that no manifest declares are excluded. Walks up to the
+ * filesystem root; a malformed or missing manifest yields an empty set. Cached
+ * per starting directory.
+ */
+function declaredDependencies(fromFile: string): ReadonlySet<string> {
+  let dir = dirname(fromFile);
+  for (;;) {
+    const cached = declaredDepsCache.get(dir);
+    if (cached !== undefined) return cached;
+
+    let text: string | null = null;
+    try {
+      text = readFileSync(join(dir, "package.json"), "utf8");
+    } catch {
+      text = null;
+    }
+    if (text !== null) {
+      const deps = new Set<string>();
+      try {
+        const pkg: unknown = JSON.parse(text);
+        if (typeof pkg === "object" && pkg !== null) {
+          for (const field of DEP_FIELDS) {
+            const bucket = (pkg as Record<string, unknown>)[field];
+            if (typeof bucket === "object" && bucket !== null && !Array.isArray(bucket)) {
+              for (const name of Object.keys(bucket)) deps.add(name);
+            }
+          }
+        }
+      } catch {
+        // Malformed manifest → empty set (boundary-parsed, never throws).
+      }
+      declaredDepsCache.set(dir, deps);
+      return deps;
+    }
+
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const empty = new Set<string>();
+  declaredDepsCache.set(dirname(fromFile), empty);
+  return empty;
+}
+
 export function resolveComponents(
   filePaths: readonly string[],
   declared: Readonly<Record<string, string>> = {},
@@ -252,6 +360,9 @@ export function resolveComponents(
   const map: Record<string, string> = {};
   const resolutions: ComponentResolution[] = [];
   const seen = new Set<string>();
+  // Collect bare package specifiers that are unresolvable on disk AND produced a
+  // declare-bucket opaque. Deduplicated; built into `unresolvedPackages` at the end.
+  const unresolvedPkgSet = new Set<string>();
 
   for (const filePath of filePaths) {
     const sf = readSourceFile(filePath);
@@ -344,6 +455,23 @@ export function resolveComponents(
           : guaranteedLib !== null
             ? "trusted"
             : "declare";
+      // When a component lands in `declare` because its specifier is a DECLARED
+      // dependency that resolveRoute can't reach on disk (uninstalled — shallow
+      // clone / fresh checkout), record the package so the CLI can surface an
+      // actionable "install deps" note instead of silent blindness.
+      //
+      // The declared-dependency cross-check is the real gate: it excludes path
+      // aliases (`~/…`, `@/…`, tsconfig `@app/…`) — which are NOT deps, so the
+      // "install dependencies" advice would be false for them — while keeping the
+      // genuine uninstalled packages (each IS in package.json, just not on disk).
+      // `packageNameOf` is belt-and-suspenders: it rejects alias-shaped strings
+      // syntactically before we even consult the manifest.
+      if (opaqueKind === "declare" && resolveRoute(used.module, filePath) === null) {
+        const pkgName = packageNameOf(used.module);
+        if (pkgName !== null && declaredDependencies(filePath).has(pkgName)) {
+          unresolvedPkgSet.add(pkgName);
+        }
+      }
       resolutions.push({
         name: used.local,
         module: used.module,
@@ -369,5 +497,6 @@ export function resolveComponents(
     declare: opaqueOf("declare"),
   };
 
-  return { map, coverage, resolutions };
+  const unresolvedPackages = [...unresolvedPkgSet].sort();
+  return { map, coverage, resolutions, unresolvedPackages };
 }

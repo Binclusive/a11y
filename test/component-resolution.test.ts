@@ -511,3 +511,56 @@ describe("resolveComponents: opaque sub-classification (reporting reframe)", () 
     expect(Object.keys(map).sort()).toEqual(["MyButton", "TextField"]);
   });
 });
+
+describe("resolveComponents: unresolvedPackages — cold-scan blind-spot signal", () => {
+  // Lives in its own dir with a sibling package.json (declares the dep) and
+  // tsconfig (declares the `~/*` alias), so the declared-dependency cross-check
+  // and the alias-exclusion can both be asserted from a real on-disk layout.
+  const unresolvedPkgFixture = join(fixtures, "unresolved-pkg", "page.tsx");
+  const stackFixturePage = join(fixtures, "stack-fixture", "app", "page.tsx");
+
+  it("a declared dependency that is not on disk AND lands declare appears in unresolvedPackages", () => {
+    const { unresolvedPackages } = resolveComponents([unresolvedPkgFixture]);
+    // @totally/not-installed-ui IS declared in the sibling package.json but not
+    // installed → declare → must appear. Deduped: Foo + Bar share one entry.
+    expect(unresolvedPackages).toEqual(["@totally/not-installed-ui"]);
+  });
+
+  it("a `~/`-alias import is NOT reported (it's a path alias, not a dependency)", () => {
+    const { unresolvedPackages } = resolveComponents([unresolvedPkgFixture]);
+    // `Aliased` from `~/widgets/aliased` is unresolved on disk, but `~` is not a
+    // package — no `~` (or any alias) may appear, and "install deps" must not apply.
+    expect(unresolvedPackages).not.toContain("~");
+    expect(unresolvedPackages.some((p) => p.startsWith("~"))).toBe(false);
+  });
+
+  it("a relative-but-missing import is NOT reported as an uninstalled package", () => {
+    const { unresolvedPackages } = resolveComponents([unresolvedPkgFixture]);
+    // `Missing` from `./missing-local` has no file on disk, but a missing
+    // relative import is a different category — never a package install to-do.
+    for (const pkg of unresolvedPackages) {
+      expect(pkg).not.toMatch(/^\.{1,2}\//);
+    }
+  });
+
+  it("the stack-fixture `~/` import does NOT contribute `~` to the list", () => {
+    // Regression for d81b43f: the `~/components/card` import previously leaked
+    // `~` into the note as if it were an npm package.
+    const { unresolvedPackages } = resolveComponents([stackFixturePage]);
+    expect(unresolvedPackages).not.toContain("~");
+    expect(unresolvedPackages.some((p) => p.startsWith("~"))).toBe(false);
+  });
+
+  it("a component resolved via registry or trace does NOT appear in unresolvedPackages", () => {
+    // consumer.tsx has TextField (registry) and MyButton/FancyLink (trace) — all checked.
+    const { unresolvedPackages } = resolveComponents([consumer]);
+    expect(unresolvedPackages).toEqual([]);
+  });
+
+  it("is sorted and deduplicated", () => {
+    const { unresolvedPackages } = resolveComponents([unresolvedPkgFixture]);
+    const sorted = [...unresolvedPackages].sort();
+    expect(unresolvedPackages).toEqual(sorted);
+    expect(unresolvedPackages.length).toBe(new Set(unresolvedPackages).size);
+  });
+});

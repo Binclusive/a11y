@@ -176,7 +176,7 @@ export async function scan(filePaths: readonly string[]): Promise<ScanResult> {
   const tsxPaths = allTsx.filter((p) => !isIgnoredFile(p));
 
   if (tsxPaths.length === 0) {
-    const empty: ResolvedComponents = { map: {}, coverage: EMPTY_COVERAGE, resolutions: [] };
+    const empty: ResolvedComponents = { map: {}, coverage: EMPTY_COVERAGE, resolutions: [], unresolvedPackages: [] };
     return { findings: [], coverage: empty.coverage, resolved: empty, contract };
   }
 
