@@ -1,0 +1,85 @@
+{
+  "$schema": "./scenario.schema.json",
+  "name": "a11y-checker-killer",
+  "title": "a11y-checker — the bug the linter everyone trusts walks past",
+  "output": "killer",
+  "terminal": {
+    "width": 1200,
+    "height": 760,
+    "theme": "Catppuccin Mocha",
+    "fontSize": 16,
+    "typingSpeed": "45ms",
+    "padding": 18
+  },
+  "workdir": ".",
+  "shellInit": ["source demo/_a11y.sh"],
+  "setup": [
+    {
+      "run": "[ -n \"$(find demo/.cache/easy-ui -name '*.tsx' 2>/dev/null | head -1)\" ] || { mkdir -p demo/.cache && { cp -R experiments/stack-matrix/.cache/DarkInventor__easy-ui demo/.cache/easy-ui 2>/dev/null || git clone --depth 1 https://github.com/DarkInventor/easy-ui demo/.cache/easy-ui; }; }"
+    }
+  ],
+  "teardown": [],
+  "acts": [
+    {
+      "title": "THE KILLER CUT — eslint-clean vs a11y-checker on real shadcn code",
+      "steps": [
+        {
+          "say": [
+            "easy-ui — a shadcn kit people install. Here's its share button, real repo."
+          ],
+          "run": "sed -n '24,30p' demo/.cache/easy-ui/components/ShareButtons.tsx",
+          "expect": {
+            "exit": 0,
+            "stdoutContains": ["Twitter", "size=\"icon\""]
+          },
+          "read": 4
+        },
+        {
+          "say": [
+            "The linter everyone runs — eslint-plugin-jsx-a11y, recommended."
+          ],
+          "run": "npx eslint --no-config-lookup --config demo/jsx-a11y.config.mjs demo/.cache/easy-ui/components/ShareButtons.tsx && echo '✓ clean — 0 problems'",
+          "expect": {
+            "exit": 0,
+            "stdoutContains": ["clean", "0 problems"],
+            "stdoutNotContains": ["button-no-name"]
+          },
+          "read": 4
+        },
+        {
+          "say": [
+            "a11y-checker, same file. Icon-only button, no accessible name — a screen reader just says 'button'."
+          ],
+          "run": "a11y scan demo/.cache/easy-ui/components | sed -n '/ShareButtons.tsx:27/,/fix:/p'",
+          "expect": {
+            "exit": 1,
+            "stdoutContains": ["enforce/button-no-name", "4.1.2", "fix:"]
+          },
+          "read": 5
+        },
+        {
+          "say": [
+            "And it's not one — across easy-ui's components, every icon-only button is nameless. eslint passed every one."
+          ],
+          "run": "a11y check demo/.cache/easy-ui/components --json | jq -r '[.findings[] | select(.ruleId==\"enforce/button-no-name\")] | length | \"\\(.) icon-only buttons with no accessible name — eslint passed every one.\"'",
+          "expect": {
+            "exit": 1,
+            "stdoutContains": ["icon-only buttons with no accessible name"]
+          },
+          "read": 4
+        },
+        {
+          "say": [
+            "Real kit. Real bug. The linter everyone trusts walked right past it."
+          ],
+          "run": "echo 'eslint: clean   ·   a11y-checker: caught the bug your users feel'",
+          "expect": {
+            "exit": 0,
+            "stdoutContains": ["caught the bug"]
+          },
+          "read": 4
+        }
+      ]
+    }
+  ]
+}

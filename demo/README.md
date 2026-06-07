@@ -1,12 +1,39 @@
 # demo/ — the a11y-checker demo
 
-Two ways to drive the same walkthrough:
+## The headline cut: `scenario.killer.json`
 
-| Path | What it is | When |
+**The 60-second pitch.** On `DarkInventor/easy-ui` — a real shadcn kit people
+install — `eslint-plugin-jsx-a11y` (recommended config) passes the icon-only
+share button **clean (0 problems)**, while a11y-checker flags it
+`enforce/button-no-name` (WCAG 4.1.2) with a `fix:` line. Then it scales: across
+easy-ui's components, **every** icon-only button is nameless, and eslint passed
+every one. Real kit, real bug, the linter everyone trusts walks right past it.
+
+```sh
+pnpm demo:lint   demo/scenario.killer.json   # prove it (eslint misses, checker catches)
+pnpm demo:record demo/scenario.killer.json   # render demo/killer.gif + killer.mp4
+```
+
+A hidden `setup` step clones easy-ui into `demo/.cache/easy-ui` (gitignored) on
+first run — preferring a local copy under `experiments/stack-matrix/.cache`,
+falling back to `git clone`. The checker only resolves easy-ui's shadcn
+`<Button>` to a real `<button>` when it scans **inside** the clone (the repo's
+`tsconfig.json` + `components/ui/button.tsx` must be present), so the scan always
+targets a directory within the clone.
+
+---
+
+Demos in this directory:
+
+| Demo | What it is | When |
 |---|---|---|
-| **`scenario.json` + `demo-kit`** | The demo authored as **data**: one spec drives a self-verifying lint, a live walk-through, and a recorded video. | Default. Author/maintain the demo here. |
+| **`scenario.killer.json`** | The headline cut above: eslint-clean vs a11y-checker on real shadcn code. | Lead with this. |
+| `scenario.json` | The full **workflow** demo: declare your design system on a sample app, recover hidden findings, close on real OSS code. | The on-ramp / how-it-works walk-through. |
 | `demo.sh` | The legacy hand-driven presenter script. Still works. | **Superseded by `demo-kit play`** — kept for reference. |
-| `TUTORIAL.md` | A copy-pasteable narrative of the same flow. | Reading, not driving. |
+| `TUTORIAL.md` | A copy-pasteable narrative of the workflow demo. | Reading, not driving. |
+
+Both `.json` scenarios are authored as **data** and driven by the same
+`demo-kit` (lint / play / record); the schema below applies to both.
 
 ---
 
@@ -62,9 +89,13 @@ A **step** is:
 ### The three verbs
 
 ```sh
-pnpm demo:lint     # tsx demo/demo-kit.ts lint   demo/scenario.json
-pnpm demo:play     # tsx demo/demo-kit.ts play   demo/scenario.json
-pnpm demo:record   # tsx demo/demo-kit.ts record demo/scenario.json
+# Each script forwards its scenario argument to demo-kit; with none, it defaults
+# to demo/scenario.json (the workflow demo).
+pnpm demo:lint     demo/scenario.killer.json   # tsx demo/demo-kit.ts lint   <scenario>
+pnpm demo:play     demo/scenario.killer.json   # tsx demo/demo-kit.ts play   <scenario>
+pnpm demo:record   demo/scenario.killer.json   # tsx demo/demo-kit.ts record <scenario>
+
+pnpm demo:lint                                 # no arg → demo/scenario.json
 ```
 
 | Verb | What it does |
@@ -76,9 +107,9 @@ pnpm demo:record   # tsx demo/demo-kit.ts record demo/scenario.json
 ### The workflow
 
 ```
-author scenario.json  →  pnpm demo:lint   (prove it works)
-                      →  pnpm demo:play    (drive it live)   OR
-                      →  pnpm demo:record  (render a GIF/MP4)
+author <scenario>.json  →  pnpm demo:lint   <scenario>  (prove it works)
+                        →  pnpm demo:play    <scenario>  (drive it live)   OR
+                        →  pnpm demo:record  <scenario>  (render a GIF/MP4)
 ```
 
 `lint` is your CI gate: if a CLI subcommand changes, an output string drifts, or a
