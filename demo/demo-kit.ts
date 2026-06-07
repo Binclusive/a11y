@@ -24,7 +24,7 @@ import {
   existsSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 
@@ -61,6 +61,7 @@ interface Isolation {
 interface Scenario {
   name: string;
   title: string;
+  output?: string;
   terminal?: Terminal;
   workdir?: string;
   shellInit?: string[];
@@ -410,16 +411,22 @@ function cmdRecord(scenarioPath: string): number {
   // keep the tape repo-relative & pretty: show demo/sample-app, not the abs path
   const fixShown = iso ? iso.fixture : undefined;
 
+  // Output basename: scenario.output, else the scenario filename stem (drop one
+  // extension). Drives demo/<base>.tape, demo/<base>.gif, demo/<base>.mp4 so a
+  // second cut never clobbers the main demo's demo.* outputs.
+  const stem = basename(scenarioPath).replace(/\.[^.]+$/, "");
+  const base = ctx.scenario.output ?? stem;
+
   const t = ctx.scenario.terminal ?? {};
   const lines: string[] = [];
   const out = (s = "") => lines.push(s);
 
-  out(`# demo.tape — GENERATED from demo/scenario.json by \`demo-kit record\`. Do not hand-edit.`);
-  out(`# Render:  pnpm demo:record   (writes demo/demo.gif + demo/demo.mp4)`);
+  out(`# ${base}.tape — GENERATED from ${stem}.json by \`demo-kit record\`. Do not hand-edit.`);
+  out(`# Render:  pnpm exec tsx demo/demo-kit.ts record ${scenarioPath}   (writes demo/${base}.gif + demo/${base}.mp4)`);
   out(`# ${ctx.scenario.title}`);
   out("");
-  out(`Output demo/demo.gif`);
-  out(`Output demo/demo.mp4`);
+  out(`Output demo/${base}.gif`);
+  out(`Output demo/${base}.mp4`);
   out("");
   out(`Set Shell "bash"`);
   if (t.theme) out(`Set Theme "${t.theme}"`);
@@ -433,13 +440,13 @@ function cmdRecord(scenarioPath: string): number {
   // hidden setup: source shellInit, bind the fixture var, clear the screen
   out(`# hidden setup — source the alias, bind the fixture var, clear screen`);
   out(`Hide`);
-  for (const init of ctx.scenario.shellInit ?? []) out(`Type "${escapeTape(init)}"`);
+  for (const init of ctx.scenario.shellInit ?? []) out(typeLine(init));
   if (ctx.scenario.shellInit?.length) out(`Enter`);
   if (iso && fixShown) {
-    out(`Type "${escapeTape(`${iso.as}=${fixShown}`)}"`);
+    out(typeLine(`${iso.as}=${fixShown}`));
     out(`Enter`);
   }
-  out(`Type "clear"`);
+  out(typeLine("clear"));
   out(`Enter`);
   out(`Show`);
   out(`Sleep 1s`);
@@ -454,13 +461,13 @@ function cmdRecord(scenarioPath: string): number {
     for (const step of act.steps) {
       if (step.hidden) {
         out(`Hide`);
-        out(`Type "${escapeTape(step.run)}"`);
+        out(typeLine(step.run));
         out(`Enter`);
         out(`Show`);
         continue;
       }
       for (const line of step.say ?? []) out(`# ${line}`);
-      out(`Type "${escapeTape(step.run)}"`);
+      out(typeLine(step.run));
       out(`Sleep 500ms`);
       out(`Enter`);
       const sleepS = (step.read ?? 1) + SCAN_ALLOWANCE_S;
@@ -473,24 +480,25 @@ function cmdRecord(scenarioPath: string): number {
   out(`# cleanup generated files so the repo ends clean`);
   out(`Hide`);
   if (iso && fixShown) {
-    out(`Type "rm -f ${fixShown}/binclusive.json ${fixShown}/AGENTS.md ${fixShown}/CLAUDE.md"`);
+    out(typeLine(`rm -f ${fixShown}/binclusive.json ${fixShown}/AGENTS.md ${fixShown}/CLAUDE.md`));
     out(`Enter`);
   }
   for (const step of ctx.scenario.teardown ?? []) {
-    out(`Type "${escapeTape(step.run)}"`);
+    out(typeLine(step.run));
     out(`Enter`);
   }
-  out(`Type "clear"`);
+  out(typeLine("clear"));
   out(`Enter`);
   out(`Show`);
 
-  const tapePath = join(ctx.repoRoot, "demo", "demo.tape");
+  const tapeRel = join("demo", `${base}.tape`);
+  const tapePath = join(ctx.repoRoot, tapeRel);
   writeFileSync(tapePath, lines.join("\n") + "\n");
   console.log(c(A.green, `wrote ${tapePath} (${lines.length} lines)`));
 
   // run vhs
-  console.log(c(A.dim, `running: vhs demo/demo.tape`));
-  const r = spawnSync("vhs", ["demo/demo.tape"], {
+  console.log(c(A.dim, `running: vhs ${tapeRel}`));
+  const r = spawnSync("vhs", [tapeRel], {
     cwd: ctx.repoRoot,
     stdio: "inherit",
   });
@@ -499,7 +507,7 @@ function cmdRecord(scenarioPath: string): number {
       c(
         A.yellow,
         `vhs did not run (${r.error.message}). The tape was regenerated; ` +
-          `re-run \`pnpm demo:record\` in an environment where vhs's headless Chrome ` +
+          `re-run \`vhs ${tapeRel}\` in an environment where vhs's headless Chrome ` +
           `can reach ttyd over loopback (a sandbox may block it).`,
       ),
     );
@@ -515,13 +523,25 @@ function cmdRecord(scenarioPath: string): number {
     );
     return 0;
   }
-  console.log(c(A.green, `✓ rendered demo/demo.gif + demo/demo.mp4`));
+  console.log(c(A.green, `✓ rendered demo/${base}.gif + demo/${base}.mp4`));
   return 0;
 }
 
-/** VHS `Type "…"` takes a double-quoted string; escape backslashes and quotes. */
-function escapeTape(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+/**
+ * Emit a complete VHS `Type` directive for an arbitrary command string.
+ *
+ * VHS accepts three string delimiters for `Type`: `"`, `'`, and a backtick —
+ * but it has NO escape for the delimiter inside its own quotes, so a command
+ * that contains the chosen delimiter (e.g. `a11y learn "…"`, or `jq '…'`)
+ * breaks the parser. Pick a delimiter the content does NOT contain. Backslashes
+ * are still escaped so a literal `\` survives. The common cases — double quotes
+ * in the command, or single quotes in a jq/grep/sed filter — never collide
+ * because at least one of the three delimiters is always free in practice.
+ */
+function typeLine(s: string): string {
+  const body = s.replace(/\\/g, "\\\\");
+  const delim = !s.includes('"') ? '"' : !s.includes("'") ? "'" : "`";
+  return `Type ${delim}${body}${delim}`;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

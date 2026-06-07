@@ -15,6 +15,11 @@
       "type": "string",
       "description": "Human-readable title shown on the recording's title card."
     },
+    "output": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "Output basename for record mode (no extension, no slash). Drives the generated tape + render targets: demo/<output>.tape, demo/<output>.gif, demo/<output>.mp4. Defaults to the scenario filename stem (e.g. scenario.umut.json → \"scenario.umut\"). Set this to keep a second cut from clobbering the main demo's demo.* outputs."
+    },
     "terminal": {
       "type": "object",
       "description": "Presentation knobs for record mode (mapped onto VHS `Set` directives) and shared by play mode where applicable.",

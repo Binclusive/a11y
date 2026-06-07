@@ -1,0 +1,125 @@
+{
+  "$schema": "./scenario.schema.json",
+  "name": "a11y-checker-umut-cut",
+  "title": "a11y-checker — the audit corpus, shifted left into the editor",
+  "output": "umut",
+  "terminal": {
+    "width": 1200,
+    "height": 760,
+    "theme": "Catppuccin Mocha",
+    "fontSize": 16,
+    "typingSpeed": "45ms",
+    "padding": 18
+  },
+  "workdir": ".",
+  "shellInit": ["source demo/_a11y.sh"],
+  "isolation": { "fixture": "demo/sample-app", "as": "FIX" },
+  "setup": [],
+  "teardown": [],
+  "acts": [
+    {
+      "title": "ACT 1 — the audit bridge: every finding is weighted by the real corpus",
+      "steps": [
+        {
+          "say": [
+            "Same React app, design system @acme/ui declared. Drop the post-declare config in place,",
+            "so the checker sees THROUGH the opaque package to the content passed in."
+          ],
+          "run": "cp $FIX/binclusive.declared.json $FIX/binclusive.json",
+          "expect": { "exit": 0 }
+        },
+        {
+          "say": [
+            "Now SCAN. Every finding carries the audit weight: [TIER] SC X — N/26 orgs,",
+            "the distilled seen-in-the-wild failure shapes, and the fix that worked. The audit corpus,",
+            "shifted left into the editor — weighting and fixing each finding before it ships."
+          ],
+          "run": "a11y scan $FIX/src",
+          "expect": {
+            "exit": 1,
+            "stdoutContains": [
+              "5 finding(s)",
+              "VERY COMMON",
+              "orgs",
+              "22/26 orgs",
+              "21/26 orgs",
+              "seen-in-the-wild",
+              "enforce/input-no-name",
+              "enforce/button-no-name"
+            ],
+            "stdoutNotContains": ["ENOENT"]
+          },
+          "read": 6
+        },
+        {
+          "say": [
+            "The data beat — for someone who lives in audit data. Tag every finding with its",
+            "corpus weight in structured form: rule, WCAG SC, org count, tier. This is the audit",
+            "system's own signal, now riding on each editor/CI finding."
+          ],
+          "run": "a11y check $FIX/src --json | jq '[.findings[] | {rule: .ruleId, wcag: .wcag[0], orgs: .corpus.orgs, tier: .corpus.tier}]'",
+          "expect": {
+            "stdoutContains": [
+              "\"orgs\"",
+              "\"tier\"",
+              "enforce/button-no-name",
+              "very-common",
+              "22"
+            ]
+          },
+          "read": 5
+        },
+        {
+          "say": [
+            "The human-knowledge loop. Auditors encode conventions the corpus can't infer.",
+            "`learn` writes the rule into the config AND a managed AGENTS.md / CLAUDE.md block —",
+            "so an AI assistant honors it BEFORE it writes the offending code."
+          ],
+          "run": "a11y learn \"Every icon-only IconButton must pass an aria-label; never ship a bare icon control.\" --wcag 4.1.2 $FIX",
+          "expect": {
+            "exit": 0,
+            "stdoutContains": ["learned", "AGENTS.md", "binclusive.json"]
+          },
+          "read": 3
+        },
+        {
+          "say": [
+            "Confirm it landed — the learned rule sits in the managed block, alongside the",
+            "corpus patterns, ready for any agent reading AGENTS.md."
+          ],
+          "run": "grep -A1 'Learned (this repo)' $FIX/AGENTS.md",
+          "expect": {
+            "stdoutContains": [
+              "SC 4.1.2",
+              "icon-only IconButton must pass an aria-label"
+            ]
+          },
+          "read": 4
+        }
+      ]
+    },
+    {
+      "title": "ACT 2 — the corpus generalizes at scale: 27 repos × 7 frameworks × 11 design systems",
+      "steps": [
+        {
+          "say": [
+            "Does the corpus-weighted check hold beyond the fixture? The Stack-Matrix:",
+            "the same cold scan across 27 real OSS repos, 7 frameworks, 11 design systems.",
+            "Precision holds; recall is real — the audit corpus you build, running everywhere."
+          ],
+          "run": "sed -n '1,32p' experiments/stack-matrix/REPORT.md",
+          "expect": {
+            "stdoutContains": [
+              "Stack-Matrix",
+              "**27** OSS React repos",
+              "**11** design systems",
+              "**7** frameworks",
+              "shadcn-ui/taxonomy"
+            ]
+          },
+          "read": 6
+        }
+      ]
+    }
+  ]
+}
