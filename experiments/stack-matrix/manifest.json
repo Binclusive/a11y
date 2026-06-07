@@ -190,5 +190,61 @@
     "sha": "12f81a1205b086b596bb06f2b983c1cb993c1844",
     "stars": 44,
     "source": "discovered"
+  },
+  {
+    "repo": "olros/stats",
+    "designSystem": "radix",
+    "defaultBranch": "main",
+    "sha": "afb5dc7d00bbeff205187b1ce579966027789888",
+    "stars": 5,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "patdx/edge-cms",
+    "designSystem": "remix",
+    "defaultBranch": "main",
+    "sha": "0b30389e5117c4a8bf1e17e2f2146348c269cb1d",
+    "stars": 3,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "sjohnston00/sorted",
+    "designSystem": "headlessui",
+    "defaultBranch": "main",
+    "sha": "14a962c6cc28cdefa76c96dda660f764352baf31",
+    "stars": 0,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "googleanalytics/ga-dev-tools",
+    "designSystem": "mui",
+    "defaultBranch": "main",
+    "sha": "14217f42eca6358cfa973ce0e65bc128038ba42e",
+    "stars": 1531,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "EmaSuriano/gatsby-starter-mate",
+    "designSystem": "gatsby",
+    "defaultBranch": "master",
+    "sha": "c2eaec646179faac082a1b2d2216bece547b25f2",
+    "stars": 543,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "elastic/synthetics-recorder",
+    "designSystem": "cra",
+    "defaultBranch": "main",
+    "sha": "cbe360ccffb288a5e5bbb2413283bed2b6c3ea22",
+    "stars": 32,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "StenAL/new-tab",
+    "designSystem": "cra",
+    "defaultBranch": "main",
+    "sha": "52b1a9a87f4ca906c204f4a300b339f2a7ecc3b0",
+    "stars": 4,
+    "source": "framework-discovered"
   }
 ]

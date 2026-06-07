@@ -13,8 +13,17 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RESULTS_DIR = join(HERE, "results");
+const MANIFEST_PATH = join(HERE, "manifest.json");
 const REPORT_MD = join(HERE, "REPORT.md");
 const REPORT_CSV = join(HERE, "report.csv");
+
+/** The frameworks the design-system search never surfaced — backfilled directly. */
+const BACKFILL_FRAMEWORKS = ["remix", "cra", "gatsby"] as const;
+
+interface ManifestEntry {
+  repo: string;
+  source?: string;
+}
 
 interface Finding {
   ruleId: string;
@@ -111,6 +120,26 @@ function main() {
   // ---- per-framework rollup ----
   const byFw = groupBy(ok, (r) => r.framework ?? "?");
 
+  // ---- framework backfill audit (remix / cra / gatsby) ----
+  // These cells never surface from a star-ranked design-system search, so they
+  // were filled by a framework-targeted pass. Report each target's outcome
+  // honestly: how many useful (.tsx, scanned, non-error) cells it produced, and
+  // flag any that stayed dry / all-no-tsx after a fair search.
+  let manifest: ManifestEntry[] = [];
+  try {
+    manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as ManifestEntry[];
+  } catch {
+    manifest = [];
+  }
+  const fwDiscovered = new Set(
+    manifest.filter((m) => m.source === "framework-discovered").map((m) => m.repo),
+  );
+  const backfill = BACKFILL_FRAMEWORKS.map((fw) => {
+    const useful = ok.filter((r) => (r.framework ?? "?") === fw && fwDiscovered.has(r.repo));
+    const erroredFw = errored.filter((r) => fwDiscovered.has(r.repo) && r.designSystem === fw);
+    return { fw, useful: useful.length, errored: erroredFw.length, repos: useful.map((r) => r.repo) };
+  });
+
   // ---- coverage grid (DS × framework) ----
   const dsKeys = [...new Set(ok.map((r) => r.designSystem))].sort();
   const fwKeys = [...new Set(ok.map((r) => r.framework ?? "?"))].sort();
@@ -183,6 +212,30 @@ function main() {
     );
   }
   md.push("");
+
+  md.push("## Framework backfill — remix / cra / gatsby\n");
+  md.push(
+    "These three frameworks never surface from the star-ranked design-system " +
+      "search (winners skew next / react / react-router / vite-react), so they " +
+      "were filled by a **framework-targeted** discovery pass " +
+      "(`matrix.ts › FRAMEWORK_TARGETS`) that searches the framework's own dep, " +
+      "prefers TypeScript repos, and gates on `.tsx` presence (the checker is " +
+      "TSX-only). Outcome per target:\n",
+  );
+  md.push("| framework | useful cells (.tsx, scanned) | no-tsx / errored | repos |");
+  md.push("|---|---:|---:|---|");
+  for (const b of backfill) {
+    md.push(
+      `| ${b.fw} | ${b.useful} | ${b.errored} | ${b.repos.join(", ") || "_(dry — none after a fair search)_"} |`,
+    );
+  }
+  const dry = backfill.filter((b) => b.useful === 0).map((b) => b.fw);
+  md.push(
+    dry.length === 0
+      ? "\nAll three targets produced at least one useful cell.\n"
+      : `\n**Attempted but unfilled:** ${dry.join(", ")} — came up dry or all-no-tsx ` +
+          "after a fair TS-biased search (logged honestly, not padded).\n",
+  );
 
   md.push("## Signal — single-rule clusters (likely false-positive / next-hardening targets)\n");
   if (signals.length === 0) {

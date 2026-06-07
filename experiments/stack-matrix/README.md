@@ -20,6 +20,15 @@ would get it.
   the cloned repo's package.json deps: `next` → next, `@remix-run/react` →
   remix, `react-router(-dom)` → react-router, `@vitejs/plugin-react(-swc)` →
   vite-react, `react-scripts` → cra, `gatsby` → gatsby, else `react`.
+- **Framework backfill** (a second SEARCH axis) — `matrix.ts › FRAMEWORK_TARGETS`.
+  The design-system search is star-ranked, and its winners skew
+  next / react / react-router / vite-react, so **remix / cra / gatsby cells stay
+  empty**. A framework-targeted pass searches each framework's own dep
+  (`@remix-run/react`, `gatsby`, `react-scripts`), biases toward TypeScript repos
+  (the query pairs the dep with a `tsconfig.json` match), and **gates on `.tsx`
+  presence** before pinning — CRA/Gatsby apps skew heavily to `.jsx` and the
+  checker is TSX-only. Survivors are tagged `source: "framework-discovered"` and
+  **merged** onto the design-system manifest (deduped by repo).
 
 ## Three-step flow
 
@@ -38,7 +47,12 @@ For each design system, `gh search code '"<dep>" filename:package.json'`
 (skip archived / forks / the design-system's own monorepo / repos > 200 MB
 diskUsage), ranked by stars, top 3 kept, then **pinned to a commit SHA**.
 Polite: ~7s sleep between design systems (code search is ~10 req/min).
-Idempotent — overwrites `manifest.json` each run.
+
+Then a **framework pass** (`FRAMEWORK_TARGETS`) over-fetches (~8 candidates),
+applies the same filters plus a `.tsx`-presence gate, prefers TypeScript repos,
+keeps the top 2 per framework, and **merges** them onto the design-system
+manifest (dedupe by repo). Idempotent — a repo already pinned (from either pass
+or a prior run) is never duplicated; `manifest.json` is rewritten each run.
 
 ### 2. `run.ts` → `results/<owner>__<name>.json`
 

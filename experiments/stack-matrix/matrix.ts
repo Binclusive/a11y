@@ -37,6 +37,57 @@ export function designSystemByKey(key: string): DesignSystem | undefined {
 }
 
 /**
+ * A FRAMEWORK discovery target.
+ *
+ * The primary discovery axis is design-system (above). But some frameworks
+ * never surface that way: a cold design-system search ranks by stars and the
+ * winners skew next / react / react-router / vite-react, so remix / cra / gatsby
+ * cells stay empty. This second axis searches GitHub for the FRAMEWORK's own
+ * dep so those cells get filled directly.
+ *
+ * The checker is TSX-only and CRA/Gatsby apps skew heavily to `.jsx`, so the
+ * `tsHint` query biases discovery toward TypeScript repos (it pairs the dep with
+ * a `tsconfig.json` match). `own` lists the framework's own infra/monorepos to
+ * skip so a search for "gatsby" doesn't just rank gatsbyjs/gatsby first.
+ */
+export interface FrameworkTarget {
+  /** Framework key, matching a `detectFramework` return value. */
+  key: string;
+  /** npm package name that signals this framework in a package.json. */
+  dep: string;
+  /** Code-search query that biases toward TypeScript repos (over-fetch + prefer TS). */
+  tsHint: string;
+  /** owner/name repos to skip (the framework's own monorepo / infra). */
+  own: string[];
+}
+
+export const FRAMEWORK_TARGETS: FrameworkTarget[] = [
+  {
+    key: "remix",
+    dep: "@remix-run/react",
+    tsHint: '"@remix-run/react" filename:tsconfig.json',
+    own: ["remix-run/remix", "prisma/prisma-examples"],
+  },
+  {
+    key: "gatsby",
+    dep: "gatsby",
+    tsHint: '"gatsby" filename:tsconfig.json',
+    own: [
+      "gatsbyjs/gatsby",
+      "definitelytyped/definitelytyped",
+      "freecodecamp/freecodecamp",
+      "yarnpkg/berry",
+    ],
+  },
+  {
+    key: "cra",
+    dep: "react-scripts",
+    tsHint: '"react-scripts" filename:tsconfig.json',
+    own: ["facebook/create-react-app", "microsoft/typescript-error-deltas"],
+  },
+];
+
+/**
  * The own-monorepo of each design system — we skip these during discovery so a
  * search for "@mui/material" doesn't just rank mui's own repo first.
  * Keyed by design-system key; values are `owner/name` (lowercased) to skip.

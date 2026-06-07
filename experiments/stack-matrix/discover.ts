@@ -19,7 +19,7 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DESIGN_SYSTEMS, OWN_MONOREPOS } from "./matrix.ts";
+import { DESIGN_SYSTEMS, FRAMEWORK_TARGETS, OWN_MONOREPOS } from "./matrix.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SEED_PATH = join(HERE, "seed.json");
@@ -29,6 +29,12 @@ const SEARCH_LIMIT = 6; // candidates per design system from code search
 const KEEP_PER_DS = 3; // survivors kept per design system after ranking
 const MAX_DISK_KB = 200_000; // skip repos larger than this (too slow to scan)
 const POLITE_SLEEP_MS = 7_000; // between code-search calls (~10 req/min budget)
+
+// Framework discovery over-fetches (CRA/Gatsby skew to .jsx; the checker is
+// TSX-only, so we cast a wider net and prefer TypeScript repos) and keeps fewer
+// per framework — these only need to FILL a missing cell, not dominate it.
+const FW_SEARCH_LIMIT = 8; // candidates per framework from code search
+const KEEP_PER_FW = 2; // survivors kept per framework after ranking
 
 interface SeedEntry {
   repo: string;
@@ -41,7 +47,7 @@ interface ManifestEntry {
   defaultBranch: string;
   sha: string;
   stars: number;
-  source: "seed" | "discovered";
+  source: "seed" | "discovered" | "framework-discovered";
 }
 
 interface RepoMeta {
@@ -60,26 +66,45 @@ function gh(args: string[]): string {
   return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 }).trim();
 }
 
-/** Code-search for repos whose package.json declares `dep`. Returns owner/name list. */
-function searchRepos(dep: string): string[] {
+/** Run a raw `gh search code` query and return its deduped owner/name list. */
+function searchCode(query: string, limit: number): string[] {
   try {
-    const raw = gh([
-      "search",
-      "code",
-      `"${dep}" filename:package.json`,
-      "--limit",
-      String(SEARCH_LIMIT),
-      "--json",
-      "repository",
-    ]);
+    const raw = gh(["search", "code", query, "--limit", String(limit), "--json", "repository"]);
     const rows = JSON.parse(raw) as Array<{ repository?: { nameWithOwner?: string } }>;
     const names = rows
       .map((r) => r.repository?.nameWithOwner)
       .filter((n): n is string => typeof n === "string");
     return [...new Set(names)];
   } catch (err) {
-    console.warn(`  ! code-search failed for "${dep}": ${(err as Error).message.split("\n")[0]}`);
+    console.warn(`  ! code-search failed for "${query}": ${(err as Error).message.split("\n")[0]}`);
     return [];
+  }
+}
+
+/** Code-search for repos whose package.json declares `dep`. Returns owner/name list. */
+function searchRepos(dep: string): string[] {
+  return searchCode(`"${dep}" filename:package.json`, SEARCH_LIMIT);
+}
+
+/**
+ * Count `.tsx` blobs in a pinned tree via the git-trees API. The checker is
+ * TSX-only, so a repo with zero `.tsx` is useless to us — this lets the
+ * framework pass PREFER TypeScript repos and drop pure-`.jsx` CRA/Gatsby apps
+ * before they ever get cloned.
+ */
+function tsxCount(repo: string, sha: string): number {
+  const [owner, name] = repo.split("/");
+  try {
+    const raw = gh([
+      "api",
+      `repos/${owner}/${name}/git/trees/${sha}?recursive=1`,
+      "--jq",
+      '[.tree[].path | select(endswith(".tsx"))] | length',
+    ]);
+    const n = Number.parseInt(raw, 10);
+    return Number.isNaN(n) ? 0 : n;
+  } catch {
+    return 0;
   }
 }
 
@@ -196,8 +221,76 @@ async function main() {
     if (i < DESIGN_SYSTEMS.length - 1) await sleep(POLITE_SLEEP_MS);
   }
 
-  writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + "\n");
-  console.log(`\nWrote ${manifest.length} pinned repos → ${MANIFEST_PATH}`);
+  // ---- FRAMEWORK pass: fill cells the design-system search never surfaces. ----
+  // We MERGE onto the design-system manifest (dedupe by repo) instead of
+  // replacing it — the design-system picks are the spine, framework picks just
+  // backfill the empty remix / cra / gatsby columns.
+  const merged = await frameworkPass(manifest);
+
+  writeFileSync(MANIFEST_PATH, JSON.stringify(merged, null, 2) + "\n");
+  console.log(`\nWrote ${merged.length} pinned repos → ${MANIFEST_PATH}`);
+}
+
+/**
+ * Discover repos by FRAMEWORK dep (TS-biased), filter + pin like the DS pass,
+ * prefer repos that actually contain `.tsx`, and MERGE the survivors into the
+ * given manifest. Idempotent: dedupes by repo name, so an entry already present
+ * (from the DS pass or a prior framework run) is never duplicated.
+ */
+async function frameworkPass(base: ManifestEntry[]): Promise<ManifestEntry[]> {
+  const seen = new Set(base.map((e) => e.repo.toLowerCase()));
+  const additions: ManifestEntry[] = [];
+
+  console.log("\n— framework pass —");
+  for (let i = 0; i < FRAMEWORK_TARGETS.length; i++) {
+    const fw = FRAMEWORK_TARGETS[i];
+    const own = new Set(fw.own.map((s) => s.toLowerCase()));
+
+    // Over-fetch, TS-biased.
+    const candidates = searchCode(fw.tsHint, FW_SEARCH_LIMIT);
+
+    // Filter + pin + measure .tsx, exactly like the DS pass but with a TSX gate.
+    const survivors: Array<ManifestEntry & { tsx: number }> = [];
+    for (const repo of candidates) {
+      if (own.has(repo.toLowerCase())) continue; // skip the framework's own infra
+      if (seen.has(repo.toLowerCase())) continue; // already in the manifest
+      const meta = repoMeta(repo);
+      if (!meta) continue; // 404 / moved
+      if (meta.isArchived || meta.isFork) continue;
+      if (meta.diskUsage > MAX_DISK_KB) continue; // too big to scan quickly
+      const sha = pinSha(meta.nameWithOwner, meta.defaultBranch);
+      if (!sha) continue; // could not pin
+      const tsx = tsxCount(meta.nameWithOwner, sha);
+      if (tsx === 0) continue; // TSX-only checker — pure-.jsx repos are useless
+      survivors.push({
+        repo: meta.nameWithOwner,
+        designSystem: fw.key, // framework cell; detectFramework re-derives post-clone
+        defaultBranch: meta.defaultBranch,
+        sha,
+        stars: meta.stars,
+        source: "framework-discovered",
+        tsx,
+      });
+    }
+
+    // Prefer richer TSX repos, break ties by stars; keep the top N.
+    survivors.sort((a, b) => b.tsx - a.tsx || b.stars - a.stars);
+    const kept = survivors.slice(0, KEEP_PER_FW);
+    for (const k of kept) {
+      const { tsx: _tsx, ...entry } = k;
+      additions.push(entry);
+      seen.add(entry.repo.toLowerCase());
+    }
+    console.log(
+      `${fw.key.padEnd(7)} kept ${kept.length}/${survivors.length} ` +
+        `(searched=${candidates.length}) → ` +
+        (kept.map((k) => `${k.repo}(tsx=${k.tsx})`).join(", ") || "none"),
+    );
+
+    if (i < FRAMEWORK_TARGETS.length - 1) await sleep(POLITE_SLEEP_MS);
+  }
+
+  return [...base, ...additions];
 }
 
 main().catch((err) => {
