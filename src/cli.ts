@@ -25,7 +25,7 @@ const TIER_LABEL: Record<EnrichedFinding["corpus"]["tier"], string> = {
  * collector produced the finding. The `via` tag names the non-structural
  * producers so each one's distinct reach is legible.
  */
-function detailLines(f: EnrichedFinding): string[] {
+export function detailLines(f: EnrichedFinding): string[] {
   const scList =
     f.wcag.length > 0 ? f.wcag.map((sc) => `WCAG ${sc}`).join(", ") : "no WCAG mapping";
   const via =
@@ -47,13 +47,27 @@ function detailLines(f: EnrichedFinding): string[] {
   }
 
   if (f.corpus.source === "audit") {
-    // The moat: real audit-frequency data — org count + frequency tier.
-    lines.push(
-      `    corpus: [${TIER_LABEL[f.corpus.tier]}] SC ${f.corpus.sc} — ${f.corpus.orgs}/26 orgs`,
-      `    fix:    ${f.corpus.fix}`,
-    );
-    // Distilled per-failure-shape evidence for this SC (when the SC is distilled).
-    if (f.corpus.patterns.length > 0) {
+    // The moat: real audit-frequency data — org count + frequency tier. The
+    // tier line is an accurate SC-LEVEL fact and is always shown.
+    lines.push(`    corpus: [${TIER_LABEL[f.corpus.tier]}] SC ${f.corpus.sc} — ${f.corpus.orgs}/26 orgs`);
+    if (f.provenance === "axe") {
+      // The corpus `fix` is SC-generic (written for the SC's most-common
+      // failure) and contradicts varied axe rules under that SC — so for an
+      // axe finding show axe's OWN rule-accurate guidance instead: the
+      // requirement is already on the `message` line above; link the canonical
+      // Deque fix page as `ref` (consistent with the baseline axe path).
+      if (f.corpus.helpUrl !== null) lines.push(`    ref:    ${f.corpus.helpUrl}`);
+    } else {
+      // Source-pass finding (jsx-a11y / enforce): clean rule↔SC mapping, so the
+      // SC-keyed corpus fix is rule-accurate — keep it.
+      lines.push(`    fix:    ${f.corpus.fix}`);
+    }
+    // Distilled per-failure-shape evidence for this SC (when the SC is
+    // distilled). Shown ONLY for source-pass findings: it is SC-generic — the
+    // failure shapes most common under the SC, not under THIS axe rule — so on
+    // an axe finding it contradicts the rule exactly as the SC-generic fix does
+    // (1.1.1's shapes are all image-alt, but aria-progressbar-name is not).
+    if (f.provenance !== "axe" && f.corpus.patterns.length > 0) {
       lines.push(`    seen-in-the-wild (distilled, SC ${f.corpus.sc}):`);
       for (const p of f.corpus.patterns) {
         lines.push(`      • [${TIER_LABEL[p.frequencyTier]}] ${p.component} — ${p.failureShape}`);

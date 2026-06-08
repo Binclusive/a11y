@@ -387,6 +387,28 @@ export function enrichAll(findings: readonly Finding[]): EnrichedFinding[] {
   return findings.map(enrich);
 }
 
+/**
+ * The rule-accurate fix string to display/emit for a finding — the single seam
+ * the CLI report and the MCP `CheckFinding` both read so they never disagree.
+ *
+ * For a `provenance === "axe"` (rendered-DOM) finding the corpus `fix` is the
+ * SC-GENERIC fix, written for that SC's most-common failure (1.1.1 → missing
+ * image alt). But one SC spans many axe rules with different failure modes
+ * (`aria-progressbar-name` is also 1.1.1), so the SC-generic fix contradicts the
+ * rule. axe's OWN per-rule guidance is rule-accurate, so for axe findings the
+ * displayed fix is axe's: the per-rule `message` (axe help), null when even that
+ * is absent. The Deque help page (`corpus.helpUrl`) is the canonical fix link
+ * and is surfaced alongside as `ref`.
+ *
+ * For source-pass findings (`jsx-a11y` / `enforce`) the corpus `fix` is kept
+ * exactly as-is: their rule↔SC mapping is clean via wcag-map, so the SC-keyed
+ * corpus fix is rule-accurate.
+ */
+export function displayFix(f: EnrichedFinding): string | null {
+  if (f.provenance === "axe") return f.message ?? null;
+  return f.corpus.fix;
+}
+
 /** A corpus SC entry surfaced for contract generation: SC + frequency + fix. */
 export interface CorpusCriterion {
   readonly sc: string;

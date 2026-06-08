@@ -39,6 +39,7 @@ import {
   baselineRules,
   type CorpusPattern,
   corpusPatterns,
+  displayFix,
   type EnrichedFinding,
   enrichAll,
 } from "./corpus";
@@ -63,6 +64,13 @@ export interface CheckFinding {
    * axe recommendation, not a WCAG conformance failure.
    */
   readonly bestPractice: EnrichedFinding["corpus"]["bestPractice"];
+  /**
+   * The rule-accurate fix. For source-pass findings (`jsx-a11y` / `enforce`)
+   * this is the SC-keyed corpus fix. For `provenance === "axe"` findings it is
+   * axe's OWN per-rule guidance (axe help), NOT the SC-generic corpus fix —
+   * which would contradict the rule (see {@link displayFix}). `helpUrl` carries
+   * the canonical Deque fix page either way.
+   */
   readonly fix: string | null;
   /** axe's Deque-University help URL, when the source knows it. */
   readonly helpUrl: EnrichedFinding["corpus"]["helpUrl"];
@@ -85,7 +93,7 @@ function toCheckFinding(f: EnrichedFinding, file: string): CheckFinding {
     tier: f.corpus.tier,
     severity: f.corpus.severity,
     bestPractice: f.corpus.bestPractice,
-    fix: f.corpus.fix,
+    fix: displayFix(f),
     helpUrl: f.corpus.helpUrl,
     message: f.message,
     enforcement: f.enforcement,

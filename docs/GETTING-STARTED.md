@@ -80,7 +80,7 @@ npx @binclusive/a11y init        # run in your project root
 
 ```
 a11y-checker init — /path/to/your-app
-  stack:       next (app router) · @radix-ui/react-checkbox · ts
+  stack:       next (app router) · Radix · ts
   enforcement: block 1.3.1, 4.1.2, 2.4.4
   wrote:       binclusive.json
   block:       AGENTS.md
@@ -99,7 +99,7 @@ WCAG criteria that will **fail a build**; everything else is a warning.
   "stack": {
     "framework": "next",
     "router": "app",
-    "designSystem": "@radix-ui/react-checkbox",
+    "designSystem": "Radix",
     "language": "ts"
   },
   "enforcement": {
@@ -353,7 +353,7 @@ aria-progressbar-name
     ARIA progressbar nodes must have an accessible name
     severity: SERIOUS
     corpus: [COMMON] SC 1.1.1 — 16/26 orgs
-    fix:    Provide alt text for informative images; give decorative images an empty alt.
+    ref:    https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name
 
 82 finding(s)   COMMON: 7  |  VERY COMMON: 6  |  BASELINE: 69
 enforcement: 82 blocking · 0 warning

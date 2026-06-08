@@ -1,7 +1,8 @@
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 import { buildBaselineCatalog } from "../src/baseline/gen-baseline";
-import { baselineRules, enrich } from "../src/corpus";
+import { detailLines } from "../src/cli";
+import { baselineRules, displayFix, enrich } from "../src/corpus";
 import type { Finding } from "../src/core";
 
 /** A minimal axe finding, with only the fields enrich/baseline read. */
@@ -181,5 +182,79 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
     expect(e.corpus.sc).toBeNull();
     expect(e.corpus.severity).toBeNull();
     expect(e.corpus.bestPractice).toBe(false);
+  });
+});
+
+describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus fix", () => {
+  // The credibility bug: `aria-progressbar-name` is an axe rule tagged WCAG
+  // 1.1.1 — an SC the audit corpus HAS (common, 16/26), whose generic fix is
+  // written for that SC's most-common failure ("Provide alt text for
+  // informative images …"). Rendering that fix under a progressbar rule
+  // contradicts the rule. axe's per-rule help is rule-accurate, so the displayed
+  // fix must be axe's, while the corpus frequency tier (an SC-level fact) stays.
+  const progressbar = (over: Partial<Finding> = {}): Finding =>
+    axeFinding({
+      ruleId: "aria-progressbar-name",
+      message: "ARIA progressbar nodes must have an accessible name",
+      wcag: ["1.1.1"],
+      severity: "serious",
+      helpUrl:
+        "https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name?application=axeAPI",
+      ...over,
+    });
+
+  it("enriches to source 'audit' on SC 1.1.1 — the corpus DOES cover this SC", () => {
+    const e = enrich(progressbar());
+    expect(e.corpus.source).toBe("audit");
+    expect(e.corpus.sc).toBe("1.1.1");
+    expect(e.corpus.tier).toBe("common");
+    expect(e.corpus.orgs).toBe(16);
+    // The raw corpus fix IS the SC-generic image-alt fix — the trap.
+    expect(e.corpus.fix).toMatch(/alt text/i);
+  });
+
+  it("displayFix returns axe's rule guidance, NOT the SC-generic corpus fix", () => {
+    const e = enrich(progressbar());
+    const fix = displayFix(e);
+    expect(fix).toBe("ARIA progressbar nodes must have an accessible name");
+    expect(fix).not.toMatch(/alt text/i); // never the 1.1.1 image-alt fix
+  });
+
+  it("the rendered audit-tier axe finding shows the corpus tier + a Deque ref, no contradictory fix", () => {
+    const lines = detailLines(enrich(progressbar()));
+    const text = lines.join("\n");
+    // The moat — SC-level frequency fact — is still present.
+    expect(text).toContain("corpus: [COMMON] SC 1.1.1 — 16/26 orgs");
+    // The canonical per-rule fix page is linked.
+    expect(text).toContain(
+      "ref:    https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name?application=axeAPI",
+    );
+    // The requirement is stated by axe's own message line.
+    expect(text).toContain("ARIA progressbar nodes must have an accessible name");
+    expect(text).toContain("severity: SERIOUS");
+    // NO contradictory SC-generic image-alt fix line.
+    expect(text).not.toMatch(/alt text/i);
+    expect(text).not.toMatch(/fix:/);
+  });
+
+  it("a SOURCE-PASS finding on the same SC keeps the corpus fix unchanged", () => {
+    // A jsx-a11y finding tagged 1.1.1 has a clean rule↔SC mapping via wcag-map,
+    // so its SC-keyed corpus fix is rule-accurate — it must stay verbatim.
+    const e = enrich({
+      file: "/x.tsx",
+      line: 7,
+      ruleId: "jsx-a11y/alt-text",
+      message: "img elements must have an alt prop",
+      wcag: ["1.1.1"],
+      enforcement: "block",
+      provenance: "jsx-a11y",
+    });
+    expect(e.corpus.source).toBe("audit");
+    expect(displayFix(e)).toMatch(/alt text/i); // unchanged corpus fix
+    expect(displayFix(e)).toBe(e.corpus.fix);
+
+    const text = detailLines(e).join("\n");
+    expect(text).toContain("corpus: [COMMON] SC 1.1.1 — 16/26 orgs");
+    expect(text).toMatch(/fix:\s+Provide alt text/); // corpus fix still rendered
   });
 });

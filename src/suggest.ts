@@ -34,7 +34,7 @@
 
 import type { ControlType } from "./enforce";
 import { leafName, TOGGLE_NAMES, typeFromName } from "./enforce";
-import { isFrameworkPrimitive, isOwnModule, packageNameOf } from "./module-scope";
+import { familyLabel, isFrameworkPrimitive, isOwnModule, packageNameOf } from "./module-scope";
 import type { ComponentResolution } from "./resolve-components";
 
 /**
@@ -90,9 +90,12 @@ export interface SuggestOptions {
    */
   readonly isOwnAlias: (specifier: string) => boolean;
   /**
-   * The detected design-system package (e.g. `"@acme/ui"`), or `null`/`"custom"`
-   * when none was detected. Suggestions from this package sort FIRST so the
-   * most relevant guesses lead the printed list; it does not gate inclusion.
+   * The detected design-system LABEL (e.g. `"@acme/ui"`, or a collapsed family
+   * name like `"Radix"`), or `null`/`"custom"` when none was detected.
+   * Suggestions from this design system sort FIRST so the most relevant guesses
+   * lead the printed list; it does not gate inclusion. The rank comparison
+   * collapses each suggestion's package through {@link familyLabel} so a family
+   * label still matches its per-component sub-packages.
    */
   readonly designSystem: string | null;
 }
@@ -309,8 +312,13 @@ export function suggestComponentMap(
   }
 
   // Design-system suggestions first, then alphabetical — deterministic output.
+  // `designSystem` is the DETECTED label, which is collapsed to a family name for
+  // known multi-package families (`@radix-ui/react-checkbox` -> `Radix`), so the
+  // suggestion's package is run through the SAME collapse before comparing —
+  // otherwise a Radix app's per-component packages would never match `Radix` and
+  // the design-system-first sort would silently regress.
   const rank = (s: ComponentSuggestion): number =>
-    designSystem !== null && packageNameOf(s.module) === designSystem ? 0 : 1;
+    designSystem !== null && familyLabel(packageNameOf(s.module)) === designSystem ? 0 : 1;
   suggestions.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 
   return {

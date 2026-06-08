@@ -15,7 +15,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Language, Router, Stack } from "./contract";
-import { isFrameworkPrimitive, isOwnModule, packageNameOf } from "./module-scope";
+import { familyLabel, isFrameworkPrimitive, isOwnModule, packageNameOf } from "./module-scope";
 import { resolveComponents } from "./resolve-components";
 import { ownAliasMatcherFor } from "./tsconfig-aliases";
 
@@ -143,6 +143,14 @@ function detectLanguage(dir: string): Language {
  * imports + path aliases) and framework primitives (`next`, `react`, ...) never
  * count — the design system is the UI-component package, not the platform.
  *
+ * The winning package is then collapsed to its canonical FAMILY name for the
+ * human-facing label via {@link familyLabel}: a Radix app's dominant package is
+ * some per-component sub-package (`@radix-ui/react-checkbox`), but the reported
+ * design system is `Radix`. Single-package design systems (`bootstrap`) and
+ * workspace packages (`@acme/ui`) pass through unchanged. The collapse is the
+ * label only — it does not affect trusted-library resolution, which keys off the
+ * raw module specifier in `registry.ts`.
+ *
  * `rootDir` is where the repo's tsconfig is found (find-up), so its
  * `compilerOptions.paths` aliases that map into own source are excluded too. It
  * defaults to the directory of the first scanned file — find-up climbs from
@@ -173,7 +181,10 @@ export function detectDesignSystem(tsxFiles: readonly string[], rootDir?: string
     return best === null ? null : best.pkg;
   };
 
-  return pickMax(resolvedHost) ?? pickMax(rawUsage) ?? "custom";
+  const winner = pickMax(resolvedHost) ?? pickMax(rawUsage);
+  // Collapse a known multi-package family (Radix, MUI, …) to its canonical name
+  // for the human-facing label; an unknown/single-package DS passes through.
+  return winner === null ? "custom" : familyLabel(winner);
 }
 
 /**

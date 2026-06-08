@@ -46,7 +46,8 @@ describe("detectDesignSystem excludes own-source aliases from ranking", () => {
   it("picks the real third-party lib over the aliased own component", () => {
     const page = join(aliasFixture, "src", "page.tsx");
     // @app/components/app-button traces to <button> but is an own-source alias;
-    // @mui/material (registry) is the real design system and must win.
-    expect(detectDesignSystem([page], aliasFixture)).toBe("@mui/material");
+    // @mui/material (registry) is the real design system and must win. It is
+    // reported by its canonical family label `MUI`.
+    expect(detectDesignSystem([page], aliasFixture)).toBe("MUI");
   });
 });
