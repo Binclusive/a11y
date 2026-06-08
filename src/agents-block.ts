@@ -112,6 +112,31 @@ function learnedLines(contract: Contract): string[] {
 }
 
 /**
+ * The ROBOT MODE protocol — how an agent should drive the MCP tools to remediate
+ * a11y. Deliberately NON-inferable (which tools, rank by `tier`, re-scan to
+ * verify): an AI can't guess the tool names or the corpus-frequency ordering, so
+ * this carries real signal. Emitted at the top of every generated block, so ANY
+ * agent that reads AGENTS.md/CLAUDE.md — Cursor, Copilot, Codex, Windsurf, Cline —
+ * runs the same loop as the Claude Code `grind` skill, with no file to copy by
+ * hand. Lines stay terse and single-blank-separated (the block is re-read every
+ * turn, and the splice tests forbid blank-line accumulation).
+ */
+const PROTOCOL_LINES: readonly string[] = [
+  "Use the local `binclusive-a11y` MCP tools — `check_a11y`, `get_a11y_rules` —",
+  "whenever accessibility is in scope. Don't guess from generic a11y knowledge.",
+  "",
+  "To fix or clean up accessibility:",
+  "1. `check_a11y` the directory; work findings by `tier` — very-common first.",
+  "2. Apply mechanical fixes (missing `type`, role typo, `href`, `tabIndex`).",
+  "3. For semantic fixes (alt text, `aria-label`, link text, labels) derive a real",
+  '   value from context — never filler like `alt="image"`; flag low-confidence ones.',
+  "4. Re-scan after each change: a fix counts only when the checker agrees it cleared.",
+  "5. Stop after 2 failed tries on a finding; report opaque `coverage` as blind spots.",
+  "Remediate findings — never claim compliance. Before adding components, check",
+  "`get_a11y_rules({ component })` and apply the rules first.",
+];
+
+/**
  * Build the managed block body (between, not including, the markers) from the
  * contract and the distilled corpus patterns. Pure function of its inputs —
  * same inputs, same bytes — which is what makes regeneration idempotent and
@@ -121,7 +146,11 @@ export function renderBlock(contract: Contract, patterns: readonly CorpusPattern
   const enforcement = contract.enforcement;
   const lines: string[] = [
     BLOCK_BEGIN,
-    "## Accessibility contract (Binclusive)",
+    "## Accessibility (Binclusive)",
+    "",
+    ...PROTOCOL_LINES,
+    "",
+    "### Contract",
     "",
     stackHeader(contract.stack),
     `Enforcement — block: ${enforcement.block.join(", ") || "(none)"} · warn: ${

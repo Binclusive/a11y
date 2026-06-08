@@ -49,8 +49,26 @@ violations → propose the judgment ones (never placeholder text) → re-scan to
 verify each fix cleared → repeat. It ends with a report of what it fixed, what
 needs a human, and what it couldn't see.
 
-## Other agents (Cursor, Copilot, …)
+## Other agents (Cursor, Copilot, Codex, Windsurf, Cline)
 
-The MCP server is vendor-neutral and the same `@binclusive/a11y` package backs it,
-but the one-command install above is Claude Code only. Cross-vendor install
-(deeplinks + `AGENTS.md`) is the next packaging step.
+The MCP server is vendor-neutral. To use it outside Claude Code:
+
+1. Add the server to your tool's MCP config (the same stdio command the plugin uses):
+
+   ```json
+   { "command": "npx", "args": ["-y", "@binclusive/a11y", "mcp"] }
+   ```
+
+2. In your project, run:
+
+   ```bash
+   npx @binclusive/a11y init
+   ```
+
+   This generates an `AGENTS.md` containing the ROBOT MODE loop **and** your repo's
+   corpus rules. Cursor, Copilot, Codex, Windsurf, and Cline all read `AGENTS.md`,
+   so your agent then runs the same grind loop — no file to copy by hand. (Claude
+   Code reads `CLAUDE.md`, which `init` writes too.)
+
+Re-run `init`/`learn` any time; they refresh the rules block and leave the rest of
+the file untouched.
