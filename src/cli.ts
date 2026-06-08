@@ -39,9 +39,15 @@ function detailLines(f: EnrichedFinding): string[] {
     `    wcag:   ${scList}`,
     `    ${f.message}`,
   ];
-  if (f.corpus.tier === "unknown") {
-    lines.push("    corpus: no snapshot match (tier unknown)");
-  } else {
+
+  // Severity, when known — from axe's runtime impact or the baseline catalog's
+  // published default. Shown for both audit and baseline hits.
+  if (f.corpus.severity !== null) {
+    lines.push(`    severity: ${f.corpus.severity.toUpperCase()}`);
+  }
+
+  if (f.corpus.source === "audit") {
+    // The moat: real audit-frequency data — org count + frequency tier.
     lines.push(
       `    corpus: [${TIER_LABEL[f.corpus.tier]}] SC ${f.corpus.sc} — ${f.corpus.orgs}/26 orgs`,
       `    fix:    ${f.corpus.fix}`,
@@ -53,6 +59,17 @@ function detailLines(f: EnrichedFinding): string[] {
         lines.push(`      • [${TIER_LABEL[p.frequencyTier]}] ${p.component} — ${p.failureShape}`);
       }
     }
+  } else if (f.corpus.source === "baseline") {
+    // Coverage: axe's published per-rule data, NOT audit-frequency data. Make
+    // that explicit so it never reads as a moat hit.
+    lines.push(`    fix:    ${f.corpus.fix}`);
+    if (f.corpus.helpUrl !== null) lines.push(`    ref:    ${f.corpus.helpUrl}`);
+    lines.push(`    corpus: baseline rule SC ${f.corpus.sc} (no audit-frequency data yet)`);
+  } else {
+    // Neither source knows the SC — but never a bare dead-end: surface whatever
+    // the finding itself carries (an axe finding still has its runtime helpUrl).
+    if (f.corpus.helpUrl !== null) lines.push(`    ref:    ${f.corpus.helpUrl}`);
+    lines.push("    corpus: no SC mapping — not in audit-frequency data or the baseline catalog");
   }
   return lines;
 }
@@ -67,9 +84,14 @@ function formatUrlFinding(f: EnrichedFinding): string {
 }
 
 /**
- * The two summary lines every report ends on: the corpus-tier rollup and the
+ * The two summary lines every report ends on: the evidence rollup and the
  * enforcement split. Returns the blocking count too, since that gates the exit
  * code. Shared by the source and rendered-DOM reports.
+ *
+ * Audit-corpus hits roll up under their real frequency tier (the moat).
+ * Baseline-only hits — covered by axe's catalog but absent from audit-frequency
+ * data — roll up under `BASELINE`, and the truly unmapped under `UNMAPPED`, so
+ * the coverage layer is visible without being mistaken for moat data.
  */
 function reportTotals(findings: readonly EnrichedFinding[]): {
   readonly lines: readonly string[];
@@ -77,7 +99,12 @@ function reportTotals(findings: readonly EnrichedFinding[]): {
 } {
   const tierCounts = new Map<string, number>();
   for (const f of findings) {
-    const key = TIER_LABEL[f.corpus.tier];
+    const key =
+      f.corpus.source === "audit"
+        ? TIER_LABEL[f.corpus.tier]
+        : f.corpus.source === "baseline"
+          ? "BASELINE"
+          : "UNMAPPED";
     tierCounts.set(key, (tierCounts.get(key) ?? 0) + 1);
   }
   const rollup = [...tierCounts.entries()].map(([tier, n]) => `${tier}: ${n}`).join("  |  ");

@@ -13,8 +13,12 @@ import patterns331 from "../data/corpus/patterns-3.3.1.json" with { type: "json"
 import patterns332 from "../data/corpus/patterns-3.3.2.json" with { type: "json" };
 import patterns412 from "../data/corpus/patterns-4.1.2.json" with { type: "json" };
 import patterns413 from "../data/corpus/patterns-4.1.3.json" with { type: "json" };
+import baselineCatalog from "../data/baseline-rules.json" with { type: "json" };
 import snapshot from "../data/corpus-snapshot.json" with { type: "json" };
 import type { Finding } from "./core";
+
+/** Severity levels, ordered least → most severe. axe's runtime impact vocabulary. */
+export type Severity = "minor" | "moderate" | "serious" | "critical";
 
 /**
  * Corpus tiers, ordered by frequency. `unknown` is the floor: the finding's
@@ -38,18 +42,40 @@ export interface DistilledPatternRef {
 }
 
 /**
- * The corpus evidence attached to a finding: which SC matched, how widespread
- * it is in the dynamic-audit corpus, and the representative fix. `tier`
- * `"unknown"` means no snapshot match — `sc`/`orgs`/`fix` are null in that case.
- * `patterns` carries the distilled per-failure-shape evidence for the matched
- * SC (empty when the SC hasn't been distilled yet).
+ * The evidence attached to a finding. `source` is the discriminator between the
+ * two NON-OVERLAPPING sources of truth — they never mix:
+ *
+ *   - `"audit"`    — matched the real-audit corpus snapshot (`data/corpus-snapshot.json`).
+ *                    Carries `orgs` (the real org count) and a real frequency `tier`.
+ *                    This is the moat: truthful, partial (~15 SCs).
+ *   - `"baseline"` — no corpus match, but axe-core's baseline catalog
+ *                    (`data/baseline-rules.json`) knows the rule/SC. Carries axe's
+ *                    `severity` + standard `fix` + `helpUrl`, and `orgs: null`,
+ *                    `tier: "unknown"` (it is NOT audit-frequency data). This is
+ *                    the coverage layer: every axe/WCAG rule gets an SC, a
+ *                    severity, and a fix even if the corpus has never seen it.
+ *   - `"none"`     — neither source knows the SC (or the finding has no SC). The
+ *                    finding still reports; it just carries no evidence.
+ *
+ * `tier`/`orgs`/`patterns` are corpus-only and meaningful only when
+ * `source === "audit"`. `severity`/`helpUrl` are populated for `"baseline"` (and
+ * for axe findings, carried straight off the finding's runtime axe metadata).
  */
 export interface CorpusEvidence {
+  readonly source: "audit" | "baseline" | "none";
   readonly sc: string | null;
   readonly tier: CorpusTier;
   readonly orgs: number | null;
   readonly fix: string | null;
   readonly patterns: readonly DistilledPatternRef[];
+  /**
+   * Severity for this finding. From axe's runtime impact on an axe finding, else
+   * axe's published default impact for the rule (baseline catalog). Null when no
+   * baseline rule knows the SC and the finding carried no runtime impact.
+   */
+  readonly severity: Severity | null;
+  /** axe's Deque-University help URL for the rule, when the baseline knows it. */
+  readonly helpUrl: string | null;
 }
 
 /** A finding plus its corpus cross-reference. */
@@ -85,6 +111,65 @@ function readCriteria(raw: unknown): ReadonlyMap<string, CriterionEntry> {
 }
 
 const CRITERIA = readCriteria(snapshot);
+
+/**
+ * A baseline-catalog rule, narrowed from `data/baseline-rules.json`. Mirrors the
+ * generator's `BaselineRule` shape. This is the COVERAGE source of truth (axe's
+ * published per-rule metadata) — distinct from the audit corpus above; it never
+ * carries an org count or a frequency tier.
+ */
+interface BaselineRuleEntry {
+  readonly ruleId: string;
+  readonly sc: readonly string[];
+  readonly severity: Severity;
+  readonly help: string;
+  readonly helpUrl: string;
+}
+
+/**
+ * Narrow the baseline catalog (loaded as `unknown` at the JSON boundary) into
+ * two indexes: by axe ruleId (for axe findings, the exact rule) and by SC (for
+ * source-pass findings, which carry an SC but no axe ruleId). For an SC mapped by
+ * several rules, the first in the catalog's deterministic (ruleId-sorted) order
+ * wins — stable across regenerations. Each entry is validated structurally so a
+ * malformed file fails loud rather than smuggling `any` inward.
+ */
+function readBaseline(raw: unknown): {
+  byRule: ReadonlyMap<string, BaselineRuleEntry>;
+  bySc: ReadonlyMap<string, BaselineRuleEntry>;
+} {
+  const byRule = new Map<string, BaselineRuleEntry>();
+  const bySc = new Map<string, BaselineRuleEntry>();
+  const isSeverity = (s: unknown): s is Severity =>
+    s === "minor" || s === "moderate" || s === "serious" || s === "critical";
+
+  if (typeof raw !== "object" || raw === null || !("rules" in raw)) return { byRule, bySc };
+  const list = (raw as { rules: unknown }).rules;
+  if (!Array.isArray(list)) return { byRule, bySc };
+
+  for (const r of list) {
+    if (typeof r !== "object" || r === null) continue;
+    const { ruleId, sc, severity, help, helpUrl } = r as Record<string, unknown>;
+    if (
+      typeof ruleId !== "string" ||
+      !Array.isArray(sc) ||
+      !isSeverity(severity) ||
+      typeof help !== "string" ||
+      typeof helpUrl !== "string"
+    ) {
+      continue;
+    }
+    const scList = sc.filter((s): s is string => typeof s === "string");
+    const entry: BaselineRuleEntry = { ruleId, sc: scList, severity, help, helpUrl };
+    byRule.set(ruleId, entry);
+    for (const oneSc of scList) {
+      if (!bySc.has(oneSc)) bySc.set(oneSc, entry);
+    }
+  }
+  return { byRule, bySc };
+}
+
+const BASELINE = readBaseline(baselineCatalog);
 
 /**
  * Narrow a distilled `patterns-<SC>.json` file (loaded as `unknown` at the JSON
@@ -157,12 +242,43 @@ const DISTILLED = readDistilled(
 );
 
 /**
- * Cross-reference a finding against the corpus snapshot by WCAG SC.
+ * Look up a baseline-catalog entry for a finding: prefer the axe ruleId (an axe
+ * finding names the exact rule), else the finding's SC(s). Returns the matched
+ * baseline rule and the SC it should be reported under, or null.
+ */
+function baselineFor(finding: Finding): { sc: string; entry: BaselineRuleEntry } | null {
+  // axe findings carry the exact axe rule id — the most precise key.
+  const byRule = BASELINE.byRule.get(finding.ruleId);
+  if (byRule !== undefined) {
+    const sc = byRule.sc[0] ?? finding.wcag[0] ?? null;
+    if (sc !== null) return { sc, entry: byRule };
+  }
+  // Source-pass findings (jsx-a11y / enforce) carry an SC but no axe rule id —
+  // match by SC. First SC the baseline knows wins (finding order preserved).
+  for (const sc of finding.wcag) {
+    const entry = BASELINE.bySc.get(sc);
+    if (entry !== undefined) return { sc, entry };
+  }
+  return null;
+}
+
+/**
+ * Cross-reference a finding against the two NON-OVERLAPPING evidence sources,
+ * corpus FIRST then baseline — so every finding surfaces with an SC, a severity,
+ * and a fix instead of dead-ending at `unknown`/null.
  *
- * A finding can carry several SC (e.g. label issues are both 1.3.1 and 4.1.2);
- * we attach the most-widespread matching SC so the report leads with the
- * highest-impact framing. No match (or no SC at all) yields tier `"unknown"` —
- * the finding still reports, it just carries no corpus evidence.
+ *   1. AUDIT corpus (the moat). A finding can carry several SC (label issues are
+ *      both 1.3.1 and 4.1.2); we attach the most-widespread matching SC so the
+ *      report leads with the highest-impact framing. → `source: "audit"`,
+ *      real `orgs` + `tier`, distilled patterns.
+ *   2. BASELINE catalog (coverage). On NO corpus match, fall back to axe's
+ *      published per-rule metadata: severity + standard fix + helpUrl, keyed by
+ *      the finding's axe ruleId (axe findings) or SC (source passes). For axe
+ *      findings the runtime impact already on the finding wins over the catalog's
+ *      static severity. → `source: "baseline"`, `orgs: null`, `tier: "unknown"`.
+ *   3. NEITHER knows the SC (or the finding has no SC) → `source: "none"`. The
+ *      finding still reports; an axe finding still surfaces its own runtime
+ *      severity/helpUrl even here.
  */
 export function enrich(finding: Finding): EnrichedFinding {
   let best: { sc: string; entry: CriterionEntry } | null = null;
@@ -174,20 +290,58 @@ export function enrich(finding: Finding): EnrichedFinding {
     }
   }
 
-  if (best === null) {
+  // 1. AUDIT — the real-frequency moat. Severity still comes from the finding's
+  //    own runtime axe impact when present (an axe finding), else the baseline's
+  //    published default for the matched SC; helpUrl likewise from baseline.
+  if (best !== null) {
+    const baseline = BASELINE.bySc.get(best.sc);
     return {
       ...finding,
-      corpus: { sc: null, tier: "unknown", orgs: null, fix: null, patterns: [] },
+      corpus: {
+        source: "audit",
+        sc: best.sc,
+        tier: best.entry.tier,
+        orgs: best.entry.orgs,
+        fix: best.entry.fix,
+        patterns: DISTILLED.get(best.sc) ?? [],
+        severity: finding.severity ?? baseline?.severity ?? null,
+        helpUrl: finding.helpUrl ?? baseline?.helpUrl ?? null,
+      },
     };
   }
+
+  // 2. BASELINE — coverage for SCs the corpus has never seen.
+  const baseline = baselineFor(finding);
+  if (baseline !== null) {
+    return {
+      ...finding,
+      corpus: {
+        source: "baseline",
+        sc: baseline.sc,
+        tier: "unknown",
+        orgs: null,
+        fix: baseline.entry.help,
+        patterns: [],
+        // Runtime axe impact (most accurate) wins over the catalog default.
+        severity: finding.severity ?? baseline.entry.severity,
+        helpUrl: finding.helpUrl ?? baseline.entry.helpUrl,
+      },
+    };
+  }
+
+  // 3. NONE — neither source knows the SC. An axe finding may still carry its
+  //    own runtime severity/helpUrl off the finding itself.
   return {
     ...finding,
     corpus: {
-      sc: best.sc,
-      tier: best.entry.tier,
-      orgs: best.entry.orgs,
-      fix: best.entry.fix,
-      patterns: DISTILLED.get(best.sc) ?? [],
+      source: "none",
+      sc: null,
+      tier: "unknown",
+      orgs: null,
+      fix: null,
+      patterns: [],
+      severity: finding.severity ?? null,
+      helpUrl: finding.helpUrl ?? null,
     },
   };
 }
@@ -280,4 +434,45 @@ export function corpusPatterns(): readonly CorpusPattern[] {
       if (a.sc !== b.sc) return a.sc < b.sc ? -1 : 1;
       return a.id < b.id ? -1 : 1;
     });
+}
+
+/**
+ * A baseline-catalog rule surfaced for `get_a11y_rules`: axe's published
+ * per-rule data (ruleId, SC, severity, standard fix, helpUrl) for ANY axe/WCAG
+ * rule — the coverage answer when the distilled patterns don't cover what was
+ * asked. Carries NO org count and NO frequency tier (it is not audit data).
+ */
+export interface BaselineRuleInfo {
+  readonly ruleId: string;
+  readonly sc: readonly string[];
+  readonly severity: Severity;
+  readonly fix: string;
+  readonly helpUrl: string;
+}
+
+/**
+ * Look up baseline rules by axe ruleId substring and/or WCAG SC. With no filter,
+ * returns the whole catalog (already ruleId-sorted, deterministic). This lets an
+ * agent ask "rules for color-contrast" and get the baseline entry even when the
+ * corpus has no distilled pattern for it. Pure read over `baseline-rules.json`.
+ */
+export function baselineRules(filter: { ruleId?: string; sc?: string } = {}): BaselineRuleInfo[] {
+  const toInfo = (e: BaselineRuleEntry): BaselineRuleInfo => ({
+    ruleId: e.ruleId,
+    sc: e.sc,
+    severity: e.severity,
+    fix: e.help,
+    helpUrl: e.helpUrl,
+  });
+
+  let entries = [...BASELINE.byRule.values()];
+  const ruleNeedle = filter.ruleId?.trim().toLowerCase();
+  if (ruleNeedle !== undefined && ruleNeedle !== "") {
+    entries = entries.filter((e) => e.ruleId.toLowerCase().includes(ruleNeedle));
+  }
+  const scNeedle = filter.sc?.trim();
+  if (scNeedle !== undefined && scNeedle !== "") {
+    entries = entries.filter((e) => e.sc.includes(scNeedle));
+  }
+  return entries.map(toInfo);
 }

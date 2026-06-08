@@ -12,7 +12,8 @@
     "bin",
     "src",
     "data/corpus-snapshot.json",
-    "data/corpus/patterns-*.json"
+    "data/corpus/patterns-*.json",
+    "data/baseline-rules.json"
   ],
   "repository": {
     "type": "git",
@@ -28,6 +29,7 @@
     "scan": "tsx ./src/cli.ts check",
     "scan:url": "tsx ./src/cli.ts check-url",
     "mcp": "tsx ./src/mcp.ts",
+    "gen:baseline": "tsx ./src/baseline/gen-baseline.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "demo:lint": "sh -c 'tsx demo/demo-kit.ts lint \"${1:-demo/scenario.json}\"' _",

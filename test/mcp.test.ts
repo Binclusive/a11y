@@ -67,6 +67,29 @@ describe("get_a11y_rules handler", () => {
     const r = getA11yRules({ component: "link", sc: "2.4.4" });
     expect(r.matchedOn).toBe("component");
   });
+
+  it("backs an SC query with the baseline entry even when distilled (2.4.4)", () => {
+    const r = getA11yRules({ sc: "2.4.4" });
+    expect(r.baseline.length).toBeGreaterThan(0);
+    expect(r.baseline.every((b) => b.sc.includes("2.4.4"))).toBe(true);
+  });
+
+  it("answers for an axe ruleId the corpus never distilled (color-contrast)", () => {
+    const r = getA11yRules({ ruleId: "color-contrast" });
+    expect(r.matchedOn).toBe("ruleId");
+    expect(r.patterns).toEqual([]); // no distilled pattern for it
+    const cc = r.baseline.find((b) => b.ruleId === "color-contrast");
+    expect(cc?.severity).toBe("serious");
+    expect(cc?.sc).toContain("1.4.3");
+    expect(cc?.helpUrl).toContain("dequeuniversity.com");
+  });
+
+  it("falls back to baseline for an SC the corpus has not distilled (2.4.2)", () => {
+    // 2.4.2 (page-title) has no distilled pattern — pure baseline coverage.
+    const r = getA11yRules({ sc: "2.4.2" });
+    expect(r.patterns).toEqual([]);
+    expect(r.baseline.some((b) => b.ruleId === "document-title")).toBe(true);
+  });
 });
 
 describe("learn_a11y_rule handler", () => {

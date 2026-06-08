@@ -71,6 +71,19 @@ export interface Finding {
    * source-level passes, which anchor with `file:line`.
    */
   readonly selector?: string;
+  /**
+   * axe-core's per-node runtime IMPACT for this finding — the single most
+   * accurate severity, computed by axe against the actual rendered node. Set
+   * only on `axe` findings (the source passes have no axe runtime). The corpus
+   * enrich step prefers this over the static baseline severity when present.
+   */
+  readonly severity?: "minor" | "moderate" | "serious" | "critical";
+  /**
+   * axe-core's Deque-University help URL for the rule that fired. Set only on
+   * `axe` findings; the baseline catalog supplies the same URL for source-pass
+   * findings via the SC lookup.
+   */
+  readonly helpUrl?: string;
 }
 
 /**

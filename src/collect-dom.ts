@@ -22,6 +22,12 @@ import { AxeBuilder } from "@axe-core/playwright";
 import { chromium } from "playwright";
 import { enforcementFor } from "./config-scan";
 import type { Finding } from "./core";
+import { scFromTags } from "./wcag-tags";
+
+// Re-exported so the historical `import { scFromTags } from "./collect-dom"`
+// keeps working; the implementation now lives in the browser-free `wcag-tags.ts`
+// so the offline baseline generator can share it without pulling in playwright.
+export { scFromTags };
 
 /** The result of rendering one URL and running axe over it. */
 export interface DomScanResult {
@@ -36,32 +42,6 @@ export interface DomScanOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
-
-/**
- * Read WCAG success criteria off axe-core's `tags`. axe tags an SC as
- * `wcag<principle><guideline><criterion>` with the dots removed — `wcag111` is
- * 1.1.1, `wcag244` is 2.4.4, `wcag1411` is 1.4.11. The principle and guideline
- * are always one digit; the criterion is the remainder (so 2-or-more-digit
- * criteria like `.11` round-trip). Conformance-level tags (`wcag2a`, `wcag21aa`)
- * and non-WCAG tags (`best-practice`, `cat.color`, `ACT`) carry letters and are
- * skipped. Deduped, original order preserved.
- *
- * This is the whole bridge between axe's vocabulary and the corpus: every
- * `enrichAll` lookup keys off these SC strings.
- */
-export function scFromTags(tags: readonly string[]): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const tag of tags) {
-    const m = /^wcag(\d)(\d)(\d+)$/.exec(tag);
-    if (m === null) continue;
-    const sc = `${m[1]}.${m[2]}.${m[3]}`;
-    if (seen.has(sc)) continue;
-    seen.add(sc);
-    out.push(sc);
-  }
-  return out;
-}
 
 /**
  * Flatten an axe node target into a single CSS selector string. axe reports
@@ -100,6 +80,10 @@ export async function scanUrl(url: string, opts: DomScanOptions = {}): Promise<D
       const wcag = scFromTags(v.tags);
       const enforcement = enforcementFor(wcag, null);
       for (const node of v.nodes) {
+        // axe's runtime IMPACT is the most accurate severity: it is computed
+        // against the actual rendered node. Prefer the per-node impact; fall
+        // back to the violation-level impact when axe leaves the node's null.
+        const severity = node.impact ?? v.impact ?? undefined;
         findings.push({
           file: url,
           line: 0,
@@ -109,6 +93,8 @@ export async function scanUrl(url: string, opts: DomScanOptions = {}): Promise<D
           wcag,
           enforcement,
           provenance: "axe",
+          ...(severity != null ? { severity } : {}),
+          helpUrl: v.helpUrl,
         });
       }
     }
