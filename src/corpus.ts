@@ -49,17 +49,24 @@ export interface DistilledPatternRef {
  *                    Carries `orgs` (the real org count) and a real frequency `tier`.
  *                    This is the moat: truthful, partial (~15 SCs).
  *   - `"baseline"` — no corpus match, but axe-core's baseline catalog
- *                    (`data/baseline-rules.json`) knows the rule/SC. Carries axe's
+ *                    (`data/baseline-rules.json`) knows the rule. Carries axe's
  *                    `severity` + standard `fix` + `helpUrl`, and `orgs: null`,
- *                    `tier: "unknown"` (it is NOT audit-frequency data). This is
- *                    the coverage layer: every axe/WCAG rule gets an SC, a
- *                    severity, and a fix even if the corpus has never seen it.
- *   - `"none"`     — neither source knows the SC (or the finding has no SC). The
- *                    finding still reports; it just carries no evidence.
+ *                    `tier: "unknown"` (it is NOT audit-frequency data). Matched by
+ *                    the finding's SC, OR — for axe best-practice rules that carry
+ *                    no WCAG SC tag (`region`, `landmark-unique`, …) — by the axe
+ *                    ruleId, in which case `sc` is null and `bestPractice` is true.
+ *                    This is the coverage layer: every axe rule surfaces with a
+ *                    severity and a fix even if the corpus has never seen it.
+ *   - `"none"`     — the finding's ruleId is genuinely absent from the catalog
+ *                    (and no SC matched). The finding still reports; it just
+ *                    carries no catalog evidence.
  *
  * `tier`/`orgs`/`patterns` are corpus-only and meaningful only when
  * `source === "audit"`. `severity`/`helpUrl` are populated for `"baseline"` (and
  * for axe findings, carried straight off the finding's runtime axe metadata).
+ * `bestPractice` is true only for a baseline-by-ruleId match with no WCAG SC —
+ * an axe recommendation that is NOT a WCAG failure, so it must not be dressed up
+ * with a fabricated SC.
  */
 export interface CorpusEvidence {
   readonly source: "audit" | "baseline" | "none";
@@ -76,6 +83,13 @@ export interface CorpusEvidence {
   readonly severity: Severity | null;
   /** axe's Deque-University help URL for the rule, when the baseline knows it. */
   readonly helpUrl: string | null;
+  /**
+   * True only when this is a baseline match for an axe best-practice rule that
+   * carries NO WCAG SC (matched by ruleId, `sc === null`). It is an axe
+   * recommendation, not a WCAG conformance failure — surfaced honestly, never
+   * with a forced SC.
+   */
+  readonly bestPractice: boolean;
 }
 
 /** A finding plus its corpus cross-reference. */
@@ -242,19 +256,11 @@ const DISTILLED = readDistilled(
 );
 
 /**
- * Look up a baseline-catalog entry for a finding: prefer the axe ruleId (an axe
- * finding names the exact rule), else the finding's SC(s). Returns the matched
- * baseline rule and the SC it should be reported under, or null.
+ * Find the first of a finding's SCs that the baseline catalog knows, with the
+ * matched entry. Source-pass findings (jsx-a11y / enforce) and WCAG-tagged axe
+ * findings resolve here. Finding order is preserved (first known SC wins).
  */
-function baselineFor(finding: Finding): { sc: string; entry: BaselineRuleEntry } | null {
-  // axe findings carry the exact axe rule id — the most precise key.
-  const byRule = BASELINE.byRule.get(finding.ruleId);
-  if (byRule !== undefined) {
-    const sc = byRule.sc[0] ?? finding.wcag[0] ?? null;
-    if (sc !== null) return { sc, entry: byRule };
-  }
-  // Source-pass findings (jsx-a11y / enforce) carry an SC but no axe rule id —
-  // match by SC. First SC the baseline knows wins (finding order preserved).
+function baselineBySc(finding: Finding): { sc: string; entry: BaselineRuleEntry } | null {
   for (const sc of finding.wcag) {
     const entry = BASELINE.bySc.get(sc);
     if (entry !== undefined) return { sc, entry };
@@ -263,22 +269,26 @@ function baselineFor(finding: Finding): { sc: string; entry: BaselineRuleEntry }
 }
 
 /**
- * Cross-reference a finding against the two NON-OVERLAPPING evidence sources,
- * corpus FIRST then baseline — so every finding surfaces with an SC, a severity,
- * and a fix instead of dead-ending at `unknown`/null.
+ * Cross-reference a finding against the evidence sources, most-authoritative
+ * first, so every finding surfaces with a severity and a fix instead of
+ * dead-ending at `unknown`/null:
  *
- *   1. AUDIT corpus (the moat). A finding can carry several SC (label issues are
- *      both 1.3.1 and 4.1.2); we attach the most-widespread matching SC so the
- *      report leads with the highest-impact framing. → `source: "audit"`,
+ *   1. AUDIT corpus (by SC) — the moat. A finding can carry several SC (label
+ *      issues are both 1.3.1 and 4.1.2); attach the most-widespread matching SC
+ *      so the report leads with the highest-impact framing. → `source: "audit"`,
  *      real `orgs` + `tier`, distilled patterns.
- *   2. BASELINE catalog (coverage). On NO corpus match, fall back to axe's
- *      published per-rule metadata: severity + standard fix + helpUrl, keyed by
- *      the finding's axe ruleId (axe findings) or SC (source passes). For axe
- *      findings the runtime impact already on the finding wins over the catalog's
- *      static severity. → `source: "baseline"`, `orgs: null`, `tier: "unknown"`.
- *   3. NEITHER knows the SC (or the finding has no SC) → `source: "none"`. The
- *      finding still reports; an axe finding still surfaces its own runtime
- *      severity/helpUrl even here.
+ *   2. BASELINE (by SC) — coverage for WCAG SCs the corpus has never seen. axe's
+ *      published per-rule severity + standard fix + helpUrl. → `source: "baseline"`,
+ *      `orgs: null`, `tier: "unknown"`, `bestPractice: false`.
+ *   3. BASELINE (by ruleId) — the axe best-practice rules that carry NO WCAG SC
+ *      tag (`region`, `landmark-unique`, …). Matched by the finding's axe ruleId,
+ *      reported honestly: `sc: null`, `bestPractice: true`, still carrying
+ *      severity + fix + helpUrl. → `source: "baseline"`.
+ *   4. NONE — the ruleId is genuinely absent from the catalog (and no SC
+ *      matched). An axe finding may still surface its own runtime severity/helpUrl.
+ *
+ * For axe findings the runtime impact already on the finding always wins over
+ * the catalog's static severity.
  */
 export function enrich(finding: Finding): EnrichedFinding {
   let best: { sc: string; entry: CriterionEntry } | null = null;
@@ -306,31 +316,56 @@ export function enrich(finding: Finding): EnrichedFinding {
         patterns: DISTILLED.get(best.sc) ?? [],
         severity: finding.severity ?? baseline?.severity ?? null,
         helpUrl: finding.helpUrl ?? baseline?.helpUrl ?? null,
+        bestPractice: false,
       },
     };
   }
 
-  // 2. BASELINE — coverage for SCs the corpus has never seen.
-  const baseline = baselineFor(finding);
-  if (baseline !== null) {
+  // 2. BASELINE by SC — coverage for WCAG SCs the corpus has never distilled.
+  const bySc = baselineBySc(finding);
+  if (bySc !== null) {
     return {
       ...finding,
       corpus: {
         source: "baseline",
-        sc: baseline.sc,
+        sc: bySc.sc,
         tier: "unknown",
         orgs: null,
-        fix: baseline.entry.help,
+        fix: bySc.entry.help,
         patterns: [],
         // Runtime axe impact (most accurate) wins over the catalog default.
-        severity: finding.severity ?? baseline.entry.severity,
-        helpUrl: finding.helpUrl ?? baseline.entry.helpUrl,
+        severity: finding.severity ?? bySc.entry.severity,
+        helpUrl: finding.helpUrl ?? bySc.entry.helpUrl,
+        bestPractice: false,
       },
     };
   }
 
-  // 3. NONE — neither source knows the SC. An axe finding may still carry its
-  //    own runtime severity/helpUrl off the finding itself.
+  // 3. BASELINE by ruleId — axe best-practice rules with NO WCAG SC tag. The
+  //    catalog knows the rule even though `bySc` missed; report it honestly with
+  //    `sc: null` + `bestPractice: true` rather than dropping to UNMAPPED.
+  const byRule = BASELINE.byRule.get(finding.ruleId);
+  if (byRule !== undefined) {
+    // A catalog rule WITH an SC should have matched by SC above; if we reach here
+    // it has no WCAG SC, so this is a best-practice recommendation.
+    return {
+      ...finding,
+      corpus: {
+        source: "baseline",
+        sc: byRule.sc[0] ?? null,
+        tier: "unknown",
+        orgs: null,
+        fix: byRule.help,
+        patterns: [],
+        severity: finding.severity ?? byRule.severity,
+        helpUrl: finding.helpUrl ?? byRule.helpUrl,
+        bestPractice: byRule.sc.length === 0,
+      },
+    };
+  }
+
+  // 4. NONE — the ruleId is absent from the catalog. An axe finding may still
+  //    carry its own runtime severity/helpUrl off the finding itself.
   return {
     ...finding,
     corpus: {
@@ -342,6 +377,7 @@ export function enrich(finding: Finding): EnrichedFinding {
       patterns: [],
       severity: finding.severity ?? null,
       helpUrl: finding.helpUrl ?? null,
+      bestPractice: false,
     },
   };
 }

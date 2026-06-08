@@ -58,6 +58,11 @@ export interface CheckFinding {
   readonly tier: EnrichedFinding["corpus"]["tier"];
   /** Severity: axe runtime impact, else the baseline catalog default. */
   readonly severity: EnrichedFinding["corpus"]["severity"];
+  /**
+   * True for a baseline match on an axe best-practice rule with no WCAG SC — an
+   * axe recommendation, not a WCAG conformance failure.
+   */
+  readonly bestPractice: EnrichedFinding["corpus"]["bestPractice"];
   readonly fix: string | null;
   /** axe's Deque-University help URL, when the source knows it. */
   readonly helpUrl: EnrichedFinding["corpus"]["helpUrl"];
@@ -79,6 +84,7 @@ function toCheckFinding(f: EnrichedFinding, file: string): CheckFinding {
     source: f.corpus.source,
     tier: f.corpus.tier,
     severity: f.corpus.severity,
+    bestPractice: f.corpus.bestPractice,
     fix: f.corpus.fix,
     helpUrl: f.corpus.helpUrl,
     message: f.message,

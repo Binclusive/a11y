@@ -64,7 +64,12 @@ function detailLines(f: EnrichedFinding): string[] {
     // that explicit so it never reads as a moat hit.
     lines.push(`    fix:    ${f.corpus.fix}`);
     if (f.corpus.helpUrl !== null) lines.push(`    ref:    ${f.corpus.helpUrl}`);
-    lines.push(`    corpus: baseline rule SC ${f.corpus.sc} (no audit-frequency data yet)`);
+    if (f.corpus.bestPractice) {
+      // An axe best-practice rule with no WCAG SC — honestly NOT a WCAG failure.
+      lines.push("    rule:   best-practice (no WCAG SC)");
+    } else {
+      lines.push(`    corpus: baseline rule SC ${f.corpus.sc} (no audit-frequency data yet)`);
+    }
   } else {
     // Neither source knows the SC — but never a bare dead-end: surface whatever
     // the finding itself carries (an axe finding still has its runtime helpUrl).
@@ -89,9 +94,10 @@ function formatUrlFinding(f: EnrichedFinding): string {
  * code. Shared by the source and rendered-DOM reports.
  *
  * Audit-corpus hits roll up under their real frequency tier (the moat).
- * Baseline-only hits — covered by axe's catalog but absent from audit-frequency
- * data — roll up under `BASELINE`, and the truly unmapped under `UNMAPPED`, so
- * the coverage layer is visible without being mistaken for moat data.
+ * Baseline hits — covered by axe's catalog but absent from audit-frequency data,
+ * INCLUDING the best-practice rules matched by ruleId — roll up under `BASELINE`.
+ * `UNMAPPED` is left only for findings whose ruleId is absent from the catalog,
+ * so the coverage layer is visible without being mistaken for moat data.
  */
 function reportTotals(findings: readonly EnrichedFinding[]): {
   readonly lines: readonly string[];

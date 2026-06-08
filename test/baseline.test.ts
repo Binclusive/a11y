@@ -136,13 +136,42 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
     expect(e.corpus.tier).toBe("very-common");
     expect(e.corpus.orgs).toBe(17);
     expect(e.corpus.fix).not.toBeNull();
+    expect(e.corpus.bestPractice).toBe(false);
   });
 
-  it("returns source 'none' when neither source knows the SC", () => {
+  it("falls back to baseline-by-ruleId for an axe best-practice rule with no SC", () => {
+    // `region` is a real axe best-practice rule carrying NO WCAG SC tag — the
+    // case that used to dead-end at UNMAPPED. It must resolve to baseline.
+    const e = enrich(
+      axeFinding({
+        ruleId: "region",
+        wcag: [], // best-practice rules emit no wcag tag → no SC to key on
+        message: "All page content should be contained by landmarks",
+        severity: undefined,
+      }),
+    );
+    expect(e.corpus.source).toBe("baseline");
+    expect(e.corpus.bestPractice).toBe(true);
+    expect(e.corpus.sc).toBeNull(); // honest: not a WCAG failure
+    expect(e.corpus.severity).toBe("moderate"); // axe's published default impact
+    expect(e.corpus.fix).not.toBeNull();
+    expect(e.corpus.helpUrl).toContain("dequeuniversity.com");
+  });
+
+  it("best-practice by-ruleId still lets axe runtime impact win", () => {
+    const e = enrich(
+      axeFinding({ ruleId: "landmark-unique", wcag: [], severity: "serious" }),
+    );
+    expect(e.corpus.source).toBe("baseline");
+    expect(e.corpus.bestPractice).toBe(true);
+    expect(e.corpus.severity).toBe("serious"); // runtime impact over catalog default
+  });
+
+  it("returns source 'none' only when the ruleId is absent from the catalog", () => {
     const e = enrich({
       file: "/x.tsx",
       line: 1,
-      ruleId: "jsx-a11y/unmapped",
+      ruleId: "jsx-a11y/unmapped", // not an axe rule — not in the catalog
       message: "x",
       wcag: ["9.9.9"], // not a real SC; in neither source
       enforcement: "warn",
@@ -151,5 +180,6 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
     expect(e.corpus.source).toBe("none");
     expect(e.corpus.sc).toBeNull();
     expect(e.corpus.severity).toBeNull();
+    expect(e.corpus.bestPractice).toBe(false);
   });
 });
