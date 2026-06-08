@@ -42,55 +42,70 @@ export interface DistilledPatternRef {
 }
 
 /**
- * The evidence attached to a finding. `source` is the discriminator between the
- * two NON-OVERLAPPING sources of truth — they never mix:
+ * The evidence attached to a finding — a DISCRIMINATED UNION on `source`, so the
+ * TYPE encodes which fields are meaningful for which source instead of the old
+ * all-optional flat bag (where `tier`/`orgs`/`patterns` were nominally present
+ * even when `source !== "audit"`). The three variants are non-overlapping
+ * sources of truth that never mix:
  *
  *   - `"audit"`    — matched the real-audit corpus snapshot (`data/corpus-snapshot.json`).
- *                    Carries `orgs` (the real org count) and a real frequency `tier`.
- *                    This is the moat: truthful, partial (~15 SCs).
+ *                    The moat: truthful, partial (~15 SCs). Carries the real
+ *                    `orgs` count, the frequency `tier`, the SC-generic `fix`,
+ *                    and the distilled `patterns`. `severity`/`helpUrl` are the
+ *                    finding's runtime axe values, falling back to the baseline
+ *                    catalog's published default for the matched SC — they let
+ *                    the report show a severity and (for axe findings) a `ref`
+ *                    even though the moat itself has no per-rule metadata.
  *   - `"baseline"` — no corpus match, but axe-core's baseline catalog
- *                    (`data/baseline-rules.json`) knows the rule. Carries axe's
- *                    `severity` + standard `fix` + `helpUrl`, and `orgs: null`,
- *                    `tier: "unknown"` (it is NOT audit-frequency data). Matched by
- *                    the finding's SC, OR — for axe best-practice rules that carry
- *                    no WCAG SC tag (`region`, `landmark-unique`, …) — by the axe
- *                    ruleId, in which case `sc` is null and `bestPractice` is true.
- *                    This is the coverage layer: every axe rule surfaces with a
- *                    severity and a fix even if the corpus has never seen it.
+ *                    (`data/baseline-rules.json`) knows the rule. Coverage, NOT
+ *                    audit-frequency data: carries axe's `severity` + standard
+ *                    `fix` + `helpUrl`. Matched by the finding's SC, OR — for axe
+ *                    best-practice rules that carry no WCAG SC tag (`region`,
+ *                    `landmark-unique`, …) — by the axe ruleId, in which case
+ *                    `sc` is null and `bestPractice` is true (`sc === null` ⇔
+ *                    `bestPractice`). An axe recommendation must never be dressed
+ *                    up with a fabricated SC.
  *   - `"none"`     — the finding's ruleId is genuinely absent from the catalog
- *                    (and no SC matched). The finding still reports; it just
- *                    carries no catalog evidence.
+ *                    (and no SC matched). It carries NO catalog evidence at all;
+ *                    any severity/helpUrl to display comes off the finding's own
+ *                    runtime axe metadata (read via {@link corpusSeverity} /
+ *                    {@link corpusHelpUrl}), not off this variant.
  *
- * `tier`/`orgs`/`patterns` are corpus-only and meaningful only when
- * `source === "audit"`. `severity`/`helpUrl` are populated for `"baseline"` (and
- * for axe findings, carried straight off the finding's runtime axe metadata).
- * `bestPractice` is true only for a baseline-by-ruleId match with no WCAG SC —
- * an axe recommendation that is NOT a WCAG failure, so it must not be dressed up
- * with a fabricated SC.
+ * The axe-vs-SC DISPLAY policy ("for axe findings show the rule's own help, not
+ * the SC-generic fix") lives in exactly one place — {@link resolveDisplay} — not
+ * on this type and not in its consumers.
  */
-export interface CorpusEvidence {
-  readonly source: "audit" | "baseline" | "none";
-  readonly sc: string | null;
-  readonly tier: CorpusTier;
-  readonly orgs: number | null;
-  readonly fix: string | null;
-  readonly patterns: readonly DistilledPatternRef[];
-  /**
-   * Severity for this finding. From axe's runtime impact on an axe finding, else
-   * axe's published default impact for the rule (baseline catalog). Null when no
-   * baseline rule knows the SC and the finding carried no runtime impact.
-   */
-  readonly severity: Severity | null;
-  /** axe's Deque-University help URL for the rule, when the baseline knows it. */
-  readonly helpUrl: string | null;
-  /**
-   * True only when this is a baseline match for an axe best-practice rule that
-   * carries NO WCAG SC (matched by ruleId, `sc === null`). It is an axe
-   * recommendation, not a WCAG conformance failure — surfaced honestly, never
-   * with a forced SC.
-   */
-  readonly bestPractice: boolean;
-}
+export type CorpusEvidence =
+  | {
+      readonly source: "audit";
+      readonly sc: string;
+      readonly tier: CorpusTier;
+      readonly orgs: number;
+      readonly fix: string;
+      readonly patterns: readonly DistilledPatternRef[];
+      /**
+       * The finding's runtime axe impact, else the baseline catalog's published
+       * default for the matched SC, else null (a source-pass finding on an SC the
+       * baseline catalog doesn't know). Display-only — the moat itself is
+       * SC-level and carries no per-rule severity.
+       */
+      readonly severity: Severity | null;
+      /**
+       * The finding's runtime axe help URL (axe findings only), else the baseline
+       * catalog's URL for the matched SC, else null. Display-only.
+       */
+      readonly helpUrl: string | null;
+    }
+  | {
+      readonly source: "baseline";
+      readonly sc: string | null;
+      readonly severity: Severity;
+      readonly fix: string;
+      readonly helpUrl: string | null;
+      /** `sc === null` ⇔ `bestPractice` — an axe rule with no WCAG SC tag. */
+      readonly bestPractice: boolean;
+    }
+  | { readonly source: "none" };
 
 /** A finding plus its corpus cross-reference. */
 export interface EnrichedFinding extends Finding {
@@ -300,86 +315,61 @@ export function enrich(finding: Finding): EnrichedFinding {
     }
   }
 
-  // 1. AUDIT — the real-frequency moat. Severity still comes from the finding's
-  //    own runtime axe impact when present (an axe finding), else the baseline's
-  //    published default for the matched SC; helpUrl likewise from baseline.
+  // 1. AUDIT — the real-frequency moat. Severity/helpUrl are display-only: the
+  //    finding's own runtime axe values when present, else the baseline catalog's
+  //    published default for the matched SC.
   if (best !== null) {
     const baseline = BASELINE.bySc.get(best.sc);
-    return {
-      ...finding,
-      corpus: {
-        source: "audit",
-        sc: best.sc,
-        tier: best.entry.tier,
-        orgs: best.entry.orgs,
-        fix: best.entry.fix,
-        patterns: DISTILLED.get(best.sc) ?? [],
-        severity: finding.severity ?? baseline?.severity ?? null,
-        helpUrl: finding.helpUrl ?? baseline?.helpUrl ?? null,
-        bestPractice: false,
-      },
-    };
+    return withCorpus(finding, {
+      source: "audit",
+      sc: best.sc,
+      tier: best.entry.tier,
+      orgs: best.entry.orgs,
+      fix: best.entry.fix,
+      patterns: DISTILLED.get(best.sc) ?? [],
+      severity: finding.severity ?? baseline?.severity ?? null,
+      helpUrl: finding.helpUrl ?? baseline?.helpUrl ?? null,
+    });
   }
 
   // 2. BASELINE by SC — coverage for WCAG SCs the corpus has never distilled.
+  //    Runtime axe impact (most accurate) wins over the catalog default.
   const bySc = baselineBySc(finding);
   if (bySc !== null) {
-    return {
-      ...finding,
-      corpus: {
-        source: "baseline",
-        sc: bySc.sc,
-        tier: "unknown",
-        orgs: null,
-        fix: bySc.entry.help,
-        patterns: [],
-        // Runtime axe impact (most accurate) wins over the catalog default.
-        severity: finding.severity ?? bySc.entry.severity,
-        helpUrl: finding.helpUrl ?? bySc.entry.helpUrl,
-        bestPractice: false,
-      },
-    };
+    return withCorpus(finding, {
+      source: "baseline",
+      sc: bySc.sc,
+      fix: bySc.entry.help,
+      severity: finding.severity ?? bySc.entry.severity,
+      helpUrl: finding.helpUrl ?? bySc.entry.helpUrl,
+      bestPractice: false,
+    });
   }
 
   // 3. BASELINE by ruleId — axe best-practice rules with NO WCAG SC tag. The
   //    catalog knows the rule even though `bySc` missed; report it honestly with
-  //    `sc: null` + `bestPractice: true` rather than dropping to UNMAPPED.
+  //    `sc: null` + `bestPractice: true` rather than dropping to UNMAPPED. (A
+  //    catalog rule WITH an SC would have matched by SC above.)
   const byRule = BASELINE.byRule.get(finding.ruleId);
   if (byRule !== undefined) {
-    // A catalog rule WITH an SC should have matched by SC above; if we reach here
-    // it has no WCAG SC, so this is a best-practice recommendation.
-    return {
-      ...finding,
-      corpus: {
-        source: "baseline",
-        sc: byRule.sc[0] ?? null,
-        tier: "unknown",
-        orgs: null,
-        fix: byRule.help,
-        patterns: [],
-        severity: finding.severity ?? byRule.severity,
-        helpUrl: finding.helpUrl ?? byRule.helpUrl,
-        bestPractice: byRule.sc.length === 0,
-      },
-    };
+    return withCorpus(finding, {
+      source: "baseline",
+      sc: byRule.sc[0] ?? null,
+      fix: byRule.help,
+      severity: finding.severity ?? byRule.severity,
+      helpUrl: finding.helpUrl ?? byRule.helpUrl,
+      bestPractice: byRule.sc.length === 0,
+    });
   }
 
-  // 4. NONE — the ruleId is absent from the catalog. An axe finding may still
-  //    carry its own runtime severity/helpUrl off the finding itself.
-  return {
-    ...finding,
-    corpus: {
-      source: "none",
-      sc: null,
-      tier: "unknown",
-      orgs: null,
-      fix: null,
-      patterns: [],
-      severity: finding.severity ?? null,
-      helpUrl: finding.helpUrl ?? null,
-      bestPractice: false,
-    },
-  };
+  // 4. NONE — the ruleId is absent from the catalog and no SC matched. No
+  //    catalog evidence; any displayable severity/helpUrl comes off the finding.
+  return withCorpus(finding, { source: "none" });
+}
+
+/** Attach a corpus-evidence variant to a finding. The one place the two join. */
+function withCorpus(finding: Finding, corpus: CorpusEvidence): EnrichedFinding {
+  return { ...finding, corpus };
 }
 
 /** Enrich a batch of findings. */
@@ -387,26 +377,111 @@ export function enrichAll(findings: readonly Finding[]): EnrichedFinding[] {
   return findings.map(enrich);
 }
 
+/** The frequency tier as a flat value across the union — `unknown` off-moat. */
+export function corpusTier(c: CorpusEvidence): CorpusTier {
+  return c.source === "audit" ? c.tier : "unknown";
+}
+
+/** The SC-keyed corpus fix where one exists (audit/baseline), else null. */
+export function corpusFix(c: CorpusEvidence): string | null {
+  switch (c.source) {
+    case "audit":
+    case "baseline":
+      return c.fix;
+    case "none":
+      return null;
+  }
+}
+
 /**
- * The rule-accurate fix string to display/emit for a finding — the single seam
- * the CLI report and the MCP `CheckFinding` both read so they never disagree.
- *
- * For a `provenance === "axe"` (rendered-DOM) finding the corpus `fix` is the
- * SC-GENERIC fix, written for that SC's most-common failure (1.1.1 → missing
- * image alt). But one SC spans many axe rules with different failure modes
- * (`aria-progressbar-name` is also 1.1.1), so the SC-generic fix contradicts the
- * rule. axe's OWN per-rule guidance is rule-accurate, so for axe findings the
- * displayed fix is axe's: the per-rule `message` (axe help), null when even that
- * is absent. The Deque help page (`corpus.helpUrl`) is the canonical fix link
- * and is surfaced alongside as `ref`.
- *
- * For source-pass findings (`jsx-a11y` / `enforce`) the corpus `fix` is kept
- * exactly as-is: their rule↔SC mapping is clean via wcag-map, so the SC-keyed
- * corpus fix is rule-accurate.
+ * The severity to display for a finding: the catalog/runtime value the variant
+ * carries, falling back to the finding's own runtime axe impact for `none`.
  */
-export function displayFix(f: EnrichedFinding): string | null {
-  if (f.provenance === "axe") return f.message ?? null;
-  return f.corpus.fix;
+export function corpusSeverity(f: EnrichedFinding): Severity | null {
+  const c = f.corpus;
+  switch (c.source) {
+    case "audit":
+    case "baseline":
+      return c.severity;
+    case "none":
+      return f.severity ?? null;
+  }
+}
+
+/**
+ * The Deque help URL to display for a finding: the catalog/runtime value the
+ * variant carries, falling back to the finding's own runtime URL for `none`.
+ */
+export function corpusHelpUrl(f: EnrichedFinding): string | null {
+  const c = f.corpus;
+  switch (c.source) {
+    case "audit":
+    case "baseline":
+      return c.helpUrl;
+    case "none":
+      return f.helpUrl ?? null;
+  }
+}
+
+/** Whether this is an axe best-practice recommendation (no WCAG SC). */
+export function corpusBestPractice(c: CorpusEvidence): boolean {
+  return c.source === "baseline" && c.bestPractice;
+}
+
+/**
+ * The resolved DISPLAY contract for a finding — the SOLE owner of the axe-vs-SC
+ * policy. Every consumer (the CLI `detailLines` printer, the MCP `CheckFinding`)
+ * reads this instead of re-deriving the policy, so they can never disagree.
+ *
+ * The policy: for a `provenance === "axe"` (rendered-DOM) finding the corpus
+ * `fix` is SC-GENERIC — written for the SC's most-common failure (1.1.1 →
+ * missing image alt) — but one SC spans many axe rules with different failure
+ * modes (`aria-progressbar-name` is also 1.1.1), so that fix contradicts the
+ * rule. axe's OWN per-rule guidance is rule-accurate, so for axe findings we
+ * show the rule's help/`ref` and suppress both the SC-generic `fix:` line and
+ * the distilled `seen-in-the-wild` patterns (equally SC-generic). For source
+ * findings (`jsx-a11y` / `enforce`) the rule↔SC mapping is clean via wcag-map,
+ * so the corpus `fix` + patterns are rule-accurate and shown verbatim.
+ */
+export interface DisplayContract {
+  /** Uppercased severity for the `severity:` line, or null to omit it. */
+  readonly severityLabel: string | null;
+  /** Text for the CLI `fix:` line, or null to suppress it (axe → suppressed). */
+  readonly fixLine: string | null;
+  /**
+   * The rule-accurate fix string for API emission (MCP `CheckFinding.fix`): axe
+   * findings get axe's per-rule help (`message`); source findings get the corpus
+   * `fix`. Unlike `fixLine` this is never suppressed — the MCP field always
+   * carries the rule-accurate fix; the CLI just renders axe's via `ref` instead.
+   */
+  readonly fix: string | null;
+  /** The Deque help URL to render as a `ref:` line, or null to omit it. */
+  readonly refUrl: string | null;
+  /** Whether to render the distilled `seen-in-the-wild` patterns block. */
+  readonly showPatterns: boolean;
+}
+
+export function resolveDisplay(f: EnrichedFinding): DisplayContract {
+  const c = f.corpus;
+  const isAxe = f.provenance === "axe";
+  const severity = corpusSeverity(f);
+  // axe → rule-accurate help (its own message); source → SC-keyed corpus fix.
+  const ruleFix = isAxe ? (f.message ?? null) : corpusFix(c);
+  // The CLI `fix:` line is suppressed ONLY for an AUDIT axe finding: there the
+  // corpus fix is SC-generic and contradicts the rule, so the rule's `ref`
+  // stands in. A BASELINE fix is already axe's per-rule help (rule-accurate), so
+  // it is shown for axe and source alike; `none` never carries a fix line.
+  const fixLine = c.source === "audit" ? (isAxe ? null : c.fix) : corpusFix(c);
+  // `ref:` shows for every axe finding, and for every baseline/none finding that
+  // carries a help URL; an audit SOURCE finding shows its corpus fix, not a ref.
+  const refUrl = isAxe || c.source !== "audit" ? corpusHelpUrl(f) : null;
+  return {
+    severityLabel: severity === null ? null : severity.toUpperCase(),
+    fixLine,
+    fix: ruleFix,
+    refUrl,
+    showPatterns: !isAxe && c.source === "audit" && c.patterns.length > 0,
+  };
 }
 
 /** A corpus SC entry surfaced for contract generation: SC + frequency + fix. */

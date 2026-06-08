@@ -37,11 +37,18 @@ import { scan } from "./core";
 import {
   type BaselineRuleInfo,
   baselineRules,
+  corpusBestPractice,
+  type CorpusEvidence,
   type CorpusPattern,
+  corpusHelpUrl,
   corpusPatterns,
-  displayFix,
+  corpusSeverity,
+  corpusTier,
+  type CorpusTier,
   type EnrichedFinding,
   enrichAll,
+  resolveDisplay,
+  type Severity,
 } from "./corpus";
 import type { Coverage } from "./resolve-components";
 
@@ -53,27 +60,31 @@ export interface CheckFinding {
   readonly wcag: readonly string[];
   /**
    * Which evidence source matched: `audit` (real corpus frequency — the moat),
-   * `baseline` (axe's published per-rule catalog — coverage), or `none`.
+   * `baseline` (axe's published per-rule catalog — coverage), or `none`. This
+   * flat shape is the deliberate FLAT VIEW of the {@link CorpusEvidence} union
+   * for external API consumers — the per-source accessors below project it.
    */
-  readonly source: EnrichedFinding["corpus"]["source"];
-  readonly tier: EnrichedFinding["corpus"]["tier"];
+  readonly source: CorpusEvidence["source"];
+  /** Frequency tier; `unknown` off the audit moat. */
+  readonly tier: CorpusTier;
   /** Severity: axe runtime impact, else the baseline catalog default. */
-  readonly severity: EnrichedFinding["corpus"]["severity"];
+  readonly severity: Severity | null;
   /**
    * True for a baseline match on an axe best-practice rule with no WCAG SC — an
    * axe recommendation, not a WCAG conformance failure.
    */
-  readonly bestPractice: EnrichedFinding["corpus"]["bestPractice"];
+  readonly bestPractice: boolean;
   /**
    * The rule-accurate fix. For source-pass findings (`jsx-a11y` / `enforce`)
    * this is the SC-keyed corpus fix. For `provenance === "axe"` findings it is
    * axe's OWN per-rule guidance (axe help), NOT the SC-generic corpus fix —
-   * which would contradict the rule (see {@link displayFix}). `helpUrl` carries
-   * the canonical Deque fix page either way.
+   * which would contradict the rule. Both come from the single
+   * {@link resolveDisplay} contract the CLI uses, so the two can't disagree.
+   * `helpUrl` carries the canonical Deque fix page either way.
    */
   readonly fix: string | null;
   /** axe's Deque-University help URL, when the source knows it. */
-  readonly helpUrl: EnrichedFinding["corpus"]["helpUrl"];
+  readonly helpUrl: string | null;
   readonly message: string;
   readonly enforcement: EnrichedFinding["enforcement"];
   /** Which pass produced it: structural `jsx-a11y`, or the call-site `enforce` check. */
@@ -90,11 +101,11 @@ function toCheckFinding(f: EnrichedFinding, file: string): CheckFinding {
     ruleId: f.ruleId,
     wcag: f.wcag,
     source: f.corpus.source,
-    tier: f.corpus.tier,
-    severity: f.corpus.severity,
-    bestPractice: f.corpus.bestPractice,
-    fix: displayFix(f),
-    helpUrl: f.corpus.helpUrl,
+    tier: corpusTier(f.corpus),
+    severity: corpusSeverity(f),
+    bestPractice: corpusBestPractice(f.corpus),
+    fix: resolveDisplay(f).fix,
+    helpUrl: corpusHelpUrl(f),
     message: f.message,
     enforcement: f.enforcement,
     provenance: f.provenance,

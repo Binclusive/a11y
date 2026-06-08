@@ -2,7 +2,16 @@ import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 import { buildBaselineCatalog } from "../src/baseline/gen-baseline";
 import { detailLines } from "../src/cli";
-import { baselineRules, displayFix, enrich } from "../src/corpus";
+import {
+  baselineRules,
+  corpusBestPractice,
+  corpusFix,
+  corpusHelpUrl,
+  corpusSeverity,
+  corpusTier,
+  enrich,
+  resolveDisplay,
+} from "../src/corpus";
 import type { Finding } from "../src/core";
 
 /** A minimal axe finding, with only the fields enrich/baseline read. */
@@ -90,9 +99,13 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
     // 1.4.3 (color-contrast) is NOT in the seed snapshot — the classic dead end.
     const e = enrich(axeFinding({ severity: undefined }));
     expect(e.corpus.source).toBe("baseline");
+    if (e.corpus.source !== "baseline") throw new Error("unreachable");
     expect(e.corpus.sc).toBe("1.4.3");
-    expect(e.corpus.tier).toBe("unknown"); // not audit-frequency data
-    expect(e.corpus.orgs).toBeNull(); // baseline carries no org count
+    // The union no longer carries tier/orgs on a baseline variant — not audit
+    // data — which is exactly the invariant the discriminated union now encodes.
+    expect("tier" in e.corpus).toBe(false);
+    expect("orgs" in e.corpus).toBe(false);
+    expect(corpusTier(e.corpus)).toBe("unknown"); // flat view defaults off-moat
     expect(e.corpus.severity).toBe("serious"); // axe's published default impact
     expect(e.corpus.fix).not.toBeNull();
     expect(e.corpus.helpUrl).toContain("dequeuniversity.com");
@@ -101,7 +114,7 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
   it("prefers the axe runtime impact over the baseline default severity", () => {
     const e = enrich(axeFinding({ severity: "critical" }));
     expect(e.corpus.source).toBe("baseline");
-    expect(e.corpus.severity).toBe("critical"); // runtime impact wins
+    expect(corpusSeverity(e)).toBe("critical"); // runtime impact wins
   });
 
   it("baseline-matches a source-pass finding by SC (no axe ruleId)", () => {
@@ -116,8 +129,8 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
       provenance: "jsx-a11y",
     });
     expect(e.corpus.source).toBe("baseline");
-    expect(e.corpus.severity).toBe("serious");
-    expect(e.corpus.helpUrl).toContain("dequeuniversity.com");
+    expect(corpusSeverity(e)).toBe("serious");
+    expect(corpusHelpUrl(e)).toContain("dequeuniversity.com");
   });
 
   it("corpus-covered SCs still return source 'audit', unchanged", () => {
@@ -133,11 +146,12 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
       provenance: "jsx-a11y",
     });
     expect(e.corpus.source).toBe("audit");
+    if (e.corpus.source !== "audit") throw new Error("unreachable");
     expect(e.corpus.sc).toBe("2.4.4");
     expect(e.corpus.tier).toBe("very-common");
     expect(e.corpus.orgs).toBe(17);
     expect(e.corpus.fix).not.toBeNull();
-    expect(e.corpus.bestPractice).toBe(false);
+    expect(corpusBestPractice(e.corpus)).toBe(false);
   });
 
   it("falls back to baseline-by-ruleId for an axe best-practice rule with no SC", () => {
@@ -152,6 +166,7 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
       }),
     );
     expect(e.corpus.source).toBe("baseline");
+    if (e.corpus.source !== "baseline") throw new Error("unreachable");
     expect(e.corpus.bestPractice).toBe(true);
     expect(e.corpus.sc).toBeNull(); // honest: not a WCAG failure
     expect(e.corpus.severity).toBe("moderate"); // axe's published default impact
@@ -164,8 +179,8 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
       axeFinding({ ruleId: "landmark-unique", wcag: [], severity: "serious" }),
     );
     expect(e.corpus.source).toBe("baseline");
-    expect(e.corpus.bestPractice).toBe(true);
-    expect(e.corpus.severity).toBe("serious"); // runtime impact over catalog default
+    expect(corpusBestPractice(e.corpus)).toBe(true);
+    expect(corpusSeverity(e)).toBe("serious"); // runtime impact over catalog default
   });
 
   it("returns source 'none' only when the ruleId is absent from the catalog", () => {
@@ -179,9 +194,11 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
       provenance: "jsx-a11y",
     });
     expect(e.corpus.source).toBe("none");
-    expect(e.corpus.sc).toBeNull();
-    expect(e.corpus.severity).toBeNull();
-    expect(e.corpus.bestPractice).toBe(false);
+    // The `none` variant carries NO catalog evidence at all — the union has only
+    // its `source` tag; severity/helpUrl come off the finding via the accessors.
+    expect(Object.keys(e.corpus)).toEqual(["source"]);
+    expect(corpusSeverity(e)).toBeNull();
+    expect(corpusBestPractice(e.corpus)).toBe(false);
   });
 });
 
@@ -206,6 +223,7 @@ describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus f
   it("enriches to source 'audit' on SC 1.1.1 — the corpus DOES cover this SC", () => {
     const e = enrich(progressbar());
     expect(e.corpus.source).toBe("audit");
+    if (e.corpus.source !== "audit") throw new Error("unreachable");
     expect(e.corpus.sc).toBe("1.1.1");
     expect(e.corpus.tier).toBe("common");
     expect(e.corpus.orgs).toBe(16);
@@ -213,11 +231,13 @@ describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus f
     expect(e.corpus.fix).toMatch(/alt text/i);
   });
 
-  it("displayFix returns axe's rule guidance, NOT the SC-generic corpus fix", () => {
+  it("resolveDisplay.fix returns axe's rule guidance, NOT the SC-generic corpus fix", () => {
     const e = enrich(progressbar());
-    const fix = displayFix(e);
+    const fix = resolveDisplay(e).fix;
     expect(fix).toBe("ARIA progressbar nodes must have an accessible name");
     expect(fix).not.toMatch(/alt text/i); // never the 1.1.1 image-alt fix
+    // The CLI suppresses the `fix:` line for axe findings in favour of `ref`.
+    expect(resolveDisplay(e).fixLine).toBeNull();
   });
 
   it("the rendered audit-tier axe finding shows the corpus tier + a Deque ref, no contradictory fix", () => {
@@ -250,8 +270,10 @@ describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus f
       provenance: "jsx-a11y",
     });
     expect(e.corpus.source).toBe("audit");
-    expect(displayFix(e)).toMatch(/alt text/i); // unchanged corpus fix
-    expect(displayFix(e)).toBe(e.corpus.fix);
+    if (e.corpus.source !== "audit") throw new Error("unreachable");
+    expect(resolveDisplay(e).fix).toMatch(/alt text/i); // unchanged corpus fix
+    expect(resolveDisplay(e).fix).toBe(e.corpus.fix);
+    expect(corpusFix(e.corpus)).toBe(e.corpus.fix);
 
     const text = detailLines(e).join("\n");
     expect(text).toContain("corpus: [COMMON] SC 1.1.1 — 16/26 orgs");

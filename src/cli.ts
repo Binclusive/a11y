@@ -4,13 +4,13 @@ import { collectTsx } from "./collect";
 import { scanUrl } from "./collect-dom";
 import { gen, init, type LearnInput, learn } from "./commands";
 import { scan } from "./core";
-import { type EnrichedFinding, enrichAll } from "./corpus";
+import { type CorpusTier, type EnrichedFinding, enrichAll, resolveDisplay } from "./corpus";
 import { runHookCli } from "./hook";
 import { startStdioServer } from "./mcp";
 import type { ComponentResolution, Coverage } from "./resolve-components";
 import type { SuggestResult } from "./suggest";
 
-const TIER_LABEL: Record<EnrichedFinding["corpus"]["tier"], string> = {
+const TIER_LABEL: Record<CorpusTier, string> = {
   "very-common": "VERY COMMON",
   common: "COMMON",
   occasional: "OCCASIONAL",
@@ -40,55 +40,46 @@ export function detailLines(f: EnrichedFinding): string[] {
     `    ${f.message}`,
   ];
 
-  // Severity, when known — from axe's runtime impact or the baseline catalog's
-  // published default. Shown for both audit and baseline hits.
-  if (f.corpus.severity !== null) {
-    lines.push(`    severity: ${f.corpus.severity.toUpperCase()}`);
-  }
+  // The display contract resolves the axe-vs-SC policy once (see resolveDisplay):
+  // WHAT severity / fix-line / ref / patterns to show. This printer only places
+  // those resolved values in each source's layout — no policy, no provenance
+  // checks.
+  const d = resolveDisplay(f);
+  if (d.severityLabel !== null) lines.push(`    severity: ${d.severityLabel}`);
 
-  if (f.corpus.source === "audit") {
-    // The moat: real audit-frequency data — org count + frequency tier. The
-    // tier line is an accurate SC-LEVEL fact and is always shown.
-    lines.push(`    corpus: [${TIER_LABEL[f.corpus.tier]}] SC ${f.corpus.sc} — ${f.corpus.orgs}/26 orgs`);
-    if (f.provenance === "axe") {
-      // The corpus `fix` is SC-generic (written for the SC's most-common
-      // failure) and contradicts varied axe rules under that SC — so for an
-      // axe finding show axe's OWN rule-accurate guidance instead: the
-      // requirement is already on the `message` line above; link the canonical
-      // Deque fix page as `ref` (consistent with the baseline axe path).
-      if (f.corpus.helpUrl !== null) lines.push(`    ref:    ${f.corpus.helpUrl}`);
-    } else {
-      // Source-pass finding (jsx-a11y / enforce): clean rule↔SC mapping, so the
-      // SC-keyed corpus fix is rule-accurate — keep it.
-      lines.push(`    fix:    ${f.corpus.fix}`);
-    }
-    // Distilled per-failure-shape evidence for this SC (when the SC is
-    // distilled). Shown ONLY for source-pass findings: it is SC-generic — the
-    // failure shapes most common under the SC, not under THIS axe rule — so on
-    // an axe finding it contradicts the rule exactly as the SC-generic fix does
-    // (1.1.1's shapes are all image-alt, but aria-progressbar-name is not).
-    if (f.provenance !== "axe" && f.corpus.patterns.length > 0) {
-      lines.push(`    seen-in-the-wild (distilled, SC ${f.corpus.sc}):`);
-      for (const p of f.corpus.patterns) {
-        lines.push(`      • [${TIER_LABEL[p.frequencyTier]}] ${p.component} — ${p.failureShape}`);
+  const c = f.corpus;
+  switch (c.source) {
+    case "audit":
+      // The moat: real audit-frequency data — org count + frequency tier. The
+      // tier line is an accurate SC-LEVEL fact and is always shown.
+      lines.push(`    corpus: [${TIER_LABEL[c.tier]}] SC ${c.sc} — ${c.orgs}/26 orgs`);
+      if (d.fixLine !== null) lines.push(`    fix:    ${d.fixLine}`);
+      if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
+      if (d.showPatterns) {
+        lines.push(`    seen-in-the-wild (distilled, SC ${c.sc}):`);
+        for (const p of c.patterns) {
+          lines.push(`      • [${TIER_LABEL[p.frequencyTier]}] ${p.component} — ${p.failureShape}`);
+        }
       }
-    }
-  } else if (f.corpus.source === "baseline") {
-    // Coverage: axe's published per-rule data, NOT audit-frequency data. Make
-    // that explicit so it never reads as a moat hit.
-    lines.push(`    fix:    ${f.corpus.fix}`);
-    if (f.corpus.helpUrl !== null) lines.push(`    ref:    ${f.corpus.helpUrl}`);
-    if (f.corpus.bestPractice) {
-      // An axe best-practice rule with no WCAG SC — honestly NOT a WCAG failure.
-      lines.push("    rule:   best-practice (no WCAG SC)");
-    } else {
-      lines.push(`    corpus: baseline rule SC ${f.corpus.sc} (no audit-frequency data yet)`);
-    }
-  } else {
-    // Neither source knows the SC — but never a bare dead-end: surface whatever
-    // the finding itself carries (an axe finding still has its runtime helpUrl).
-    if (f.corpus.helpUrl !== null) lines.push(`    ref:    ${f.corpus.helpUrl}`);
-    lines.push("    corpus: no SC mapping — not in audit-frequency data or the baseline catalog");
+      break;
+    case "baseline":
+      // Coverage: axe's published per-rule data, NOT audit-frequency data. Make
+      // that explicit so it never reads as a moat hit.
+      if (d.fixLine !== null) lines.push(`    fix:    ${d.fixLine}`);
+      if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
+      if (c.bestPractice) {
+        // An axe best-practice rule with no WCAG SC — honestly NOT a WCAG failure.
+        lines.push("    rule:   best-practice (no WCAG SC)");
+      } else {
+        lines.push(`    corpus: baseline rule SC ${c.sc} (no audit-frequency data yet)`);
+      }
+      break;
+    case "none":
+      // Neither source knows the SC — but never a bare dead-end: surface whatever
+      // the finding itself carries (an axe finding still has its runtime helpUrl).
+      if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
+      lines.push("    corpus: no SC mapping — not in audit-frequency data or the baseline catalog");
+      break;
   }
   return lines;
 }
@@ -412,13 +403,6 @@ async function runCheck(dir: string, json = false): Promise<void> {
 }
 
 /**
- * The rendered-DOM counterpart to `runCheck`: drive a real browser to the URL,
- * run axe-core against the live page, and report findings anchored on CSS
- * selectors instead of source lines. This is the source-less path — it inspects
- * what actually ships, so it covers non-React pages and anything the static
- * .tsx scan can't see (server-rendered markup, third-party widgets, runtime DOM).
- */
-/**
  * Accept a bare filesystem path (`./dist/index.html`) as well as a real URL.
  * If the arg already carries a scheme (`http://`, `https://`, `file://`) pass it
  * through; otherwise it's a local path — resolve it and convert to a `file://`
@@ -428,6 +412,13 @@ function normalizeTarget(target: string): string {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(target) ? target : pathToFileURL(resolve(target)).href;
 }
 
+/**
+ * The rendered-DOM counterpart to `runCheck`: drive a real browser to the URL,
+ * run axe-core against the live page, and report findings anchored on CSS
+ * selectors instead of source lines. This is the source-less path — it inspects
+ * what actually ships, so it covers non-React pages and anything the static
+ * .tsx scan can't see (server-rendered markup, third-party widgets, runtime DOM).
+ */
 async function runCheckUrl(url: string): Promise<void> {
   const target = normalizeTarget(url);
   console.log(`a11y-checker — rendering ${target} and running axe-core\n`);
