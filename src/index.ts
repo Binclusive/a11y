@@ -7,6 +7,7 @@ export {
   spliceBlock,
 } from "./agents-block";
 export { collectTsx } from "./collect";
+export { type DomScanOptions, type DomScanResult, scanUrl, scFromTags } from "./collect-dom";
 export {
   appendLearned,
   BLOCK_TARGETS,

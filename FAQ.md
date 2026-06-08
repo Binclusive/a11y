@@ -34,6 +34,20 @@ It resolves each component to the HTML element it really renders, four ways, str
 
 It lands in `declare` — shown, not hidden. You add a one-line entry to `binclusive.json` to teach it, or we add the library to the registry (pure data). Coverage grows from real runs, not guesses.
 
+### "What if there's no React source — a live site, ASP.NET, plain HTML?"
+
+There's a **second producer** for exactly that: `a11y-checker check-url <target>`
+(or `pnpm scan:url`). It renders the real page in a browser (Playwright/Chromium),
+runs **axe-core** against the live DOM, and flows the findings through the *same*
+corpus / WCAG / enforcement pipeline as the source scan — same tiers, same fixes,
+same gate. `<target>` takes an `http(s)://` URL, a `file://` URL, or a bare local
+path. This is what lets it audit non-React sites (Razor/jQuery, server-rendered),
+any deployed URL you don't have source for, and local `.html` files. A real
+browser also catches what static analysis can't — color-contrast, computed roles,
+layout-dependent rules. One caveat: server-side *templates* (`.cshtml`) aren't
+valid standalone HTML, so point `check-url` at the **running app** (`localhost`),
+not the template file. Full walkthrough: `docs/AUDIT-URL.md`.
+
 ### "Is this meant to replace accessibility audits?"
 
 No — it's the **other half.** Audits find what already shipped; this stops it shipping. Together they close the loop, and every audit makes the corpus (and the checker) sharper. Audit without a write-time tool = the same bugs keep arriving; write-time tool without audits = nobody watches the long tail.

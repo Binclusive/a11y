@@ -32,8 +32,13 @@ import { wcagForRuleId } from "./wcag-map";
  *     and checks the app-owned content (name/alt/label/link-text) — so it fires
  *     on opaque/trusted components the structural pass can't reach. This is the
  *     recall win: "trusted" stops being false reassurance.
+ *   - `axe`      — the rendered-DOM collector (see `collect-dom.ts`): a live URL
+ *     is rendered in a real browser and axe-core runs against the resulting DOM.
+ *     Source-blind by design — it covers non-React sites and live pages we have
+ *     no `.tsx` for, and it sees what static analysis can't (color-contrast,
+ *     computed roles, real rendered text). Anchored by `selector`, not a line.
  */
-export type FindingProvenance = "jsx-a11y" | "enforce";
+export type FindingProvenance = "jsx-a11y" | "enforce" | "axe";
 
 /**
  * A single accessibility finding. A jsx-a11y finding is normalized off an
@@ -59,6 +64,13 @@ export interface Finding {
   readonly wcag: readonly string[];
   readonly enforcement: EnforcementLevel;
   readonly provenance: FindingProvenance;
+  /**
+   * Where the finding lives in a rendered DOM: the CSS selector axe-core
+   * reports for the offending node. Set only on `axe` findings (`file` holds the
+   * page URL and `line` is 0 — a live DOM has no source line). Absent on the
+   * source-level passes, which anchor with `file:line`.
+   */
+  readonly selector?: string;
 }
 
 /**

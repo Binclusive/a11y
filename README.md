@@ -21,6 +21,8 @@ That's the whole thing. It scans every `.tsx` under the folder and prints a cove
 
 No clone handy? Point it at this repo's own test fixtures: `pnpm scan ./test/fixtures`.
 
+> **No React source?** (A live site, an ASP.NET/Razor app, plain HTML.) The same checker can render a real page in a browser and audit the live DOM — `pnpm scan:url https://www.havas.net`. See **[Auditing HTML & live pages (non-React)](#auditing-html--live-pages-non-react)** below.
+
 > **Using your own design system?** (Almost everyone is.) A cold scan leaves most of your components in `declare` — *that's expected, not a failure.* To turn on its best trick (finding bugs *inside* your own components), it needs to know which of your components are buttons, inputs, etc. You don't write that by hand:
 >
 > ```bash
@@ -68,6 +70,34 @@ Two passes + one corpus:
 
 A generic linter can't do 2 or 3. The deeper story (and why the corpus is a moat) is in `docs/`.
 
+There's also a **second producer**: a rendered-DOM collector that drives a real browser to a URL and runs axe-core against the live page — same corpus, same WCAG, same enforcement gate, no source required. That's the next section.
+
+---
+
+## Auditing HTML & live pages (non-React)
+
+The scan above works on `.tsx` source. But not every page *has* React source on disk — a deployed customer site, an ASP.NET/Razor app, a plain HTML/Bootstrap/jQuery page. For those, point the checker at the **rendered page** instead of the source:
+
+```bash
+pnpm exec playwright install chromium   # one-time: the browser the render path drives
+```
+
+```bash
+pnpm scan:url https://www.havas.net     # a deployed site (a real customer)
+pnpm scan:url http://localhost:5000     # your local dev server
+pnpm scan:url ./wwwroot/index.html      # a local static .html file (bare path works)
+```
+
+`<target>` takes an `http(s)://` URL, a `file://` URL, or a **bare local path** (auto-converted to `file://`). Under the hood it renders the page in real Chromium (via Playwright), runs **axe-core** against the live DOM, then flows every finding through the *same* corpus / WCAG / enforcement machinery as the source scan — so a contrast bug on havas.net comes back tiered and gated exactly like a missing label in your `.tsx`.
+
+This is the source-less path — one command audits any live site, React or not.
+
+- **Templates need a running server.** A server-side template (`.cshtml` Razor, `.erb`, etc.) is **not** valid standalone HTML — it's `@`-directives, loops, interpolation — so `file://` can't render it. Point `check-url` at the **running app** (`localhost`) for templates. Only plain `.html` files render directly via `file://`.
+- **It catches what static analysis can't.** A real browser render surfaces categories the `.tsx` scan and even headless DOMs (jsdom) are blind to — notably **color-contrast (WCAG 1.4.3)**, computed ARIA roles, and layout-dependent rules.
+- **Honest edge:** the seed corpus snapshot currently covers ~10 success criteria and does **not** yet include some SCs this path surfaces (e.g. 1.4.3 contrast, 1.4.1, 2.4.4). Those findings still appear — the render catches them regardless — but they roll up as tier `UNKNOWN` (no corpus fix text) until the corpus is extended.
+
+The full walkthrough — install once, read the output, the `(rendered-DOM / axe)` provenance tag — is in **`docs/AUDIT-URL.md`**.
+
 ---
 
 ## Dig deeper
@@ -75,6 +105,7 @@ A generic linter can't do 2 or 3. The deeper story (and why the corpus is a moat
 | If you want… | Open / read |
 |---|---|
 | **Adopt it with your own design system** | **`WALKTHROUGH.md`** |
+| **Audit a live URL or HTML page (non-React)** | **`docs/AUDIT-URL.md`** |
 | The pitch + the moat, with numbers | `docs/decks/numbers.html` |
 | Real findings on real OSS projects | `docs/decks/showcase.html` |
 | How the machine works, conceptually | `docs/decks/engineering.html` |

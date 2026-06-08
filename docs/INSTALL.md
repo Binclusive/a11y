@@ -32,7 +32,7 @@ npm view @binclusive/a11y version   # prints a version, not 401/404
 
 One install registers, together:
 
-- the local **MCP server** — `check_a11y`, `get_a11y_rules`, `learn_a11y_rule`;
+- the local **MCP server** — `check_a11y`, `check_url`, `get_a11y_rules`, `learn_a11y_rule`;
 - the **auto-whisper hook** — flags a11y the instant the agent edits a file;
 - the **`grind` skill** — ROBOT MODE.
 

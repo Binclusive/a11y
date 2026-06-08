@@ -1,5 +1,7 @@
 import { relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { collectTsx } from "./collect";
+import { scanUrl } from "./collect-dom";
 import { gen, init, type LearnInput, learn } from "./commands";
 import { scan } from "./core";
 import { type EnrichedFinding, enrichAll } from "./corpus";
@@ -15,15 +17,24 @@ const TIER_LABEL: Record<EnrichedFinding["corpus"]["tier"], string> = {
   unknown: "UNKNOWN",
 };
 
-function formatFinding(f: EnrichedFinding, root: string): string {
-  const where = `${relative(root, f.file)}:${f.line}`;
+/**
+ * The body of a finding report — everything below the location line. Shared by
+ * the source report (`formatFinding`, anchored `file:line`) and the rendered-DOM
+ * report (`formatUrlFinding`, anchored on the axe selector) so the corpus
+ * cross-ref, fix, and distilled evidence render identically regardless of which
+ * collector produced the finding. The `via` tag names the non-structural
+ * producers so each one's distinct reach is legible.
+ */
+function detailLines(f: EnrichedFinding): string[] {
   const scList =
     f.wcag.length > 0 ? f.wcag.map((sc) => `WCAG ${sc}`).join(", ") : "no WCAG mapping";
-  // The enforce check reaches content on opaque/trusted components the
-  // structural pass can't see — tag those findings so the recall win is legible.
-  const via = f.provenance === "enforce" ? "  (call-site content check)" : "";
+  const via =
+    f.provenance === "enforce"
+      ? "  (call-site content check)"
+      : f.provenance === "axe"
+        ? "  (rendered-DOM / axe)"
+        : "";
   const lines = [
-    `  ${where}`,
     `    rule:   ${f.ruleId}  [${f.enforcement}]${via}`,
     `    wcag:   ${scList}`,
     `    ${f.message}`,
@@ -43,7 +54,42 @@ function formatFinding(f: EnrichedFinding, root: string): string {
       }
     }
   }
-  return lines.join("\n");
+  return lines;
+}
+
+function formatFinding(f: EnrichedFinding, root: string): string {
+  return [`  ${relative(root, f.file)}:${f.line}`, ...detailLines(f)].join("\n");
+}
+
+/** A rendered-DOM finding, anchored on the axe CSS selector instead of a line. */
+function formatUrlFinding(f: EnrichedFinding): string {
+  return [`  ${f.selector ?? "(document)"}`, ...detailLines(f)].join("\n");
+}
+
+/**
+ * The two summary lines every report ends on: the corpus-tier rollup and the
+ * enforcement split. Returns the blocking count too, since that gates the exit
+ * code. Shared by the source and rendered-DOM reports.
+ */
+function reportTotals(findings: readonly EnrichedFinding[]): {
+  readonly lines: readonly string[];
+  readonly blocking: number;
+} {
+  const tierCounts = new Map<string, number>();
+  for (const f of findings) {
+    const key = TIER_LABEL[f.corpus.tier];
+    tierCounts.set(key, (tierCounts.get(key) ?? 0) + 1);
+  }
+  const rollup = [...tierCounts.entries()].map(([tier, n]) => `${tier}: ${n}`).join("  |  ");
+  const blocking = findings.filter((f) => f.enforcement === "block").length;
+  const warning = findings.length - blocking;
+  return {
+    lines: [
+      `${findings.length} finding(s)   ${rollup}`,
+      `enforcement: ${blocking} blocking · ${warning} warning`,
+    ],
+    blocking,
+  };
 }
 
 /**
@@ -309,24 +355,68 @@ async function runCheck(dir: string, json = false): Promise<void> {
     }
   }
 
-  // Tier rollup so the corpus value is visible at a glance.
-  const tierCounts = new Map<string, number>();
-  for (const f of findings) {
-    const key = TIER_LABEL[f.corpus.tier];
-    tierCounts.set(key, (tierCounts.get(key) ?? 0) + 1);
-  }
-  const rollup = [...tierCounts.entries()].map(([tier, n]) => `${tier}: ${n}`).join("  |  ");
-
-  // Enforcement split: `block` findings gate the exit code, `warn` only surface.
-  // With no contract every finding is `block`, so the gate is unchanged.
-  const blocking = findings.filter((f) => f.enforcement === "block").length;
-  const warning = findings.length - blocking;
-  console.log(`${findings.length} finding(s)   ${rollup}`);
-  console.log(`enforcement: ${blocking} blocking · ${warning} warning`);
+  // Tier rollup + enforcement split — the two summary lines every report ends on.
+  const totals = reportTotals(findings);
+  for (const line of totals.lines) console.log(line);
 
   // Exit non-zero only when something the contract BLOCKS fired. A scan that
   // surfaces warn-only findings is a clean build by the customer's own policy.
-  process.exitCode = blocking > 0 ? 1 : 0;
+  process.exitCode = totals.blocking > 0 ? 1 : 0;
+}
+
+/**
+ * The rendered-DOM counterpart to `runCheck`: drive a real browser to the URL,
+ * run axe-core against the live page, and report findings anchored on CSS
+ * selectors instead of source lines. This is the source-less path — it inspects
+ * what actually ships, so it covers non-React pages and anything the static
+ * .tsx scan can't see (server-rendered markup, third-party widgets, runtime DOM).
+ */
+/**
+ * Accept a bare filesystem path (`./dist/index.html`) as well as a real URL.
+ * If the arg already carries a scheme (`http://`, `https://`, `file://`) pass it
+ * through; otherwise it's a local path — resolve it and convert to a `file://`
+ * URL so Playwright can navigate to it.
+ */
+function normalizeTarget(target: string): string {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(target) ? target : pathToFileURL(resolve(target)).href;
+}
+
+async function runCheckUrl(url: string): Promise<void> {
+  const target = normalizeTarget(url);
+  console.log(`a11y-checker — rendering ${target} and running axe-core\n`);
+
+  const result = await scanUrl(target);
+  const findings = enrichAll(result.findings);
+
+  if (findings.length === 0) {
+    console.log("No axe-core violations found.");
+    return;
+  }
+
+  // Group by axe rule for a readable report — the DOM path has no file to group
+  // on (every finding shares the URL), so the ruleId is the natural section key.
+  const byRule = new Map<string, EnrichedFinding[]>();
+  for (const f of findings) {
+    const list = byRule.get(f.ruleId) ?? [];
+    list.push(f);
+    byRule.set(f.ruleId, list);
+  }
+
+  for (const [ruleId, group] of byRule) {
+    console.log(ruleId);
+    for (const f of group) {
+      console.log(formatUrlFinding(f));
+      console.log("");
+    }
+  }
+
+  // Tier rollup + enforcement split — the two summary lines every report ends on.
+  const totals = reportTotals(findings);
+  for (const line of totals.lines) console.log(line);
+
+  // Exit non-zero only when something the contract BLOCKS fired. A scan that
+  // surfaces warn-only findings is a clean build by the customer's own policy.
+  process.exitCode = totals.blocking > 0 ? 1 : 0;
 }
 
 /**
@@ -482,6 +572,7 @@ async function runGen(args: readonly string[]): Promise<void> {
 
 const USAGE = `usage:
   a11y-checker check <dir> [--json]              scan .tsx for a11y findings (--json: machine-readable output)
+  a11y-checker check-url <url>                   render a live URL and run axe-core (non-React / source-less pages)
   a11y-checker init [--suggest] [dir]           detect stack, write binclusive.json + AGENTS/CLAUDE block (--suggest scaffolds the components map)
   a11y-checker learn "<rule>" [--wcag a,b] [--fix "..."] [--source "..."] [dir]
   a11y-checker gen [--check] [dir]               regenerate the block (--check exits non-zero on drift)
@@ -512,6 +603,15 @@ async function main(): Promise<void> {
         return;
       }
       return runCheck(dir, parsed.bools.has("json"));
+    }
+    case "check-url": {
+      const url = parseArgs(rest, []).positionals[0];
+      if (url === undefined) {
+        console.error("usage: a11y-checker check-url <url>");
+        process.exitCode = 2;
+        return;
+      }
+      return runCheckUrl(url);
     }
     default: {
       // Back-compat: bare `a11y-checker <dir>` still runs check.
