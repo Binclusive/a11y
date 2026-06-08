@@ -1,0 +1,17 @@
+{
+  "name": "binclusive",
+  "owner": {
+    "name": "Binclusive"
+  },
+  "description": "Binclusive accessibility tooling for coding agents.",
+  "plugins": [
+    {
+      "name": "a11y-checker",
+      "source": "./plugin",
+      "description": "Local, corpus-grounded accessibility remediation for React/TSX — an MCP server, a PostToolUse auto-whisper hook, and an autonomous ROBOT MODE skill. Runs on your machine; no network, no upload.",
+      "author": { "name": "Binclusive" },
+      "homepage": "https://github.com/binclusive/monorepo/tree/main/packages/a11y-checker",
+      "license": "MIT"
+    }
+  ]
+}
