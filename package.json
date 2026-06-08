@@ -1,16 +1,28 @@
 {
-  "name": "@binclusive/a11y-checker",
+  "name": "@binclusive/a11y",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Local accessibility checker for React/TSX, grounded in a real-world audit corpus. Runs entirely on your machine — no network, no upload.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "bin": {
-    "a11y-checker": "./src/cli.ts"
+    "a11y-checker": "./bin/a11y.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "data/corpus-snapshot.json",
+    "data/corpus/patterns-*.json"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Binclusive/a11y-checker-plugin.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.6.0"
   },
   "scripts": {
     "scan": "tsx ./src/cli.ts check",

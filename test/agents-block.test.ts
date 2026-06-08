@@ -137,6 +137,13 @@ describe("renderBlock", () => {
   it("is pure — same inputs yield identical bytes", () => {
     expect(renderBlock(contract, patterns)).toBe(renderBlock(contract, patterns));
   });
+
+  it("emits the ROBOT MODE protocol so any AGENTS.md-reading agent runs the same loop", () => {
+    const block = renderBlock(contract, patterns);
+    expect(block).toContain("`binclusive-a11y` MCP tools");
+    expect(block).toContain("Re-scan after each change");
+    expect(block).toContain("never claim compliance");
+  });
 });
 
 describe("spliceBlock idempotence + preservation", () => {
