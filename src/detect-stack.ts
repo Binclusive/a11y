@@ -15,8 +15,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Language, Router, Stack } from "./contract";
+import { isFrameworkPrimitive, isOwnModule, packageNameOf } from "./module-scope";
 import { resolveComponents } from "./resolve-components";
 import { ownAliasMatcherFor } from "./tsconfig-aliases";
+
+// Re-export the shared module-scoping rules so existing importers of
+// `packageNameOf` from this module keep working; the rules now live in
+// `module-scope.ts` so `suggest.ts` shares them without a circular import.
+export { isFrameworkPrimitive, isOwnModule, packageNameOf } from "./module-scope";
 
 /**
  * Walk UP from `dir` (inclusive) to the nearest ancestor containing `marker`,
@@ -117,64 +123,6 @@ function detectRouter(dir: string, framework: string): Router {
 /** Language from tsconfig presence at or above the scanned dir (package-up). */
 function detectLanguage(dir: string): Language {
   return findUp(dir, "tsconfig.json") !== null ? "ts" : "js";
-}
-
-/**
- * Reduce a module specifier to its package name so per-component sub-paths
- * collapse onto one library: `@mui/material/Button` -> `@mui/material`,
- * `@radix-ui/react-label` -> `@radix-ui/react-label` (scoped pkg kept whole),
- * `next/link` -> `next`. Relative imports (`./`, `../`) are the repo's OWN
- * components — they are not a design system and are excluded by the caller.
- */
-export function packageNameOf(specifier: string): string {
-  const parts = specifier.split("/");
-  if (specifier.startsWith("@")) {
-    // Scoped: keep "@scope/name", drop deeper sub-paths.
-    return parts.slice(0, 2).join("/");
-  }
-  return parts[0] ?? specifier;
-}
-
-/**
- * A module specifier that resolves to the repo's OWN code, not an installed
- * package: relative (`./`, `../`), the conventional source aliases (`~/...`,
- * `@/...`, `#...`), and — when an `ownAlias` matcher is supplied — any
- * `compilerOptions.paths` alias whose target maps INTO the repo's own source
- * (Saleor `@dashboard/* -> src/*`, Cal.com `@coss/ui/* -> packages/.../src/*`).
- * These are the team's own components and must never be mistaken for a design
- * system — only published packages count.
- */
-function isOwnModule(specifier: string, ownAlias?: (s: string) => boolean): boolean {
-  if (specifier.startsWith(".")) return true;
-  if (specifier.startsWith("~") || specifier.startsWith("#")) return true;
-  // `@/...` is the common src alias; a real scoped package is `@scope/name`.
-  if (specifier.startsWith("@/")) return true;
-  // A project alias that maps into own source is own code, even when it LOOKS
-  // like a scoped package (`@dashboard/...`, `@coss/ui/...`).
-  if (ownAlias?.(specifier) === true) return true;
-  return false;
-}
-
-/**
- * Framework view/meta-framework PACKAGES whose component-like exports
- * (`next/link`, `next/image`, `react`) are platform primitives, not a design
- * system. A repo's "design system" is the package that supplies its UI
- * COMPONENTS — never the framework it runs on. Excluding these is what stops
- * `next` from winning the ranking just because every page imports `next/link`.
- * Keyed by package name (after {@link packageNameOf}).
- */
-const FRAMEWORK_PRIMITIVES: ReadonlySet<string> = new Set([
-  "next",
-  "react",
-  "react-dom",
-  "gatsby",
-  "@remix-run/react",
-  "@remix-run/node",
-  "astro",
-]);
-
-function isFrameworkPrimitive(pkg: string): boolean {
-  return FRAMEWORK_PRIMITIVES.has(pkg);
 }
 
 /**

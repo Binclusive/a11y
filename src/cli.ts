@@ -6,6 +6,7 @@ import { type EnrichedFinding, enrichAll } from "./corpus";
 import { runHookCli } from "./hook";
 import { startStdioServer } from "./mcp";
 import type { ComponentResolution, Coverage } from "./resolve-components";
+import type { SuggestResult } from "./suggest";
 
 const TIER_LABEL: Record<EnrichedFinding["corpus"]["tier"], string> = {
   "very-common": "VERY COMMON",
@@ -368,18 +369,56 @@ function parseArgs(args: readonly string[], valueFlags: readonly string[]): Pars
 }
 
 async function runInit(args: readonly string[]): Promise<void> {
-  const { positionals } = parseArgs(args, []);
+  const { positionals, bools } = parseArgs(args, []);
+  const suggest = bools.has("suggest");
   const dir = resolve(positionals[0] ?? ".");
-  const r = await init(dir);
+  const r = await init(dir, { suggest });
   const s = r.contract.stack;
   const router = s.router === null ? "" : ` (${s.router} router)`;
-  console.log(`a11y-checker init — ${dir}`);
+  const title = suggest ? "init --suggest" : "init";
+  console.log(`a11y-checker ${title} — ${dir}`);
   console.log(`  stack:       ${s.framework}${router} · ${s.designSystem} · ${s.language}`);
-  console.log(`  enforcement: block ${r.contract.enforcement.block.join(", ") || "(none)"}`);
-  console.log(`  wrote:       ${relative(dir, r.contractPath)}`);
+  if (r.suggestions !== null) printSuggestions(r.suggestions);
+  if (r.suggestions === null) {
+    console.log(`  enforcement: block ${r.contract.enforcement.block.join(", ") || "(none)"}`);
+  }
+  if (r.suggestions === null) {
+    console.log(`  wrote:       ${relative(dir, r.contractPath)}`);
+  } else {
+    console.log(
+      `  wrote:       ${relative(dir, r.contractPath)} (components map included — review before committing)`,
+    );
+  }
   for (const p of r.blockPaths) console.log(`  block:       ${relative(dir, p)}`);
   if (r.preservedLearned > 0) {
     console.log(`  preserved:   ${r.preservedLearned} learned rule(s)`);
+  }
+}
+
+/**
+ * Render the `--suggest` block: every guessed host, aligned, with a confidence
+ * marker (✓ confident, ⚠ verify + reason) so the user REVIEWS each one — the
+ * whole point of suggesting rather than silently applying. Composites/toggles
+ * left in declare are listed too, so nothing the guesser skipped is invisible.
+ */
+function printSuggestions(result: SuggestResult): void {
+  const { suggestions, skipped } = result;
+  if (suggestions.length === 0) {
+    console.log("  no leaf-primitive components to suggest (all composite or already declared)");
+  } else {
+    console.log(
+      `  suggested ${suggestions.length} component mapping${suggestions.length === 1 ? "" : "s"} (review them — especially the ⚠):`,
+    );
+    const nameW = Math.max(...suggestions.map((s) => s.name.length));
+    const hostW = Math.max(...suggestions.map((s) => s.host.length));
+    for (const s of suggestions) {
+      const marker =
+        s.confidence === "confident" ? "✓" : `⚠ verify — ${s.reason ?? "double-check"}`;
+      console.log(`    ${s.name.padEnd(nameW)} → ${s.host.padEnd(hostW)}  ${marker}`);
+    }
+  }
+  if (skipped.length > 0) {
+    console.log(`  left in declare (composite — no single host): ${skipped.join(", ")}`);
   }
 }
 
@@ -443,7 +482,7 @@ async function runGen(args: readonly string[]): Promise<void> {
 
 const USAGE = `usage:
   a11y-checker check <dir> [--json]              scan .tsx for a11y findings (--json: machine-readable output)
-  a11y-checker init [dir]                        detect stack, write binclusive.json + AGENTS/CLAUDE block
+  a11y-checker init [--suggest] [dir]           detect stack, write binclusive.json + AGENTS/CLAUDE block (--suggest scaffolds the components map)
   a11y-checker learn "<rule>" [--wcag a,b] [--fix "..."] [--source "..."] [dir]
   a11y-checker gen [--check] [dir]               regenerate the block (--check exits non-zero on drift)
   a11y-checker mcp                               start a local stdio MCP server exposing the checker to MCP clients
