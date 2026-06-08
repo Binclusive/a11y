@@ -1,0 +1,111 @@
+{
+  "$schema": "./scenario.schema.json",
+  "name": "a11y-checker-walkthrough",
+  "title": "a11y-checker — see THROUGH your design system",
+  "terminal": {
+    "width": 1200,
+    "height": 760,
+    "theme": "Catppuccin Mocha",
+    "fontSize": 16,
+    "typingSpeed": "45ms",
+    "padding": 18
+  },
+  "workdir": ".",
+  "shellInit": ["source demo/_a11y.sh"],
+  "isolation": { "fixture": "demo/sample-app", "as": "FIX" },
+  "setup": [],
+  "teardown": [],
+  "acts": [
+    {
+      "title": "ACT 1 — sample-app on-ramp: declare your design system, recover hidden findings",
+      "steps": [
+        {
+          "say": [
+            "A tiny React app whose design system @acme/ui is DECLARED but NOT installed.",
+            "Step 1 — a COLD scan. Zero config: resolve every component, check structure + content."
+          ],
+          "run": "a11y scan $FIX/src",
+          "expect": {
+            "exit": 1,
+            "stdoutContains": ["3 finding(s)", "enforce/link-no-name", "isn't resolved on disk"],
+            "stdoutNotContains": ["ENOENT"]
+          },
+          "read": 4
+        },
+        {
+          "say": [
+            "Step 2 — teach the checker the stack. init detects framework + design system."
+          ],
+          "run": "a11y init $FIX",
+          "expect": {
+            "stdoutContains": ["react · @acme/ui · ts", "wrote:"]
+          },
+          "read": 2
+        },
+        {
+          "say": [
+            "Step 3 — declare your 3 primitives so the checker sees THROUGH the opaque package."
+          ],
+          "run": "cp $FIX/binclusive.declared.json $FIX/binclusive.json",
+          "expect": { "exit": 0 }
+        },
+        {
+          "run": "cat $FIX/binclusive.json",
+          "expect": {
+            "stdoutContains": ["\"IconButton\": \"button\"", "\"TextField\": \"input\""]
+          },
+          "read": 3
+        },
+        {
+          "say": [
+            "Step 4 — RESCAN. Same code; the checker now reaches the content passed INTO @acme/ui.",
+            "THE RECALL WIN: 3 → 5 findings. Two were hidden inside the opaque components."
+          ],
+          "run": "a11y scan $FIX/src",
+          "expect": {
+            "exit": 1,
+            "stdoutContains": ["5 finding(s)", "enforce/input-no-name", "enforce/button-no-name"]
+          },
+          "read": 4
+        },
+        {
+          "say": [
+            "Step 5 — --json makes it CI-ready. Pipe summary.blocking straight into a build gate."
+          ],
+          "run": "a11y check $FIX/src --json | jq '.summary'",
+          "expect": {
+            "stdoutContains": ["\"blocking\": 5"]
+          },
+          "read": 3
+        }
+      ]
+    },
+    {
+      "title": "ACT 2 — credibility close: real OSS code, then the cross-stack experiment",
+      "steps": [
+        {
+          "say": [
+            "Does this hold on REAL code? shadcn's own Taxonomy app (Next.js + Radix).",
+            "Radix reads as TRUSTED; the findings are app-owned content, not framework noise."
+          ],
+          "run": "a11y scan experiments/stack-matrix/.cache/shadcn-ui__taxonomy",
+          "expect": {
+            "exit": 1,
+            "stdoutContains": ["finding(s)", "trusted"]
+          },
+          "read": 4
+        },
+        {
+          "say": [
+            "The experiment: 20 OSS React apps × 8 design systems × 4 frameworks. Precision HOLDS."
+          ],
+          "run": "sed -n '1,30p' experiments/stack-matrix/REPORT.md",
+          "expect": {
+            "stdoutContains": ["Stack-Matrix", "shadcn-ui/taxonomy"]
+          },
+          "read": 4
+        }
+      ]
+    }
+  ]
+}

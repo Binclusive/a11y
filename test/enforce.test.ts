@@ -128,16 +128,46 @@ describe("enforce: image (1.1.1)", () => {
 describe("enforce: link (2.4.4-link-no-name)", () => {
   it("flags an icon-only link with no name", () => {
     const linkHits = enforceRuleIds(links, CTX).filter((r) => r === "enforce/link-no-name");
-    expect(linkHits.length).toBe(1); // IconOnlyLink only
+    // IconOnlyLink (MUI) + IconOnlyRouterLink (react-router) — both icon-only, nameless.
+    expect(linkHits.length).toBe(2);
   });
 
   it("does NOT flag a link with visible text or an aria-label", () => {
     const linkHits = enforceContent([links], CTX).filter(
       (f) => f.ruleId === "enforce/link-no-name",
     );
-    // LinkWithText + LabelledIconLink are both named → only the 1 icon-only hit.
-    expect(linkHits.length).toBe(1);
-    expect(linkHits[0]?.wcag).toEqual(["2.4.4"]);
+    // Named/text links (LinkWithText, LabelledIconLink, NavLinkWithText,
+    // LabelledRouterLink) and the DynamicRouterLink (unknowable child) all skip →
+    // exactly the 2 icon-only nameless links remain.
+    expect(linkHits.length).toBe(2);
+    expect(linkHits.every((f) => f.wcag.includes("2.4.4"))).toBe(true);
+  });
+});
+
+describe("enforce: react-router Link/NavLink recall (hardening #1)", () => {
+  it("recognizes router Link/NavLink as link controls via the content pass alone", () => {
+    // No resolutions, no contract — proves recognition comes from the router-link
+    // module gate, not from any host map (the structural pass never sees them).
+    const findings = enforceContent([links], CTX).filter(
+      (f) => f.ruleId === "enforce/link-no-name",
+    );
+    // The react-router icon-only link must be among the flagged ones.
+    const src = readFileSync(links, "utf8").split("\n");
+    const routerIconLine = src.findIndex((l) => l.includes("export const IconOnlyRouterLink")) + 2;
+    expect(findings.map((f) => f.line)).toContain(routerIconLine);
+  });
+
+  it("does NOT flag router links that have text, an aria-label, or a dynamic child", () => {
+    const findings = enforceContent([links], CTX).filter(
+      (f) => f.ruleId === "enforce/link-no-name",
+    );
+    const src = readFileSync(links, "utf8").split("\n");
+    const line = (needle: string): number =>
+      src.findIndex((l) => l.includes(needle)) + 2;
+    const flagged = new Set(findings.map((f) => f.line));
+    expect(flagged.has(line("export const NavLinkWithText"))).toBe(false);
+    expect(flagged.has(line("export const LabelledRouterLink"))).toBe(false);
+    expect(flagged.has(line("export const DynamicRouterLink"))).toBe(false);
   });
 });
 

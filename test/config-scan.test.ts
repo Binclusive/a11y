@@ -135,9 +135,11 @@ describe("formatOpaqueHint: declare-bucket components become a copy-paste config
       library: null,
     });
     expect(hint).toContain("Card (from @/components/card) — unrecognized.");
-    expect(hint).toContain('binclusive.json → "components": { "Card":');
-    // The host can't be known (that's why it's unresolved) → options are offered.
-    expect(hint).toMatch(/button\|a\|input/);
+    expect(hint).toContain('binclusive.json → "components": { "Card": "<host>" }');
+    // The host can't be known → options are listed; "pick ONE" is explicit.
+    expect(hint).toContain("pick ONE of:");
+    expect(hint).toContain("button");
+    expect(hint).toContain("input");
   });
 });
 

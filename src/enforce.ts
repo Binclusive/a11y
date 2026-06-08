@@ -2,7 +2,13 @@ import ts from "typescript";
 import { enforcementFor } from "./config-scan";
 import type { Contract, Declarations } from "./contract";
 import type { Finding } from "./core";
-import { isIconLibrary, isToggleRole, lookupGuaranteed, lookupRegistry } from "./registry";
+import {
+  isIconLibrary,
+  isRouterLinkControl,
+  isToggleRole,
+  lookupGuaranteed,
+  lookupRegistry,
+} from "./registry";
 import type { ComponentResolution } from "./resolve-components";
 import { collectLocalImports, type ImportBinding } from "./source-trace";
 import { ariaHiddenLineRanges, transInjectedLineRanges } from "./suppression-ranges";
@@ -299,6 +305,18 @@ function classify(
 
   // An icon-library import is content, never a control — short-circuit.
   if (binding !== undefined && isIconLibrary(binding.module)) return null;
+
+  // 1.5. Router link controls — react-router / Remix `Link` / `NavLink`. They
+  // render `<a>` but carry the destination on `to`, not `href`, so they are kept
+  // OUT of the structural jsx-a11y map (anchor-is-valid would false-positive on
+  // the missing href — the 28-FP trap a hand-declared `"Link":"a"` produces).
+  // Here in the CONTENT pass the check is name-based, so an icon-only / empty
+  // router link with no accessible name is the genuine 2.4.4. host-strength: the
+  // library contract guarantees a single `<a>`, so the call-site content IS the
+  // link's name (a self-closing nameless one is really nameless).
+  if (binding !== undefined && isRouterLinkControl(binding.module, binding.imported)) {
+    return { type: "link", strength: "host" };
+  }
 
   // 2. Registry: a known export with one unambiguous host.
   if (binding !== undefined) {

@@ -16,7 +16,13 @@
     "scan": "tsx ./src/cli.ts check",
     "mcp": "tsx ./src/mcp.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "demo:lint": "sh -c 'tsx demo/demo-kit.ts lint \"${1:-demo/scenario.json}\"' _",
+    "demo:play": "sh -c 'tsx demo/demo-kit.ts play \"${1:-demo/scenario.json}\" \"${@:2}\"' _",
+    "demo:record": "sh -c 'tsx demo/demo-kit.ts record \"${1:-demo/scenario.json}\"' _",
+    "matrix:discover": "tsx experiments/stack-matrix/discover.ts",
+    "matrix:run": "tsx experiments/stack-matrix/run.ts",
+    "matrix:report": "tsx experiments/stack-matrix/report.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.26.0",

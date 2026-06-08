@@ -508,6 +508,41 @@ export function isStructural(name: string, moduleSpecifier: string): boolean {
 }
 
 /**
+ * Router modules whose `Link` / `NavLink` are `<a>`-rendering LINK CONTROLS (not
+ * the structural plumbing in {@link ROUTER_STRUCTURAL_NAMES}). They render an
+ * anchor, but the destination rides a `to` prop — NOT `href` — so they are
+ * pointedly kept OUT of the jsx-a11y component map: the structural
+ * `anchor-is-valid` rule reads a missing `href` literally and would false-
+ * positive on every `<Link to=…>`. Recognition therefore lives only in the
+ * content pass (enforce), where the check is NAME-based, not href-based: an
+ * icon-only `<Link to><Icon/></Link>` with no accessible name is the real 2.4.4
+ * it always was. Scoped to the genuine react-router / Remix packages — NOT
+ * `@umijs/max`, whose `Link` is a distinct re-export we don't vouch for.
+ */
+const ROUTER_LINK_MODULES: readonly string[] = [
+  "react-router",
+  "react-router-dom",
+  "@remix-run/react",
+];
+
+/** The router link CONTROL export names (render `<a>`), matched on the leaf. */
+const ROUTER_LINK_NAMES: ReadonlySet<string> = new Set(["Link", "NavLink"]);
+
+/**
+ * Whether `exportName` imported from `moduleSpecifier` is a react-router / Remix
+ * link control (`Link` / `NavLink`). Consumed ONLY by the enforce content pass —
+ * never by `resolveComponents`, so these never enter the structural jsx-a11y map
+ * (see {@link ROUTER_LINK_MODULES} for why that separation matters). Module is
+ * matched exactly or as a sub-path (`react-router/dom`), name on its leaf.
+ */
+export function isRouterLinkControl(moduleSpecifier: string, exportName: string): boolean {
+  const fromRouterLinkModule = ROUTER_LINK_MODULES.some(
+    (m) => moduleSpecifier === m || moduleSpecifier.startsWith(`${m}/`),
+  );
+  return fromRouterLinkModule && ROUTER_LINK_NAMES.has(leafOf(exportName));
+}
+
+/**
  * ARIA roles that make an otherwise button/input host a TOGGLE — externally
  * labelled, so the same "uncertain → skip" rule that exempts {@link
  * TOGGLE_NAMES} applies. When a resolved host carries one of these (Radix

@@ -1,0 +1,7 @@
+{
+  "name": "unresolved-pkg-fixture",
+  "private": true,
+  "dependencies": {
+    "@totally/not-installed-ui": "1.0.0"
+  }
+}
