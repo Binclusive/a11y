@@ -6,6 +6,8 @@ A local accessibility checker for React/TSX code, grounded in a real-world audit
 
 This is a private review build. Clone it, point it at any React codebase (yours, ours, Discord's), and see what it finds — no setup, no explanation needed.
 
+> **New here? Start with the [Getting Started](docs/GETTING-STARTED.md) walkthrough.** Zero to your first fix — install, `init`, wire your editor, read a finding, clear it, gate CI.
+
 ---
 
 ## Try it (≈3 minutes)
