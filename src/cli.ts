@@ -2,6 +2,7 @@ import { relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { collectTsx } from "./collect";
 import { scanUrl } from "./collect-dom";
+import { canonicalRoot, scanSwift } from "./collect-swift";
 import { gen, init, type LearnInput, learn } from "./commands";
 import { type FindingProvenance, scan } from "./core";
 import {
@@ -501,6 +502,40 @@ async function runCheckUrl(url: string): Promise<void> {
 }
 
 /**
+ * The native counterpart to `runCheck`: shell to the out-of-process SwiftSyntax
+ * engine, which parses `.swift` source under `dir` and applies the static
+ * SwiftUI accessibility rules (with the ancestor-climb heuristic). Findings are
+ * anchored on `file:line` like the jsx-a11y pass, so the report groups by file
+ * exactly as `runCheck` does. The Swift toolchain may be missing — `scanSwift`
+ * surfaces that as a one-line Error, handled like `runCheckUrl`'s launch failure.
+ */
+async function runCheckSwift(dir: string): Promise<void> {
+  // Same canonical, symlink-free root the engine emits its paths in, so
+  // `relative(root, …)` below renders clean `Sources/…/X.swift:line` locations.
+  const root = canonicalRoot(dir);
+  console.log(`a11y-checker — scanning .swift under ${root} for SwiftUI a11y\n`);
+
+  let result: Awaited<ReturnType<typeof scanSwift>>;
+  try {
+    result = await scanSwift(root);
+  } catch (err) {
+    // The Swift toolchain (or the prebuilt binary) may be absent — print just
+    // the actionable one-line message and exit 2, same discipline as a bad URL.
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 2;
+    return;
+  }
+  const findings = enrichAll(result.findings);
+
+  renderReport(findings, {
+    emptyMessage: "No SwiftUI a11y violations found.",
+    groupKey: (f) => f.file,
+    groupHeader: (file) => relative(root, file),
+    formatItem: (f) => formatFinding(f, root),
+  });
+}
+
+/**
  * A parsed argv: positionals separated from flags. `valueFlags` are the
  * `--name value` flags that consume the NEXT token as their value — naming
  * them up front is what stops a flag's value (`--wcag 4.1.2`) from being
@@ -654,6 +689,7 @@ async function runGen(args: readonly string[]): Promise<void> {
 const USAGE = `usage:
   a11y-checker check <dir> [--json]              scan .tsx for a11y findings (--json: machine-readable output)
   a11y-checker check-url <url>                   render a live URL and run axe-core (non-React / source-less pages)
+  a11y-checker check-swift <dir>                 scan .swift for SwiftUI accessibility findings (static)
   a11y-checker init [--suggest] [dir]           detect stack, write binclusive.json + AGENTS/CLAUDE block (--suggest scaffolds the components map)
   a11y-checker learn "<rule>" [--wcag a,b] [--fix "..."] [--source "..."] [dir]
   a11y-checker gen [--check] [dir]               regenerate the block (--check exits non-zero on drift)
@@ -693,6 +729,15 @@ async function main(): Promise<void> {
         return;
       }
       return runCheckUrl(url);
+    }
+    case "check-swift": {
+      const dir = parseArgs(rest, []).positionals[0];
+      if (dir === undefined) {
+        console.error("usage: a11y-checker check-swift <dir>");
+        process.exitCode = 2;
+        return;
+      }
+      return runCheckSwift(dir);
     }
     default: {
       // Back-compat: bare `a11y-checker <dir>` still runs check.
