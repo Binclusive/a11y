@@ -1,49 +1,139 @@
 import { relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { collectTsx } from "./collect";
+import { scanUrl } from "./collect-dom";
 import { gen, init, type LearnInput, learn } from "./commands";
-import { scan } from "./core";
-import { type EnrichedFinding, enrichAll } from "./corpus";
+import { type FindingProvenance, scan } from "./core";
+import {
+  type CorpusEvidence,
+  type CorpusTier,
+  type EnrichedFinding,
+  enrichAll,
+  resolveDisplay,
+} from "./corpus";
 import { runHookCli } from "./hook";
 import { startStdioServer } from "./mcp";
 import type { ComponentResolution, Coverage } from "./resolve-components";
 import type { SuggestResult } from "./suggest";
 
-const TIER_LABEL: Record<EnrichedFinding["corpus"]["tier"], string> = {
+const TIER_LABEL: Record<CorpusTier, string> = {
   "very-common": "VERY COMMON",
   common: "COMMON",
   occasional: "OCCASIONAL",
   unknown: "UNKNOWN",
 };
 
-function formatFinding(f: EnrichedFinding, root: string): string {
-  const where = `${relative(root, f.file)}:${f.line}`;
+/**
+ * The body of a finding report — everything below the location line. Shared by
+ * the source report (`formatFinding`, anchored `file:line`) and the rendered-DOM
+ * report (`formatUrlFinding`, anchored on the axe selector) so the corpus
+ * cross-ref, fix, and distilled evidence render identically regardless of which
+ * collector produced the finding. The `via` tag names the non-structural
+ * producers so each one's distinct reach is legible.
+ */
+export function detailLines(f: EnrichedFinding): string[] {
   const scList =
     f.wcag.length > 0 ? f.wcag.map((sc) => `WCAG ${sc}`).join(", ") : "no WCAG mapping";
-  // The enforce check reaches content on opaque/trusted components the
-  // structural pass can't see — tag those findings so the recall win is legible.
-  const via = f.provenance === "enforce" ? "  (call-site content check)" : "";
+  const via =
+    f.provenance === "enforce"
+      ? "  (call-site content check)"
+      : f.provenance === "axe"
+        ? "  (rendered-DOM / axe)"
+        : "";
   const lines = [
-    `  ${where}`,
     `    rule:   ${f.ruleId}  [${f.enforcement}]${via}`,
     `    wcag:   ${scList}`,
     `    ${f.message}`,
   ];
-  if (f.corpus.tier === "unknown") {
-    lines.push("    corpus: no snapshot match (tier unknown)");
-  } else {
-    lines.push(
-      `    corpus: [${TIER_LABEL[f.corpus.tier]}] SC ${f.corpus.sc} — ${f.corpus.orgs}/26 orgs`,
-      `    fix:    ${f.corpus.fix}`,
-    );
-    // Distilled per-failure-shape evidence for this SC (when the SC is distilled).
-    if (f.corpus.patterns.length > 0) {
-      lines.push(`    seen-in-the-wild (distilled, SC ${f.corpus.sc}):`);
-      for (const p of f.corpus.patterns) {
-        lines.push(`      • [${TIER_LABEL[p.frequencyTier]}] ${p.component} — ${p.failureShape}`);
+
+  // The display contract resolves the axe-vs-SC policy once (see resolveDisplay):
+  // WHAT severity / fix-line / ref / patterns to show. This printer only places
+  // those resolved values in each source's layout — no policy, no provenance
+  // checks.
+  const d = resolveDisplay(f);
+  if (d.severityLabel !== null) lines.push(`    severity: ${d.severityLabel}`);
+
+  const c = f.corpus;
+  switch (c.source) {
+    case "audit":
+      // The moat: real audit-frequency data — org count + frequency tier. The
+      // tier line is an accurate SC-LEVEL fact and is always shown.
+      lines.push(`    corpus: [${TIER_LABEL[c.tier]}] SC ${c.sc} — ${c.orgs}/26 orgs`);
+      if (d.fixLine !== null) lines.push(`    fix:    ${d.fixLine}`);
+      if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
+      if (d.showPatterns) {
+        lines.push(`    seen-in-the-wild (distilled, SC ${c.sc}):`);
+        for (const p of c.patterns) {
+          lines.push(`      • [${TIER_LABEL[p.frequencyTier]}] ${p.component} — ${p.failureShape}`);
+        }
       }
-    }
+      break;
+    case "baseline":
+      // Coverage: axe's published per-rule data, NOT audit-frequency data. Make
+      // that explicit so it never reads as a moat hit.
+      if (d.fixLine !== null) lines.push(`    fix:    ${d.fixLine}`);
+      if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
+      if (c.bestPractice) {
+        // An axe best-practice rule with no WCAG SC — honestly NOT a WCAG failure.
+        lines.push("    rule:   best-practice (no WCAG SC)");
+      } else {
+        lines.push(`    corpus: baseline rule SC ${c.sc} (no audit-frequency data yet)`);
+      }
+      break;
+    case "none":
+      // Neither source knows the SC — but never a bare dead-end: surface whatever
+      // the finding itself carries (an axe finding still has its runtime helpUrl).
+      if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
+      lines.push("    corpus: no SC mapping — not in audit-frequency data or the baseline catalog");
+      break;
   }
-  return lines.join("\n");
+  return lines;
+}
+
+function formatFinding(f: EnrichedFinding, root: string): string {
+  return [`  ${relative(root, f.file)}:${f.line}`, ...detailLines(f)].join("\n");
+}
+
+/** A rendered-DOM finding, anchored on the axe CSS selector instead of a line. */
+function formatUrlFinding(f: EnrichedFinding): string {
+  return [`  ${f.selector ?? "(document)"}`, ...detailLines(f)].join("\n");
+}
+
+/**
+ * The two summary lines every report ends on: the evidence rollup and the
+ * enforcement split. Returns the blocking count too, since that gates the exit
+ * code. Shared by the source and rendered-DOM reports.
+ *
+ * Audit-corpus hits roll up under their real frequency tier (the moat).
+ * Baseline hits — covered by axe's catalog but absent from audit-frequency data,
+ * INCLUDING the best-practice rules matched by ruleId — roll up under `BASELINE`.
+ * `UNMAPPED` is left only for findings whose ruleId is absent from the catalog,
+ * so the coverage layer is visible without being mistaken for moat data.
+ */
+function reportTotals(findings: readonly EnrichedFinding[]): {
+  readonly lines: readonly string[];
+  readonly blocking: number;
+} {
+  const tierCounts = new Map<string, number>();
+  for (const f of findings) {
+    const key =
+      f.corpus.source === "audit"
+        ? TIER_LABEL[f.corpus.tier]
+        : f.corpus.source === "baseline"
+          ? "BASELINE"
+          : "UNMAPPED";
+    tierCounts.set(key, (tierCounts.get(key) ?? 0) + 1);
+  }
+  const rollup = [...tierCounts.entries()].map(([tier, n]) => `${tier}: ${n}`).join("  |  ");
+  const blocking = findings.filter((f) => f.enforcement === "block").length;
+  const warning = findings.length - blocking;
+  return {
+    lines: [
+      `${findings.length} finding(s)   ${rollup}`,
+      `enforcement: ${blocking} blocking · ${warning} warning`,
+    ],
+    blocking,
+  };
 }
 
 /**
@@ -174,7 +264,7 @@ export interface JsonFinding {
   readonly line: number;
   readonly ruleId: string;
   readonly enforcement: "block" | "warn";
-  readonly provenance: "jsx-a11y" | "enforce";
+  readonly provenance: FindingProvenance;
   readonly wcag: readonly string[];
   readonly corpus: { readonly tier: string; readonly sc: string | null; readonly orgs: number | null };
   readonly message: string;
@@ -201,6 +291,28 @@ export interface JsonReport {
   };
 }
 
+/**
+ * Project the source-discriminated `CorpusEvidence` union into the flat
+ * `{ tier, sc, orgs }` shape the JSON contract exposes. Only `audit` findings
+ * carry a real frequency tier + org count; `baseline` (axe-catalog coverage) and
+ * `none` have no audit-frequency data, so they report `tier: "unknown"`,
+ * `orgs: null` — the same "no moat match" marker the report used before the union.
+ */
+function jsonCorpus(c: CorpusEvidence): {
+  readonly tier: string;
+  readonly sc: string | null;
+  readonly orgs: number | null;
+} {
+  switch (c.source) {
+    case "audit":
+      return { tier: c.tier, sc: c.sc, orgs: c.orgs };
+    case "baseline":
+      return { tier: "unknown", sc: c.sc, orgs: null };
+    case "none":
+      return { tier: "unknown", sc: null, orgs: null };
+  }
+}
+
 export function buildJsonReport(
   root: string,
   filesScanned: number,
@@ -218,7 +330,7 @@ export function buildJsonReport(
     unknown: 0,
   };
   for (const f of findings) {
-    byTier[f.corpus.tier] += 1;
+    byTier[f.corpus.source === "audit" ? f.corpus.tier : "unknown"] += 1;
   }
 
   const jsonFindings: JsonFinding[] = findings.map((f) => ({
@@ -229,7 +341,7 @@ export function buildJsonReport(
     enforcement: f.enforcement,
     provenance: f.provenance,
     wcag: f.wcag,
-    corpus: { tier: f.corpus.tier, sc: f.corpus.sc, orgs: f.corpus.orgs },
+    corpus: jsonCorpus(f.corpus),
     message: f.message,
   }));
 
@@ -253,6 +365,53 @@ export function buildJsonReport(
       byTier,
     },
   };
+}
+
+/**
+ * The shared report tail for both runners (source + rendered-DOM): empty-state,
+ * grouped findings, the totals rollup, and the blocking-gated exit code. Each
+ * runner keeps its own PREAMBLE (the scan header / coverage block) and supplies
+ * only what differs — the empty-state text, how findings group, the per-group
+ * header line, and which formatter renders each finding. Output is identical to
+ * the inlined tails this replaced.
+ */
+function renderReport(
+  findings: readonly EnrichedFinding[],
+  opts: {
+    readonly emptyMessage: string;
+    readonly groupKey: (f: EnrichedFinding) => string;
+    readonly groupHeader: (key: string) => string;
+    readonly formatItem: (f: EnrichedFinding) => string;
+  },
+): void {
+  if (findings.length === 0) {
+    console.log(opts.emptyMessage);
+    return;
+  }
+
+  const groups = new Map<string, EnrichedFinding[]>();
+  for (const f of findings) {
+    const key = opts.groupKey(f);
+    const list = groups.get(key) ?? [];
+    list.push(f);
+    groups.set(key, list);
+  }
+
+  for (const [key, group] of groups) {
+    console.log(opts.groupHeader(key));
+    for (const f of group) {
+      console.log(opts.formatItem(f));
+      console.log("");
+    }
+  }
+
+  // Tier rollup + enforcement split — the two summary lines every report ends on.
+  const totals = reportTotals(findings);
+  for (const line of totals.lines) console.log(line);
+
+  // Exit non-zero only when something the contract BLOCKS fired. A scan that
+  // surfaces warn-only findings is a clean build by the customer's own policy.
+  process.exitCode = totals.blocking > 0 ? 1 : 0;
 }
 
 async function runCheck(dir: string, json = false): Promise<void> {
@@ -288,45 +447,57 @@ async function runCheck(dir: string, json = false): Promise<void> {
   console.log(formatCoverage(result.coverage, result.resolved.resolutions, result.resolved.unresolvedPackages));
   console.log("");
 
-  if (findings.length === 0) {
-    console.log("No jsx-a11y violations found.");
+  // Group by file for a readable report.
+  renderReport(findings, {
+    emptyMessage: "No jsx-a11y violations found.",
+    groupKey: (f) => f.file,
+    groupHeader: (file) => relative(root, file),
+    formatItem: (f) => formatFinding(f, root),
+  });
+}
+
+/**
+ * Accept a bare filesystem path (`./dist/index.html`) as well as a real URL.
+ * If the arg already carries a scheme (`http://`, `https://`, `file://`) pass it
+ * through; otherwise it's a local path — resolve it and convert to a `file://`
+ * URL so Playwright can navigate to it.
+ */
+function normalizeTarget(target: string): string {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(target) ? target : pathToFileURL(resolve(target)).href;
+}
+
+/**
+ * The rendered-DOM counterpart to `runCheck`: drive a real browser to the URL,
+ * run axe-core against the live page, and report findings anchored on CSS
+ * selectors instead of source lines. This is the source-less path — it inspects
+ * what actually ships, so it covers non-React pages and anything the static
+ * .tsx scan can't see (server-rendered markup, third-party widgets, runtime DOM).
+ */
+async function runCheckUrl(url: string): Promise<void> {
+  const target = normalizeTarget(url);
+  console.log(`a11y-checker — rendering ${target} and running axe-core\n`);
+
+  let result: Awaited<ReturnType<typeof scanUrl>>;
+  try {
+    result = await scanUrl(target);
+  } catch (err) {
+    // scanUrl re-throws a load/launch failure as an actionable one-line Error;
+    // print just that message (no stack) and exit 2 — a typo'd URL is a usage
+    // error, not a crash.
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 2;
     return;
   }
+  const findings = enrichAll(result.findings);
 
-  // Group by file for a readable report.
-  const byFile = new Map<string, EnrichedFinding[]>();
-  for (const f of findings) {
-    const list = byFile.get(f.file) ?? [];
-    list.push(f);
-    byFile.set(f.file, list);
-  }
-
-  for (const [file, group] of byFile) {
-    console.log(relative(root, file));
-    for (const f of group) {
-      console.log(formatFinding(f, root));
-      console.log("");
-    }
-  }
-
-  // Tier rollup so the corpus value is visible at a glance.
-  const tierCounts = new Map<string, number>();
-  for (const f of findings) {
-    const key = TIER_LABEL[f.corpus.tier];
-    tierCounts.set(key, (tierCounts.get(key) ?? 0) + 1);
-  }
-  const rollup = [...tierCounts.entries()].map(([tier, n]) => `${tier}: ${n}`).join("  |  ");
-
-  // Enforcement split: `block` findings gate the exit code, `warn` only surface.
-  // With no contract every finding is `block`, so the gate is unchanged.
-  const blocking = findings.filter((f) => f.enforcement === "block").length;
-  const warning = findings.length - blocking;
-  console.log(`${findings.length} finding(s)   ${rollup}`);
-  console.log(`enforcement: ${blocking} blocking · ${warning} warning`);
-
-  // Exit non-zero only when something the contract BLOCKS fired. A scan that
-  // surfaces warn-only findings is a clean build by the customer's own policy.
-  process.exitCode = blocking > 0 ? 1 : 0;
+  // Group by axe rule for a readable report — the DOM path has no file to group
+  // on (every finding shares the URL), so the ruleId is the natural section key.
+  renderReport(findings, {
+    emptyMessage: "No axe-core violations found.",
+    groupKey: (f) => f.ruleId,
+    groupHeader: (ruleId) => ruleId,
+    formatItem: (f) => formatUrlFinding(f),
+  });
 }
 
 /**
@@ -482,6 +653,7 @@ async function runGen(args: readonly string[]): Promise<void> {
 
 const USAGE = `usage:
   a11y-checker check <dir> [--json]              scan .tsx for a11y findings (--json: machine-readable output)
+  a11y-checker check-url <url>                   render a live URL and run axe-core (non-React / source-less pages)
   a11y-checker init [--suggest] [dir]           detect stack, write binclusive.json + AGENTS/CLAUDE block (--suggest scaffolds the components map)
   a11y-checker learn "<rule>" [--wcag a,b] [--fix "..."] [--source "..."] [dir]
   a11y-checker gen [--check] [dir]               regenerate the block (--check exits non-zero on drift)
@@ -512,6 +684,15 @@ async function main(): Promise<void> {
         return;
       }
       return runCheck(dir, parsed.bools.has("json"));
+    }
+    case "check-url": {
+      const url = parseArgs(rest, []).positionals[0];
+      if (url === undefined) {
+        console.error("usage: a11y-checker check-url <url>");
+        process.exitCode = 2;
+        return;
+      }
+      return runCheckUrl(url);
     }
     default: {
       // Back-compat: bare `a11y-checker <dir>` still runs check.

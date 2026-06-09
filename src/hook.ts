@@ -27,7 +27,7 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import { z } from "zod";
 import { scan } from "./core";
-import { type EnrichedFinding, enrichAll } from "./corpus";
+import { corpusFix, corpusTier, type CorpusTier, type EnrichedFinding, enrichAll } from "./corpus";
 
 /**
  * The slice of the PostToolUse payload we use. The full event carries more
@@ -57,7 +57,7 @@ export interface HookOutput {
 }
 
 /** Short tier tags — terser than the CLI's full labels (it runs every edit). */
-const TIER_TAG: Record<EnrichedFinding["corpus"]["tier"], string> = {
+const TIER_TAG: Record<CorpusTier, string> = {
   "very-common": "very-common",
   common: "common",
   occasional: "occasional",
@@ -76,8 +76,8 @@ function formatLine(f: EnrichedFinding, root: string): string {
   const where = `${relative(root, f.file)}:${f.line}`;
   const rule = f.ruleId.replace(/^jsx-a11y\//, "");
   const sc = f.wcag.length > 0 ? `WCAG ${f.wcag.join(", ")}` : "no WCAG mapping";
-  const tier = TIER_TAG[f.corpus.tier];
-  const fix = f.corpus.fix ?? f.message;
+  const tier = TIER_TAG[corpusTier(f.corpus)];
+  const fix = corpusFix(f.corpus) ?? f.message;
   return `  ${where} · ${rule} · ${sc} · [${tier}] · ${fix}`;
 }
 

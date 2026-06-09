@@ -83,6 +83,35 @@ what happens, in order, with the real files and functions.
 If you can narrate those four steps — **collect → scan (resolve, two passes,
 dedupe) → enrich → report** — you've explained the machinery.
 
+### The second producer — rendered DOM, for source-less / non-React pages
+
+Steps 2 (scan) and 3–4 (enrich/report) above are about *one* finding producer:
+the `.tsx` source scan. There is a **second producer** for when there is no React
+source — a deployed site, an ASP.NET/Razor app, a plain HTML page. It swaps the
+front of the pipe and reuses the back unchanged:
+
+```
+ a11y-checker check-url <target>                                 [src/cli.ts → runCheckUrl]
+        │   target = http(s):// | file:// | bare local path (→ file://)
+        ▼
+ 1'. RENDER the page in real Chromium + run axe-core              [collect-dom.ts → scanUrl]
+        │     read each violation's WCAG SC straight off axe `tags` (`wcag111` → 1.1.1)
+        │     anchor each finding on its CSS `selector`, provenance: "axe"
+        ▼
+ 3. ENRICH — the SAME corpus match by WCAG SC                     [corpus.ts → enrichAll]
+        ▼
+ 4. REPORT — grouped by axe rule, anchored on selector,           [cli.ts → formatUrlFinding]
+    tagged (rendered-DOM / axe); same tier rollup + block/warn gate
+```
+
+Same `Finding` type, same `enrichAll`, same enforcement gate — only the *source*
+of the findings differs (a rendered page vs. `.tsx` files). A real browser sees
+what static JSX never can: **color-contrast**, computed ARIA roles, and
+layout-dependent rules. The trade is that the DOM path has no components or
+imports, so it inherits the corpus's SC-level value but **not** pass two's
+component-level recall — the two producers are complementary, not equal. (The
+full rationale is `.decisions/0001-rendered-dom-adapter.md`.)
+
 ---
 
 ## 3. The five jobs, and the code that does each
@@ -108,6 +137,7 @@ The hardest and most important part. Turns `<FancyButton>` into "it's a `button`
 | `enforce.ts` | **Pass two.** The corpus-driven call-site content check + every conservatism guard. The biggest single file — this is the recall win and the false-positive discipline. |
 | `trans-suppress.ts` | Computes the line ranges where a content finding is a false positive (runtime-injected children like `<Trans>`, or `aria-hidden`), so neither pass fires there. |
 | `wcag-map.ts` | Maps each jsx-a11y rule id → its WCAG SC. The bridge that lets a finding be matched to the corpus. |
+| `collect-dom.ts` | **The second producer.** Renders a URL in real Chromium (Playwright) and runs axe-core against the live DOM — for source-less / non-React pages. Reads the WCAG SC off axe `tags` (so no rule-id crosswalk), anchors each finding on a CSS selector, tags it `provenance: "axe"`, then hands off to the same `enrichAll`. |
 
 ### Job 3 · ENRICH — "how much should I care?"
 | File | What it does |
@@ -136,8 +166,8 @@ The hardest and most important part. Turns `<FancyButton>` into "it's a `button`
 ### Delivery — "get the corpus to the developer / the AI"
 | File | What it does |
 |---|---|
-| `cli.ts` | The `a11y-checker` command: `check`, `init`, `learn`, `gen`, `mcp`, `hook` + the report formatting. |
-| `mcp.ts` | A local stdio MCP server exposing `check_a11y` / `get_a11y_rules` / `learn_a11y_rule` to Cursor/Copilot/Claude. |
+| `cli.ts` | The `a11y-checker` command: `check`, `check-url`, `init`, `learn`, `gen`, `mcp`, `hook` + the report formatting (source + rendered-DOM). |
+| `mcp.ts` | A local stdio MCP server exposing `check_a11y` / `check_url` / `get_a11y_rules` / `learn_a11y_rule` to Cursor/Copilot/Claude. |
 | `hook.ts` | The Claude Code `PostToolUse` auto-whisper hook: scans the just-edited file and feeds findings back into the same turn. |
 | `index.ts` | The public API barrel — re-exports everything for programmatic use. |
 | `collect.ts` | Recursively finds the `.tsx` files to scan (skips generated dirs). |
@@ -173,6 +203,7 @@ packages/a11y-checker/
 │   ├── enforce.ts             pass two + the FP guards      ← job 2 (the recall win)
 │   ├── trans-suppress.ts      false-positive line ranges    ← job 2
 │   ├── wcag-map.ts            rule id → WCAG SC             ← job 2 (bridge)
+│   ├── collect-dom.ts         render URL + axe-core         ← job 2 (the second producer)
 │   ├── corpus.ts              match findings to the corpus  ← job 3
 │   ├── contract.ts / config-scan.ts / commands.ts / detect-stack.ts / agents-block.ts   ← job 4
 │   ├── distill/               the offline corpus factory    ← job 5
@@ -221,6 +252,8 @@ ship. Three files per WCAG criterion, in two directories:
 | **the opaque buckets** | when opaque, why: `trusted` (known-good lib) · `icons` · `structural` (plumbing) · `declare` (the only real gap). |
 | **pass one / structural** | eslint-plugin-jsx-a11y over the resolved map — checks element structure. |
 | **pass two / enforce** | the call-site content check — checks the name/label/alt you passed, and reaches opaque/trusted components. |
+| **the two producers** | where findings come from: the **source scan** (`.tsx` → resolve + two passes) and the **rendered-DOM** collector (`collect-dom.ts` → real browser + axe-core, for source-less / non-React pages). Both feed the same `enrichAll` + gate. |
+| **provenance** | which producer a finding came from: `jsx-a11y` / `enforce` (source) or `axe` (rendered DOM). The `axe` findings anchor on a CSS `selector` instead of `file:line`. |
 | **conservatism** | enforce fires only when a problem is *provably* there. Uncertain → skip. The rule that keeps false positives near zero. |
 | **strength** | how confidently a control was recognized: `host` (proven) fires harder than `name` (a guess). |
 | **corpus tier** | how common a failure is across the 26 audited orgs: very-common / common / occasional. |

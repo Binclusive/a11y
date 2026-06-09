@@ -32,8 +32,13 @@ import { wcagForRuleId } from "./wcag-map";
  *     and checks the app-owned content (name/alt/label/link-text) — so it fires
  *     on opaque/trusted components the structural pass can't reach. This is the
  *     recall win: "trusted" stops being false reassurance.
+ *   - `axe`      — the rendered-DOM collector (see `collect-dom.ts`): a live URL
+ *     is rendered in a real browser and axe-core runs against the resulting DOM.
+ *     Source-blind by design — it covers non-React sites and live pages we have
+ *     no `.tsx` for, and it sees what static analysis can't (color-contrast,
+ *     computed roles, real rendered text). Anchored by `selector`, not a line.
  */
-export type FindingProvenance = "jsx-a11y" | "enforce";
+export type FindingProvenance = "jsx-a11y" | "enforce" | "axe";
 
 /**
  * A single accessibility finding. A jsx-a11y finding is normalized off an
@@ -59,6 +64,26 @@ export interface Finding {
   readonly wcag: readonly string[];
   readonly enforcement: EnforcementLevel;
   readonly provenance: FindingProvenance;
+  /**
+   * Where the finding lives in a rendered DOM: the CSS selector axe-core
+   * reports for the offending node. Set only on `axe` findings (`file` holds the
+   * page URL and `line` is 0 — a live DOM has no source line). Absent on the
+   * source-level passes, which anchor with `file:line`.
+   */
+  readonly selector?: string;
+  /**
+   * axe-core's per-node runtime IMPACT for this finding — the single most
+   * accurate severity, computed by axe against the actual rendered node. Set
+   * only on `axe` findings (the source passes have no axe runtime). The corpus
+   * enrich step prefers this over the static baseline severity when present.
+   */
+  readonly severity?: "minor" | "moderate" | "serious" | "critical";
+  /**
+   * axe-core's Deque-University help URL for the rule that fired. Set only on
+   * `axe` findings; the baseline catalog supplies the same URL for source-pass
+   * findings via the SC lookup.
+   */
+  readonly helpUrl?: string;
 }
 
 /**

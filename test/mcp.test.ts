@@ -2,13 +2,64 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { extractBlock } from "../src/agents-block";
 import { CONTRACT_FILE, init } from "../src/commands";
 import { parseContract } from "../src/contract";
-import { checkA11y, getA11yRules, learnA11yRule } from "../src/mcp";
+import type { DomScanResult } from "../src/collect-dom";
+import { checkA11y, checkUrl, getA11yRules, learnA11yRule } from "../src/mcp";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+
+// `checkUrl` renders a live page via `scanUrl` (real browser). Mock that one
+// seam so we can drive `toCheckFinding` with a synthetic axe finding and assert
+// the EMITTED `fix` — no Playwright needed.
+vi.mock("../src/collect-dom", () => ({
+  scanUrl: vi.fn(),
+}));
+const { scanUrl } = await import("../src/collect-dom");
+const mockScanUrl = vi.mocked(scanUrl);
+
+describe("check_url handler: axe findings emit axe's rule fix, not the SC corpus fix", () => {
+  afterEach(() => mockScanUrl.mockReset());
+
+  it("emits axe's per-rule guidance for aria-progressbar-name, keeps the corpus tier", async () => {
+    // `aria-progressbar-name` is tagged WCAG 1.1.1 — an SC the audit corpus HAS
+    // (common, 16/26), whose generic fix is the image-alt fix. The emitted
+    // `fix` must be axe's rule guidance, never that contradictory corpus fix.
+    const result: DomScanResult = {
+      url: "file:///page.html",
+      findings: [
+        {
+          file: "file:///page.html",
+          line: 0,
+          selector: ".progress-bar",
+          ruleId: "aria-progressbar-name",
+          message: "ARIA progressbar nodes must have an accessible name",
+          wcag: ["1.1.1"],
+          enforcement: "block",
+          provenance: "axe",
+          severity: "serious",
+          helpUrl:
+            "https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name?application=axeAPI",
+        },
+      ],
+    };
+    mockScanUrl.mockResolvedValue(result);
+
+    const r = await checkUrl("file:///page.html");
+    const f = r.findings.find((x) => x.ruleId === "aria-progressbar-name");
+    expect(f).toBeDefined();
+    // Corpus SC-level frequency fact survives (the moat).
+    expect(f?.source).toBe("audit");
+    expect(f?.tier).toBe("common");
+    expect(f?.wcag).toContain("1.1.1");
+    // The EMITTED fix is axe's rule guidance, NOT the 1.1.1 image-alt corpus fix.
+    expect(f?.fix).toBe("ARIA progressbar nodes must have an accessible name");
+    expect(f?.fix).not.toMatch(/alt text/i);
+    expect(f?.helpUrl).toContain("aria-progressbar-name");
+  });
+});
 
 describe("check_a11y handler", () => {
   it("returns enriched findings + coverage for the fixture dir", async () => {
@@ -66,6 +117,29 @@ describe("get_a11y_rules handler", () => {
   it("component takes precedence over sc when both are given", () => {
     const r = getA11yRules({ component: "link", sc: "2.4.4" });
     expect(r.matchedOn).toBe("component");
+  });
+
+  it("backs an SC query with the baseline entry even when distilled (2.4.4)", () => {
+    const r = getA11yRules({ sc: "2.4.4" });
+    expect(r.baseline.length).toBeGreaterThan(0);
+    expect(r.baseline.every((b) => b.sc.includes("2.4.4"))).toBe(true);
+  });
+
+  it("answers for an axe ruleId the corpus never distilled (color-contrast)", () => {
+    const r = getA11yRules({ ruleId: "color-contrast" });
+    expect(r.matchedOn).toBe("ruleId");
+    expect(r.patterns).toEqual([]); // no distilled pattern for it
+    const cc = r.baseline.find((b) => b.ruleId === "color-contrast");
+    expect(cc?.severity).toBe("serious");
+    expect(cc?.sc).toContain("1.4.3");
+    expect(cc?.helpUrl).toContain("dequeuniversity.com");
+  });
+
+  it("falls back to baseline for an SC the corpus has not distilled (2.4.2)", () => {
+    // 2.4.2 (page-title) has no distilled pattern — pure baseline coverage.
+    const r = getA11yRules({ sc: "2.4.2" });
+    expect(r.patterns).toEqual([]);
+    expect(r.baseline.some((b) => b.ruleId === "document-title")).toBe(true);
   });
 });
 

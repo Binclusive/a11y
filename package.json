@@ -12,7 +12,8 @@
     "bin",
     "src",
     "data/corpus-snapshot.json",
-    "data/corpus/patterns-*.json"
+    "data/corpus/patterns-*.json",
+    "data/baseline-rules.json"
   ],
   "repository": {
     "type": "git",
@@ -26,9 +27,13 @@
   },
   "scripts": {
     "scan": "tsx ./src/cli.ts check",
+    "scan:url": "tsx ./src/cli.ts check-url",
     "mcp": "tsx ./src/mcp.ts",
+    "gen:baseline": "tsx ./src/baseline/gen-baseline.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "//test:e2e": "Rendered-DOM e2e (real Chromium). Excluded from `test`. CI must run `npx playwright install chromium` first.",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "demo:lint": "sh -c 'tsx demo/demo-kit.ts lint \"${1:-demo/scenario.json}\"' _",
     "demo:play": "sh -c 'tsx demo/demo-kit.ts play \"${1:-demo/scenario.json}\" \"${@:2}\"' _",
     "demo:record": "sh -c 'tsx demo/demo-kit.ts record \"${1:-demo/scenario.json}\"' _",
@@ -37,10 +42,12 @@
     "matrix:report": "tsx experiments/stack-matrix/report.ts"
   },
   "dependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@modelcontextprotocol/sdk": "1.26.0",
     "@typescript-eslint/parser": "^8.21.0",
     "eslint": "^9.18.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
+    "playwright": "^1.50.1",
     "tsx": "^4.21.0",
     "typescript": "5.8.3",
     "zod": "4.0.0"

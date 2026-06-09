@@ -31,9 +31,25 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { collectTsx } from "./collect";
+import { scanUrl } from "./collect-dom";
 import { learn } from "./commands";
 import { scan } from "./core";
-import { type CorpusPattern, corpusPatterns, type EnrichedFinding, enrichAll } from "./corpus";
+import {
+  type BaselineRuleInfo,
+  baselineRules,
+  corpusBestPractice,
+  type CorpusEvidence,
+  type CorpusPattern,
+  corpusHelpUrl,
+  corpusPatterns,
+  corpusSeverity,
+  corpusTier,
+  type CorpusTier,
+  type EnrichedFinding,
+  enrichAll,
+  resolveDisplay,
+  type Severity,
+} from "./corpus";
 import type { Coverage } from "./resolve-components";
 
 /** A single finding flattened to the shape the MCP tool returns. */
@@ -42,12 +58,59 @@ export interface CheckFinding {
   readonly line: number;
   readonly ruleId: string;
   readonly wcag: readonly string[];
-  readonly tier: EnrichedFinding["corpus"]["tier"];
+  /**
+   * Which evidence source matched: `audit` (real corpus frequency — the moat),
+   * `baseline` (axe's published per-rule catalog — coverage), or `none`. This
+   * flat shape is the deliberate FLAT VIEW of the {@link CorpusEvidence} union
+   * for external API consumers — the per-source accessors below project it.
+   */
+  readonly source: CorpusEvidence["source"];
+  /** Frequency tier; `unknown` off the audit moat. */
+  readonly tier: CorpusTier;
+  /** Severity: axe runtime impact, else the baseline catalog default. */
+  readonly severity: Severity | null;
+  /**
+   * True for a baseline match on an axe best-practice rule with no WCAG SC — an
+   * axe recommendation, not a WCAG conformance failure.
+   */
+  readonly bestPractice: boolean;
+  /**
+   * The rule-accurate fix. For source-pass findings (`jsx-a11y` / `enforce`)
+   * this is the SC-keyed corpus fix. For `provenance === "axe"` findings it is
+   * axe's OWN per-rule guidance (axe help), NOT the SC-generic corpus fix —
+   * which would contradict the rule. Both come from the single
+   * {@link resolveDisplay} contract the CLI uses, so the two can't disagree.
+   * `helpUrl` carries the canonical Deque fix page either way.
+   */
   readonly fix: string | null;
+  /** axe's Deque-University help URL, when the source knows it. */
+  readonly helpUrl: string | null;
   readonly message: string;
   readonly enforcement: EnrichedFinding["enforcement"];
   /** Which pass produced it: structural `jsx-a11y`, or the call-site `enforce` check. */
   readonly provenance: EnrichedFinding["provenance"];
+  /** The axe CSS selector for the offending node. Present only on rendered-DOM/axe findings. */
+  readonly selector?: string;
+}
+
+/** Flatten an enriched finding to the MCP `CheckFinding` shape. */
+function toCheckFinding(f: EnrichedFinding, file: string): CheckFinding {
+  return {
+    file,
+    line: f.line,
+    ruleId: f.ruleId,
+    wcag: f.wcag,
+    source: f.corpus.source,
+    tier: corpusTier(f.corpus),
+    severity: corpusSeverity(f),
+    bestPractice: corpusBestPractice(f.corpus),
+    fix: resolveDisplay(f).fix,
+    helpUrl: corpusHelpUrl(f),
+    message: f.message,
+    enforcement: f.enforcement,
+    provenance: f.provenance,
+    ...(f.selector !== undefined ? { selector: f.selector } : {}),
+  };
 }
 
 /** The `check_a11y` result: findings plus the component-coverage summary. */
@@ -70,54 +133,95 @@ export async function checkA11y(dir: string): Promise<CheckA11yResult> {
   const result = await scan(files);
   const enriched = enrichAll(result.findings);
 
-  const findings: CheckFinding[] = enriched.map((f) => ({
-    file: relative(root, f.file),
-    line: f.line,
-    ruleId: f.ruleId,
-    wcag: f.wcag,
-    tier: f.corpus.tier,
-    fix: f.corpus.fix,
-    message: f.message,
-    enforcement: f.enforcement,
-    provenance: f.provenance,
-  }));
+  const findings: CheckFinding[] = enriched.map((f) => toCheckFinding(f, relative(root, f.file)));
 
   return { root, filesScanned: files.length, coverage: result.coverage, findings };
+}
+
+/** The `check_url` result: the audited URL plus its rendered-DOM findings. */
+export interface CheckUrlResult {
+  readonly url: string;
+  readonly findings: readonly CheckFinding[];
+}
+
+/**
+ * `check_url`: render a live URL in a real browser, run axe-core against the
+ * DOM (`scanUrl`), and run those findings through `enrichAll` — the same
+ * corpus-tiering pass `check_a11y` uses. The only difference is the source: a
+ * rendered page instead of `.tsx` files, so `file` is the URL (kept as-is, NOT
+ * relativized) and each finding carries the axe `selector`. No new a11y logic.
+ */
+export async function checkUrl(url: string): Promise<CheckUrlResult> {
+  const result = await scanUrl(url);
+  const enriched = enrichAll(result.findings);
+
+  // `file` stays the URL (NOT relativized) for the rendered-DOM path.
+  const findings: CheckFinding[] = enriched.map((f) => toCheckFinding(f, f.file));
+
+  return { url: result.url, findings };
 }
 
 /** How many patterns `get_a11y_rules` returns when no filter is given. */
 const TOP_RULES = 15;
 
-/** The `get_a11y_rules` result: the matched corpus patterns and how they matched. */
+/**
+ * The `get_a11y_rules` result. The PRIMARY, richer answer is the distilled
+ * corpus patterns (`patterns`) — the real-audit moat. `baseline` is the coverage
+ * fallback: axe's published per-rule entries (severity + standard fix + helpUrl,
+ * NO org count) for the requested component/SC/ruleId, so the tool can answer
+ * for any axe/WCAG rule, not only the distilled ones. `baseline` is populated
+ * whenever a query has no distilled match (or always, when asked by ruleId).
+ */
 export interface GetA11yRulesResult {
-  readonly matchedOn: "component" | "sc" | "top";
+  readonly matchedOn: "component" | "sc" | "ruleId" | "top";
   readonly count: number;
   readonly patterns: readonly CorpusPattern[];
+  readonly baseline: readonly BaselineRuleInfo[];
 }
 
 /**
  * `get_a11y_rules`: surface the distilled corpus patterns (`corpusPatterns`),
- * filtered by a component substring or a WCAG SC if given, else the top N by
- * frequency tier. Lets an agent ask "what are the a11y rules for a button?"
- * BEFORE writing it. Pure read over the corpus — no disk, no scan.
+ * filtered by a component substring, a WCAG SC, or an axe ruleId if given, else
+ * the top N by frequency tier. Lets an agent ask "what are the a11y rules for a
+ * button?" BEFORE writing it. The distilled patterns are the primary result;
+ * the baseline catalog backs it so a query the corpus has never distilled (e.g.
+ * "color-contrast") still returns axe's standard severity + fix + helpUrl. Pure
+ * read over the corpus + baseline — no disk, no scan.
  */
-export function getA11yRules(filter: { component?: string; sc?: string }): GetA11yRulesResult {
+export function getA11yRules(filter: {
+  component?: string;
+  sc?: string;
+  ruleId?: string;
+}): GetA11yRulesResult {
   const all = corpusPatterns();
+
+  // ruleId is an axe-specific key — the corpus distills by SC/component, not by
+  // axe ruleId, so this query is answered purely from the baseline catalog.
+  if (filter.ruleId !== undefined && filter.ruleId.trim() !== "") {
+    const baseline = baselineRules({ ruleId: filter.ruleId });
+    return { matchedOn: "ruleId", count: baseline.length, patterns: [], baseline };
+  }
 
   if (filter.component !== undefined && filter.component.trim() !== "") {
     const needle = filter.component.trim().toLowerCase();
     const patterns = all.filter((p) => p.component.toLowerCase().includes(needle));
-    return { matchedOn: "component", count: patterns.length, patterns };
+    // No distilled pattern? fall back to baseline by ruleId substring so a
+    // component-name query still yields axe's standard rule (e.g. "image").
+    const baseline = patterns.length === 0 ? baselineRules({ ruleId: needle }) : [];
+    return { matchedOn: "component", count: patterns.length, patterns, baseline };
   }
 
   if (filter.sc !== undefined && filter.sc.trim() !== "") {
     const needle = filter.sc.trim();
     const patterns = all.filter((p) => p.sc === needle);
-    return { matchedOn: "sc", count: patterns.length, patterns };
+    // Always back an SC query with the baseline entry for that SC — coverage for
+    // SCs the corpus has never distilled (e.g. 1.4.3 color-contrast).
+    const baseline = baselineRules({ sc: needle });
+    return { matchedOn: "sc", count: patterns.length, patterns, baseline };
   }
 
   const patterns = all.slice(0, TOP_RULES);
-  return { matchedOn: "top", count: patterns.length, patterns };
+  return { matchedOn: "top", count: patterns.length, patterns, baseline: [] };
 }
 
 /** The `learn_a11y_rule` result mirrors the `learn` CLI command's report. */
@@ -165,16 +269,27 @@ export function registerTools(server: McpServer): void {
   );
 
   server.tool(
+    "check_url",
+    "Render a live URL in a real browser and run axe-core against the rendered DOM, returning each finding (the URL as file, axe ruleId, WCAG SC, corpus frequency tier, the representative fix, and the CSS selector of the offending node). Unlike check_a11y, this needs no source: it works on non-React, server-rendered, or otherwise source-less pages, while returning the same corpus-tiered findings.",
+    { url: z.string().describe("The page URL to render and audit.") },
+    async ({ url }) => jsonContent(await checkUrl(url)),
+  );
+
+  server.tool(
     "get_a11y_rules",
-    "Return the accessibility rules (distilled corpus patterns: component, failure shape, fix, WCAG SC, frequency tier) relevant to a component or WCAG SC, so you can apply them BEFORE writing the code. With no filter, returns the most common rules.",
+    "Return the accessibility rules relevant to a component, WCAG SC, or axe ruleId so you can apply them BEFORE writing the code. The primary result is the distilled corpus patterns (component, failure shape, fix, WCAG SC, real-audit frequency tier). It is backed by a baseline catalog from axe-core's published per-rule metadata (severity, standard fix, helpUrl — no org count), so a query the corpus has never distilled (e.g. \"color-contrast\" / SC 1.4.3) still returns axe's standard rule. With no filter, returns the most common distilled rules.",
     {
       component: z
         .string()
         .optional()
         .describe('Component substring to match, e.g. "button", "link", "form".'),
       sc: z.string().optional().describe('Exact WCAG success criterion, e.g. "2.4.4".'),
+      ruleId: z
+        .string()
+        .optional()
+        .describe('axe rule id substring, e.g. "color-contrast", "image-alt".'),
     },
-    async ({ component, sc }) => jsonContent(getA11yRules({ component, sc })),
+    async ({ component, sc, ruleId }) => jsonContent(getA11yRules({ component, sc, ruleId })),
   );
 
   server.tool(
@@ -205,6 +320,7 @@ export function buildServer(): McpServer {
         "Binclusive accessibility checker, running locally over your own files.",
         "It wraps eslint-plugin-jsx-a11y with a real-world failure corpus (26-org dynamic-audit snapshot).",
         "check_a11y scans a directory and reports WCAG findings with corpus frequency tiers and fixes.",
+        "check_url renders a live URL in a real browser and runs axe-core, reporting the same corpus-tiered findings for source-less or server-rendered pages.",
         "get_a11y_rules returns the rules for a component or WCAG SC so you can apply them before writing code.",
         "learn_a11y_rule records a team rule into binclusive.json and the AGENTS.md/CLAUDE.md block.",
       ].join(" "),

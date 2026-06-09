@@ -7,6 +7,7 @@ export {
   spliceBlock,
 } from "./agents-block";
 export { collectTsx } from "./collect";
+export { type DomScanOptions, type DomScanResult, scanUrl, scFromTags } from "./collect-dom";
 export {
   appendLearned,
   BLOCK_TARGETS,
@@ -51,13 +52,20 @@ export {
   type CorpusCriterion,
   type CorpusEvidence,
   type CorpusPattern,
-  type CorpusTier,
+  corpusBestPractice,
   corpusCriteria,
+  corpusFix,
+  corpusHelpUrl,
   corpusPatterns,
+  corpusSeverity,
+  corpusTier,
+  type CorpusTier,
+  type DisplayContract,
   type DistilledPatternRef,
   type EnrichedFinding,
   enrich,
   enrichAll,
+  resolveDisplay,
 } from "./corpus";
 export {
   detectDesignSystem,

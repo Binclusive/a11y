@@ -142,6 +142,24 @@ describe("suggestComponentMap (pure): leaf-name host guesses", () => {
     );
     expect(suggestions.filter((s) => s.name === "Button")).toHaveLength(1);
   });
+
+  it("sorts a collapsed FAMILY label's sub-packages first (Radix label vs @radix-ui/*)", () => {
+    // The detected `designSystem` is now the family label `Radix`, while each
+    // suggestion's module is a per-component sub-package (`@radix-ui/react-*`).
+    // The design-system-first sort must still rank those FIRST — the rank
+    // comparison collapses the package through familyLabel, so `Radix` matches.
+    const { suggestions } = suggestComponentMap(
+      [
+        declare("AcmeButton", "@acme/ui"),
+        declare("Button", "@radix-ui/react-button"),
+        declare("TextField", "@radix-ui/react-text-field"),
+      ],
+      { isOwnAlias: () => false, designSystem: "Radix" },
+    );
+    // Both Radix sub-package suggestions lead the list; the non-family @acme/ui
+    // suggestion sorts after them.
+    expect(suggestions.map((s) => s.name)).toEqual(["Button", "TextField", "AcmeButton"]);
+  });
 });
 
 describe("suggestComponentMap on the fixture repo (real resolution)", () => {
