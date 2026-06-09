@@ -339,6 +339,53 @@ export function buildJsonReport(
   };
 }
 
+/**
+ * The shared report tail for both runners (source + rendered-DOM): empty-state,
+ * grouped findings, the totals rollup, and the blocking-gated exit code. Each
+ * runner keeps its own PREAMBLE (the scan header / coverage block) and supplies
+ * only what differs — the empty-state text, how findings group, the per-group
+ * header line, and which formatter renders each finding. Output is identical to
+ * the inlined tails this replaced.
+ */
+function renderReport(
+  findings: readonly EnrichedFinding[],
+  opts: {
+    readonly emptyMessage: string;
+    readonly groupKey: (f: EnrichedFinding) => string;
+    readonly groupHeader: (key: string) => string;
+    readonly formatItem: (f: EnrichedFinding) => string;
+  },
+): void {
+  if (findings.length === 0) {
+    console.log(opts.emptyMessage);
+    return;
+  }
+
+  const groups = new Map<string, EnrichedFinding[]>();
+  for (const f of findings) {
+    const key = opts.groupKey(f);
+    const list = groups.get(key) ?? [];
+    list.push(f);
+    groups.set(key, list);
+  }
+
+  for (const [key, group] of groups) {
+    console.log(opts.groupHeader(key));
+    for (const f of group) {
+      console.log(opts.formatItem(f));
+      console.log("");
+    }
+  }
+
+  // Tier rollup + enforcement split — the two summary lines every report ends on.
+  const totals = reportTotals(findings);
+  for (const line of totals.lines) console.log(line);
+
+  // Exit non-zero only when something the contract BLOCKS fired. A scan that
+  // surfaces warn-only findings is a clean build by the customer's own policy.
+  process.exitCode = totals.blocking > 0 ? 1 : 0;
+}
+
 async function runCheck(dir: string, json = false): Promise<void> {
   const root = resolve(dir);
   const files = await collectTsx(root);
@@ -372,34 +419,13 @@ async function runCheck(dir: string, json = false): Promise<void> {
   console.log(formatCoverage(result.coverage, result.resolved.resolutions, result.resolved.unresolvedPackages));
   console.log("");
 
-  if (findings.length === 0) {
-    console.log("No jsx-a11y violations found.");
-    return;
-  }
-
   // Group by file for a readable report.
-  const byFile = new Map<string, EnrichedFinding[]>();
-  for (const f of findings) {
-    const list = byFile.get(f.file) ?? [];
-    list.push(f);
-    byFile.set(f.file, list);
-  }
-
-  for (const [file, group] of byFile) {
-    console.log(relative(root, file));
-    for (const f of group) {
-      console.log(formatFinding(f, root));
-      console.log("");
-    }
-  }
-
-  // Tier rollup + enforcement split — the two summary lines every report ends on.
-  const totals = reportTotals(findings);
-  for (const line of totals.lines) console.log(line);
-
-  // Exit non-zero only when something the contract BLOCKS fired. A scan that
-  // surfaces warn-only findings is a clean build by the customer's own policy.
-  process.exitCode = totals.blocking > 0 ? 1 : 0;
+  renderReport(findings, {
+    emptyMessage: "No jsx-a11y violations found.",
+    groupKey: (f) => f.file,
+    groupHeader: (file) => relative(root, file),
+    formatItem: (f) => formatFinding(f, root),
+  });
 }
 
 /**
@@ -423,38 +449,27 @@ async function runCheckUrl(url: string): Promise<void> {
   const target = normalizeTarget(url);
   console.log(`a11y-checker — rendering ${target} and running axe-core\n`);
 
-  const result = await scanUrl(target);
-  const findings = enrichAll(result.findings);
-
-  if (findings.length === 0) {
-    console.log("No axe-core violations found.");
+  let result: Awaited<ReturnType<typeof scanUrl>>;
+  try {
+    result = await scanUrl(target);
+  } catch (err) {
+    // scanUrl re-throws a load/launch failure as an actionable one-line Error;
+    // print just that message (no stack) and exit 2 — a typo'd URL is a usage
+    // error, not a crash.
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 2;
     return;
   }
+  const findings = enrichAll(result.findings);
 
   // Group by axe rule for a readable report — the DOM path has no file to group
   // on (every finding shares the URL), so the ruleId is the natural section key.
-  const byRule = new Map<string, EnrichedFinding[]>();
-  for (const f of findings) {
-    const list = byRule.get(f.ruleId) ?? [];
-    list.push(f);
-    byRule.set(f.ruleId, list);
-  }
-
-  for (const [ruleId, group] of byRule) {
-    console.log(ruleId);
-    for (const f of group) {
-      console.log(formatUrlFinding(f));
-      console.log("");
-    }
-  }
-
-  // Tier rollup + enforcement split — the two summary lines every report ends on.
-  const totals = reportTotals(findings);
-  for (const line of totals.lines) console.log(line);
-
-  // Exit non-zero only when something the contract BLOCKS fired. A scan that
-  // surfaces warn-only findings is a clean build by the customer's own policy.
-  process.exitCode = totals.blocking > 0 ? 1 : 0;
+  renderReport(findings, {
+    emptyMessage: "No axe-core violations found.",
+    groupKey: (f) => f.ruleId,
+    groupHeader: (ruleId) => ruleId,
+    formatItem: (f) => formatUrlFinding(f),
+  });
 }
 
 /**

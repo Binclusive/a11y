@@ -72,7 +72,21 @@ export async function scanUrl(url: string, opts: DomScanOptions = {}): Promise<D
     // context — it requires an explicit browser.newContext().
     const context = await browser.newContext();
     const page = await context.newPage();
-    await page.goto(url, { waitUntil: "load", timeout });
+    // A typo'd or unreachable URL (or a nav timeout) rejects raw inside goto;
+    // re-throw it as an actionable Error that names the URL, the cause, and the
+    // most common real-world fix (pointing at a running server, not a raw
+    // template file). The caller prints just this message — no stack.
+    try {
+      await page.goto(url, { waitUntil: "load", timeout });
+    } catch (cause) {
+      // Playwright's message embeds a multi-line "Call log:" block; keep only the
+      // first line so the actionable Error reads as one clean line, not a dump.
+      const raw = cause instanceof Error ? cause.message : String(cause);
+      const reason = raw.split("\n")[0];
+      throw new Error(
+        `Failed to load ${url}: ${reason}. Check the URL is reachable; server-side templates (.cshtml etc.) only render via a running server — point check-url at localhost.`,
+      );
+    }
     const results = await new AxeBuilder({ page }).analyze();
 
     const findings: Finding[] = [];
