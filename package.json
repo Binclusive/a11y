@@ -32,6 +32,8 @@
     "gen:baseline": "tsx ./src/baseline/gen-baseline.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "//test:e2e": "Rendered-DOM e2e (real Chromium). Excluded from `test`. CI must run `npx playwright install chromium` first.",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "demo:lint": "sh -c 'tsx demo/demo-kit.ts lint \"${1:-demo/scenario.json}\"' _",
     "demo:play": "sh -c 'tsx demo/demo-kit.ts play \"${1:-demo/scenario.json}\" \"${@:2}\"' _",
     "demo:record": "sh -c 'tsx demo/demo-kit.ts record \"${1:-demo/scenario.json}\"' _",
