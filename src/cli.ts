@@ -2,7 +2,7 @@ import { relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { collectTsx } from "./collect";
 import { scanUrl } from "./collect-dom";
-import { canonicalRoot, scanSwift } from "./collect-swift";
+import { scanSwift } from "./collect-swift";
 import { gen, init, type LearnInput, learn } from "./commands";
 import { type FindingProvenance, scan } from "./core";
 import {
@@ -40,7 +40,9 @@ export function detailLines(f: EnrichedFinding): string[] {
       ? "  (call-site content check)"
       : f.provenance === "axe"
         ? "  (rendered-DOM / axe)"
-        : "";
+        : f.provenance === "swiftui"
+          ? "  (SwiftUI static)"
+          : "";
   const lines = [
     `    rule:   ${f.ruleId}  [${f.enforcement}]${via}`,
     `    wcag:   ${scList}`,
@@ -510,14 +512,9 @@ async function runCheckUrl(url: string): Promise<void> {
  * surfaces that as a one-line Error, handled like `runCheckUrl`'s launch failure.
  */
 async function runCheckSwift(dir: string): Promise<void> {
-  // Same canonical, symlink-free root the engine emits its paths in, so
-  // `relative(root, …)` below renders clean `Sources/…/X.swift:line` locations.
-  const root = canonicalRoot(dir);
-  console.log(`a11y-checker — scanning .swift under ${root} for SwiftUI a11y\n`);
-
   let result: Awaited<ReturnType<typeof scanSwift>>;
   try {
-    result = await scanSwift(root);
+    result = await scanSwift(dir);
   } catch (err) {
     // The Swift toolchain (or the prebuilt binary) may be absent — print just
     // the actionable one-line message and exit 2, same discipline as a bad URL.
@@ -525,6 +522,12 @@ async function runCheckSwift(dir: string): Promise<void> {
     process.exitCode = 2;
     return;
   }
+  // The collector owns its path namespace: it returns the canonical, symlink-free
+  // `root` it scanned in, so `relative(root, …)` here renders clean
+  // `Sources/…/X.swift:line` locations that agree with the engine's emitted paths.
+  const { root } = result;
+  console.log(`a11y-checker — scanning .swift under ${root} for SwiftUI a11y\n`);
+
   const findings = enrichAll(result.findings);
 
   renderReport(findings, {

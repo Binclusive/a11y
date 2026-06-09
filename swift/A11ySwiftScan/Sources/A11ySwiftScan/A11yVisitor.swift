@@ -45,17 +45,17 @@ final class A11yVisitor: SyntaxVisitor {
         guard node.declName.baseName.text == "onTapGesture" else { return .visitChildren }
         // The base of `.onTapGesture` is the view it makes tappable.
         guard let base = node.base else { return .visitChildren }
-        // If the whole tap-target chain already carries a label, it's named.
-        if chainHasAccessibleTreatment(base) { return .visitChildren }
-        // If the chain is hidden, skip.
+        // A `.accessibilityHidden(true)` on the OUTER chain takes the tap target
+        // out of the a11y tree — checked on the member node itself, not the base.
         if chainHasAccessibleTreatment(node) { return .visitChildren }
-        // If the tapped subtree contains visible text, VoiceOver reads that.
-        if subtreeSuppliesName(base) { return .visitChildren }
-        // Climbing up: a labeled ancestor control covers it.
-        if enclosingAccessibilityElementSuppliesName(Syntax(node)) { return .visitChildren }
-        // Climbing up: an enclosing container merged via `.accessibilityElement
-        // (children: .combine)` + a label supplies the name for this child.
-        if enclosingCombinedElementSuppliesName(Syntax(node)) { return .visitChildren }
+        // The single shared name predicate: a name on the tap base's own subtree
+        // or chain, on a named ancestor control, or on an enclosing combine+label
+        // container all count. A tappable view is a CHILD that INHERITS its name
+        // from an enclosing labeled control, so the ancestor climb is enabled.
+        // (Replaces the former 4-deep guard chain.)
+        if accessibleNameExists(subtree: base, climbFrom: Syntax(node), inheritsAncestorName: true) {
+            return .visitChildren
+        }
 
         findings.append(Finding(
             file: filePath,
@@ -83,8 +83,15 @@ final class A11yVisitor: SyntaxVisitor {
         // NavigationLink / Link / toolbar item / …). If that ancestor supplies a
         // name — a title string, a `.accessibilityLabel`, or sibling Text — the
         // Image is NOT unlabeled. This is the false-positive killer.
-        let (named, soleInteractiveContent) = ancestorNameStatus(for: Syntax(node))
-        if named { return }
+        let status = ancestorNameStatus(for: Syntax(node))
+        if case .named = status { return }
+        // `soleInteractiveContent`: the nearest container exists, has no name, and
+        // is itself an interactive control — the missing label makes it unusable,
+        // so the image finding is `critical`. `.none` (no container) and a
+        // non-interactive unnamed container are both `serious`.
+        let soleInteractiveContent: Bool
+        if case .unnamed(let interactive) = status { soleInteractiveContent = interactive }
+        else { soleInteractiveContent = false }
 
         // SF Symbol special case: a bare `Image(systemName:)` carries an implicit
         // VoiceOver name from the symbol. Inside a NON-interactive context that is
@@ -96,14 +103,14 @@ final class A11yVisitor: SyntaxVisitor {
         if isSystemImage(node) { return }
 
         let severity = soleInteractiveContent ? "critical" : "serious"
-        let where_ = soleInteractiveContent
+        let context = soleInteractiveContent
             ? "is the sole content of an interactive element and"
             : "is informative and"
         findings.append(Finding(
             file: filePath,
             line: line(of: node),
             ruleId: "swiftui/image-no-label",
-            message: "Image \(where_) has no accessible name on it or any ancestor up to the nearest accessibility element. Add .accessibilityLabel(\"…\"), or mark it decorative with Image(decorative:) / .accessibilityHidden(true).",
+            message: "Image \(context) has no accessible name on it or any ancestor up to the nearest accessibility element. Add .accessibilityLabel(\"…\"), or mark it decorative with Image(decorative:) / .accessibilityHidden(true).",
             wcag: ["1.1.1"],
             severity: severity
         ))
@@ -116,12 +123,16 @@ final class A11yVisitor: SyntaxVisitor {
     ///   Button(action:) { Image(systemName: "ellipsis") }
     ///   Button { … } label: { Image(systemName: "ellipsis") }
     private func checkButtonControl(_ node: FunctionCallExprSyntax) {
-        // A titled button is named: Button("Save") { … } / Button("S", systemImage:)
-        if subtreeSuppliesName(node) { return }
-        // A `.accessibilityLabel` on the Button's own chain names it.
-        if chainHasAccessibleTreatment(node) { return }
-        // A `.accessibilityHidden(true)` Button is out of the tree.
-        // (already covered by chainHasAccessibleTreatment)
+        // The single shared name predicate. A `Button` IS the accessibility
+        // element, so its name must come from its OWN subtree/chain (a title
+        // string / sibling Text inside it, or a `.accessibilityLabel` /
+        // `.accessibilityHidden(true)` on its chain) — NOT from a sibling `Text`
+        // in a shared `ToolbarItemGroup`. So the named-control ancestor climb is
+        // DISABLED here (`inheritsAncestorName: false`); only an explicit
+        // combine+label container, which genuinely merges the button, still counts.
+        if accessibleNameExists(subtree: ExprSyntax(node), climbFrom: Syntax(node), inheritsAncestorName: false) {
+            return
+        }
 
         // The button's content: does it contain a NON-systemName, NON-labeled
         // image only? If the only content is an Image with no name, the control
@@ -167,7 +178,7 @@ func isSystemImage(_ call: FunctionCallExprSyntax) -> Bool {
 /// number of parents looking for a `Label` callee. `Label` supplies the text, so
 /// its symbol is decorative-by-construction.
 func isInsideLabel(_ node: Syntax) -> Bool {
-    nearestEnclosingCall(of: node, whereCalleeIn: ["Label"], maxDepth: 10) != nil
+    nearestEnclosingCall(of: node, whereCalleeIn: ["Label"], maxDepth: labelClimbMaxDepth) != nil
 }
 
 /// Does the subtree rooted at `node` contain any `Image(...)` call?
@@ -182,82 +193,7 @@ func subtreeContainsImage(_ node: SyntaxProtocol) -> Bool {
     return false
 }
 
-// MARK: - The climb: ancestor name status for an Image
-
-/// Walk UP from an `Image` node to the nearest accessibility-element ancestor and
-/// decide whether a name is supplied. Returns:
-///   - named: true if an ancestor (or its own chain / subtree) supplies a name,
-///     OR no a11y-element ancestor exists AND the image carries no name (then the
-///     caller decides via decorative/system checks).
-///   - soleInteractiveContent: true when the nearest a11y-element ancestor IS an
-///     interactive control (Button/NavigationLink/Link/Menu/Toggle/toolbar item)
-///     and that control supplies NO name — i.e. the missing label leaves an
-///     interactive element unusable, so the image finding is "critical".
-func ancestorNameStatus(for imageNode: Syntax) -> (named: Bool, soleInteractiveContent: Bool) {
-    guard let (call, name) = nearestEnclosingCall(
-        of: imageNode,
-        whereCalleeIn: accessibilityElementContainers
-    ) else {
-        // No accessibility-element ancestor: the Image stands alone. It is named
-        // only if its own chain carries a treatment (already checked by caller),
-        // so report "not named, not interactive".
-        return (named: false, soleInteractiveContent: false)
-    }
-
-    // The ancestor exists. Is it named? A title string, a `.accessibilityLabel`
-    // on the ancestor's chain, or sibling Text inside it all count.
-    let ancestorNamed =
-        subtreeSuppliesName(call) || chainHasAccessibleTreatment(call)
-
-    if ancestorNamed {
-        return (named: true, soleInteractiveContent: false)
-    }
-
-    // Unnamed ancestor. Is it interactive? Then the missing label is critical.
-    let interactive: Set<String> = [
-        "Button", "NavigationLink", "Link", "Menu", "Toggle",
-        "ToolbarItem", "ToolbarItemGroup", "Stepper", "Picker",
-    ]
-    return (named: false, soleInteractiveContent: interactive.contains(name))
-}
-
-/// Climb to the nearest accessibility-element ancestor and ask whether it
-/// supplies a name (used by the `.onTapGesture` path).
-func enclosingAccessibilityElementSuppliesName(_ node: Syntax) -> Bool {
-    guard let (call, _) = nearestEnclosingCall(
-        of: node,
-        whereCalleeIn: accessibilityElementContainers
-    ) else { return false }
-    return subtreeSuppliesName(call) || chainHasAccessibleTreatment(call)
-}
-
-/// Climb the ENCLOSING modifier chain looking for a generic combined-element
-/// container that supplies a name: a `.accessibilityElement(children: .combine)`
-/// (or `.contain`) PAIRED with a `.accessibilityLabel` / `.accessibilityValue` /
-/// `.accessibilityRepresentation` applied to the same enclosing view (an HStack /
-/// VStack / ZStack / custom view, NOT necessarily a Button). VoiceOver then reads
-/// the merged element's label, so a tappable child inside it is named.
-///
-/// This is distinct from `enclosingAccessibilityElementSuppliesName`, which only
-/// recognizes the named-control containers (Button/NavigationLink/…). Here we
-/// recognize the "container view + combine + label" idiom that IceCubesApp uses
-/// to make a whole row one accessible button.
-func enclosingCombinedElementSuppliesName(_ node: Syntax, maxDepth: Int = 28) -> Bool {
-    var current: Syntax? = node.parent
-    var depth = 0
-    var sawCombine = false
-    var sawLabel = false
-    while let n = current, depth < maxDepth {
-        if let member = n.as(MemberAccessExprSyntax.self) {
-            let name = member.declName.baseName.text
-            if name == "accessibilityElement" { sawCombine = true }
-            if nameProvidingModifiers.contains(name) { sawLabel = true }
-            // The pair can appear in any order up the chain; once both are seen
-            // on the enclosing chain the merged element is named.
-            if sawCombine && sawLabel { return true }
-        }
-        current = n.parent
-        depth += 1
-    }
-    return false
-}
+// The ancestor climb (ancestorNameStatus), the combined-element climb
+// (enclosingCombinedElementSuppliesName), and the shared accessibleNameExists
+// predicate now live in SyntaxClimb.swift — one climb, one name predicate, shared
+// by the image, tap, and button rules.

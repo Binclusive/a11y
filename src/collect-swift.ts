@@ -47,12 +47,16 @@ interface SwiftFinding {
 /**
  * Resolve `dir` to a canonical, symlink-free absolute path — the same namespace
  * the Swift engine emits its `file` paths in (it walks via macOS `FileManager`,
- * which resolves symlinks). Both the engine input and the report's
- * `relative(root, …)` base derive from this, so they always agree. Falls back to
- * a plain `resolve` when the path doesn't exist yet (the engine then reports the
- * empty scan).
+ * which resolves symlinks). Both the engine input and the `root` returned in
+ * {@link SwiftScanResult} derive from this, so the CLI's `relative(root, …)`
+ * always agrees with the engine's emitted paths. Falls back to a plain `resolve`
+ * when the path doesn't exist yet (the engine then reports the empty scan).
+ *
+ * Module-private: the canonical root is an INTERNAL namespace decision the
+ * collector owns. It is not exported — the CLI receives the root it must render
+ * against on {@link SwiftScanResult.root}, so no path helper crosses the seam.
  */
-export function canonicalRoot(dir: string): string {
+function canonicalRoot(dir: string): string {
   const abs = resolve(dir);
   try {
     return realpathSync(abs);
@@ -86,7 +90,9 @@ function engineInvocation(dir: string): { command: string; args: string[] } {
   }
   return {
     command: "swift",
-    args: ["run", "-c", "release", "--package-path", packageRoot(), "A11ySwiftScan", dir],
+    // `--` ends `swift run`'s own option parsing so a `dir` that starts with `-`
+    // is passed through to the engine as a positional, never read as a flag.
+    args: ["run", "-c", "release", "--package-path", packageRoot(), "A11ySwiftScan", "--", dir],
   };
 }
 
@@ -126,10 +132,20 @@ function runEngine(dir: string): Promise<string> {
  * narrow it explicitly (the same discipline `corpus.ts` uses at the JSON
  * boundary).
  */
-function parseSwiftFindings(raw: string): SwiftFinding[] {
+export function parseSwiftFindings(raw: string): SwiftFinding[] {
   const text = raw.trim();
   if (text === "") return [];
-  const data: unknown = JSON.parse(text);
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    // The engine contract is a JSON array on stdout. Non-JSON here means the
+    // engine misbehaved (a stray log line, a partial write, a crash banner) —
+    // fail loud with a one-line, actionable error instead of letting a raw
+    // SyntaxError bubble untyped across the boundary.
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`A11ySwiftScan produced non-JSON output (${detail})`);
+  }
   if (!Array.isArray(data)) return [];
   const out: SwiftFinding[] = [];
   for (const item of data) {
@@ -157,8 +173,14 @@ function parseSwiftFindings(raw: string): SwiftFinding[] {
   return out;
 }
 
-/** The full output of a SwiftUI scan — just the findings, parallel to `scan`. */
+/**
+ * The full output of a SwiftUI scan, parallel to `scan`: the findings plus the
+ * canonical, symlink-free `root` the collector actually scanned in. The CLI
+ * renders `relative(root, …)` against THIS — so the collector owns its path
+ * namespace end-to-end and the CLI imports no path helper from here.
+ */
 export interface SwiftScanResult {
+  readonly root: string;
   readonly findings: readonly Finding[];
 }
 
@@ -178,8 +200,8 @@ export async function scanSwift(dir: string): Promise<SwiftScanResult> {
   // resolves symlinks (e.g. `/tmp` → `/private/tmp`), so every emitted `file`
   // is a real path. Feeding it the real root keeps the engine's output and the
   // report's `relative(root, …)` base in the same namespace — otherwise a
-  // symlinked root renders broken `../../private/…` paths. `runCheckSwift`
-  // canonicalizes its report base the same way.
+  // symlinked root renders broken `../../private/…` paths. We return this `root`
+  // so the CLI renders against the exact namespace the engine emitted in.
   const root = canonicalRoot(dir);
   const raw = await runEngine(root);
   const swiftFindings = parseSwiftFindings(raw);
@@ -201,5 +223,5 @@ export async function scanSwift(dir: string): Promise<SwiftScanResult> {
     provenance: "swiftui",
   }));
 
-  return { findings };
+  return { root, findings };
 }
