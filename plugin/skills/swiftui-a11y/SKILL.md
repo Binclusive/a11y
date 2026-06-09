@@ -67,7 +67,7 @@ ancestor up to the nearest a11y element, and is **not** decorative.
 - Severity: **block** when the image is the only content of an interactive element or
   conveys information; **warn** when intent is ambiguous.
 - **Don't flag** (these are intentional or implicitly labeled):
-  - `Image(decorative:)` and `Image(_:variableValue:)` marked decorative — explicitly
+  - `Image(decorative:)` and `Image(systemName:variableValue:)` marked decorative — explicitly
     "no semantic value." Intentional.
   - any view with `.accessibilityHidden(true)` — intentionally removed from the tree.
   - `Label("Profile", systemImage: "person")` — the **text** is the label; the symbol is
