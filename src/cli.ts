@@ -3,8 +3,14 @@ import { pathToFileURL } from "node:url";
 import { collectTsx } from "./collect";
 import { scanUrl } from "./collect-dom";
 import { gen, init, type LearnInput, learn } from "./commands";
-import { scan } from "./core";
-import { type CorpusTier, type EnrichedFinding, enrichAll, resolveDisplay } from "./corpus";
+import { type FindingProvenance, scan } from "./core";
+import {
+  type CorpusEvidence,
+  type CorpusTier,
+  type EnrichedFinding,
+  enrichAll,
+  resolveDisplay,
+} from "./corpus";
 import { runHookCli } from "./hook";
 import { startStdioServer } from "./mcp";
 import type { ComponentResolution, Coverage } from "./resolve-components";
@@ -258,7 +264,7 @@ export interface JsonFinding {
   readonly line: number;
   readonly ruleId: string;
   readonly enforcement: "block" | "warn";
-  readonly provenance: "jsx-a11y" | "enforce";
+  readonly provenance: FindingProvenance;
   readonly wcag: readonly string[];
   readonly corpus: { readonly tier: string; readonly sc: string | null; readonly orgs: number | null };
   readonly message: string;
@@ -285,6 +291,28 @@ export interface JsonReport {
   };
 }
 
+/**
+ * Project the source-discriminated `CorpusEvidence` union into the flat
+ * `{ tier, sc, orgs }` shape the JSON contract exposes. Only `audit` findings
+ * carry a real frequency tier + org count; `baseline` (axe-catalog coverage) and
+ * `none` have no audit-frequency data, so they report `tier: "unknown"`,
+ * `orgs: null` — the same "no moat match" marker the report used before the union.
+ */
+function jsonCorpus(c: CorpusEvidence): {
+  readonly tier: string;
+  readonly sc: string | null;
+  readonly orgs: number | null;
+} {
+  switch (c.source) {
+    case "audit":
+      return { tier: c.tier, sc: c.sc, orgs: c.orgs };
+    case "baseline":
+      return { tier: "unknown", sc: c.sc, orgs: null };
+    case "none":
+      return { tier: "unknown", sc: null, orgs: null };
+  }
+}
+
 export function buildJsonReport(
   root: string,
   filesScanned: number,
@@ -302,7 +330,7 @@ export function buildJsonReport(
     unknown: 0,
   };
   for (const f of findings) {
-    byTier[f.corpus.tier] += 1;
+    byTier[f.corpus.source === "audit" ? f.corpus.tier : "unknown"] += 1;
   }
 
   const jsonFindings: JsonFinding[] = findings.map((f) => ({
@@ -313,7 +341,7 @@ export function buildJsonReport(
     enforcement: f.enforcement,
     provenance: f.provenance,
     wcag: f.wcag,
-    corpus: { tier: f.corpus.tier, sc: f.corpus.sc, orgs: f.corpus.orgs },
+    corpus: jsonCorpus(f.corpus),
     message: f.message,
   }));
 
