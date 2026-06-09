@@ -11,6 +11,7 @@
   "files": [
     "bin",
     "src",
+    "swift",
     "data/corpus-snapshot.json",
     "data/corpus/patterns-*.json",
     "data/baseline-rules.json"

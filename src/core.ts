@@ -37,8 +37,13 @@ import { wcagForRuleId } from "./wcag-map";
  *     Source-blind by design — it covers non-React sites and live pages we have
  *     no `.tsx` for, and it sees what static analysis can't (color-contrast,
  *     computed roles, real rendered text). Anchored by `selector`, not a line.
+ *   - `swiftui`  — the SwiftUI static collector (see `collect-swift.ts`): an
+ *     out-of-process SwiftSyntax engine parses `.swift` source and applies the
+ *     SwiftUI accessibility rules (missing image label, unlabeled control) with
+ *     the ancestor-climb heuristic. Anchored by `file:line` like the source
+ *     passes; the native counterpart of the jsx-a11y structural pass.
  */
-export type FindingProvenance = "jsx-a11y" | "enforce" | "axe";
+export type FindingProvenance = "jsx-a11y" | "enforce" | "axe" | "swiftui";
 
 /**
  * A single accessibility finding. A jsx-a11y finding is normalized off an
