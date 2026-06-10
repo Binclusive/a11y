@@ -31,7 +31,7 @@ import { runCli } from "../src/cli";
 async function runVerb(args: readonly string[]): Promise<{
   stdout: string;
   stderr: string;
-  exitCode: number | string | undefined;
+  exitCode: number | undefined;
   exit: Exit.Exit<void, unknown>;
 }> {
   const out: string[] = [];
@@ -164,6 +164,21 @@ describe("@effect/cli dispatch: each subcommand parses + invokes its runner", ()
       const { exit } = await runVerb(["not-a-verb"]);
       // @effect/cli rejects an unrecognized subcommand: the run Effect fails.
       expect(Exit.isFailure(exit)).toBe(true);
+    },
+  );
+
+  it(
+    "a bare dir (no subcommand) falls through to `check` — back-compat shortcut",
+    { timeout: 30_000 },
+    async () => {
+      // `origin/main`'s main() routed a bare `a11y-checker <dir>` to runCheck; the
+      // subcommand tree restores it via the ROOT command's optional positional dir.
+      // An empty dir scans clean — the no-.tsx zero-state proves the bare arg
+      // routed to runCheck (not an "Invalid subcommand" failure), exiting 0.
+      const { stdout, exit, exitCode } = await runVerb([emptyDir]);
+      expect(Exit.isSuccess(exit)).toBe(true);
+      expect(stdout).toContain(`No .tsx files under ${emptyDir}`);
+      expect(exitCode ?? 0).toBe(0);
     },
   );
 });

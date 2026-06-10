@@ -737,7 +737,20 @@ const hookCommand = Command.make("hook", {}, () =>
   ),
 );
 
-const rootCommand = Command.make("a11y-checker").pipe(
+// Back-compat: a bare `a11y-checker <dir>` (no subcommand) still runs `check` on
+// that dir — the shortcut `origin/main`'s `main()` carried explicitly. The root
+// gets an OPTIONAL positional dir + a handler (canon: subcommands.md "the root's
+// own handler still runs when no subcommand is given"; args.md optional-arg). A
+// supplied dir → runCheck; absent → print the root help/usage. All 8 subcommands
+// still bind via withSubcommands and take precedence when a known verb is typed.
+const rootDir = Args.text({ name: "dir" }).pipe(Args.optional);
+
+const rootCommand = Command.make("a11y-checker", { dir: rootDir }, ({ dir }) =>
+  Option.match(dir, {
+    onNone: () => Effect.promise(() => printRootHelp()),
+    onSome: (d) => Effect.promise(() => runCheck(d)),
+  }),
+).pipe(
   Command.withDescription(
     "Local accessibility checker for React/TSX, Swift, and live URLs — grounded in a real-world audit corpus.",
   ),
@@ -763,6 +776,19 @@ export const runCli = Command.run(rootCommand, {
   name: "a11y-checker",
   version: "0.1.0",
 });
+
+/**
+ * The no-subcommand, no-dir case: print the root help/usage. effect/cli owns the
+ * help printer (canon: help.md "you never write a help printer") — so we delegate
+ * to the built-in `--help` by re-entering the parser, providing the same Node
+ * platform context. This renders the description + the full `COMMANDS` list, the
+ * back-compat replacement for `origin/main`'s `console.error(USAGE)`.
+ */
+function printRootHelp(): Promise<void> {
+  return Effect.runPromise(
+    runCli(["node", "a11y-checker", "--help"]).pipe(Effect.provide(NodeContext.layer)),
+  );
+}
 
 /**
  * The published-bin entry point: hand the whole `process.argv` to the parser,

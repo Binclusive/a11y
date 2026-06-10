@@ -24,7 +24,7 @@
     "registry": "https://npm.pkg.github.com"
   },
   "engines": {
-    "node": ">=20.6.0"
+    "node": ">=20.18.1"
   },
   "scripts": {
     "scan": "tsx ./src/cli.ts check",
