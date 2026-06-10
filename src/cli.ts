@@ -689,32 +689,24 @@ async function runGen(args: readonly string[]): Promise<void> {
   }
 }
 
-const USAGE = `usage:
-  a11y-checker check <dir> [--json]              scan .tsx for a11y findings (--json: machine-readable output)
-  a11y-checker check-url <url>                   render a live URL and run axe-core (non-React / source-less pages)
-  a11y-checker check-swift <dir>                 scan .swift for SwiftUI accessibility findings (static)
-  a11y-checker init [--suggest] [dir]           detect stack, write binclusive.json + AGENTS/CLAUDE block (--suggest scaffolds the components map)
-  a11y-checker learn "<rule>" [--wcag a,b] [--fix "..."] [--source "..."] [dir]
-  a11y-checker gen [--check] [dir]               regenerate the block (--check exits non-zero on drift)
-  a11y-checker mcp                               start a local stdio MCP server exposing the checker to MCP clients
-  a11y-checker hook                              PostToolUse hook: scan the just-edited .tsx (reads event JSON from stdin)`;
-
-async function main(): Promise<void> {
-  const argv = process.argv.slice(2);
-  const [command, ...rest] = argv;
-
-  switch (command) {
-    case "init":
-      return runInit(rest);
-    case "learn":
-      return runLearn(rest);
-    case "gen":
-      return runGen(rest);
-    case "mcp":
-      return startStdioServer();
-    case "hook":
-      return runHookCli();
-    case "check": {
+/**
+ * The CLI verbs, as a flat list: each row is a `name`, its one-line `usage`
+ * text, and the `run(rest)` that dispatches it (where `rest` is argv after the
+ * verb). This is a plain command table, not a producer registry — three or four
+ * runners don't earn an interface + descriptor + generic, so routing and the
+ * USAGE banner are just `.find` and `.map` over this array. Order here is the
+ * order printed in USAGE.
+ */
+const COMMANDS: readonly {
+  readonly name: string;
+  readonly usage: string;
+  run(rest: readonly string[]): void | Promise<void>;
+}[] = [
+  {
+    name: "check",
+    usage:
+      "  a11y-checker check <dir> [--json]              scan .tsx for a11y findings (--json: machine-readable output)",
+    run(rest) {
       const parsed = parseArgs(rest, []);
       const dir = parsed.positionals[0];
       if (dir === undefined) {
@@ -723,8 +715,13 @@ async function main(): Promise<void> {
         return;
       }
       return runCheck(dir, parsed.bools.has("json"));
-    }
-    case "check-url": {
+    },
+  },
+  {
+    name: "check-url",
+    usage:
+      "  a11y-checker check-url <url>                   render a live URL and run axe-core (non-React / source-less pages)",
+    run(rest) {
       const url = parseArgs(rest, []).positionals[0];
       if (url === undefined) {
         console.error("usage: a11y-checker check-url <url>");
@@ -732,8 +729,13 @@ async function main(): Promise<void> {
         return;
       }
       return runCheckUrl(url);
-    }
-    case "check-swift": {
+    },
+  },
+  {
+    name: "check-swift",
+    usage:
+      "  a11y-checker check-swift <dir>                 scan .swift for SwiftUI accessibility findings (static)",
+    run(rest) {
       const dir = parseArgs(rest, []).positionals[0];
       if (dir === undefined) {
         console.error("usage: a11y-checker check-swift <dir>");
@@ -741,16 +743,53 @@ async function main(): Promise<void> {
         return;
       }
       return runCheckSwift(dir);
-    }
-    default: {
-      // Back-compat: bare `a11y-checker <dir>` still runs check.
-      const dir = parseArgs(argv, []).positionals[0];
-      if (dir !== undefined) return runCheck(dir);
-      console.error(USAGE);
-      process.exitCode = 2;
-      return;
-    }
-  }
+    },
+  },
+  {
+    name: "init",
+    usage:
+      "  a11y-checker init [--suggest] [dir]           detect stack, write binclusive.json + AGENTS/CLAUDE block (--suggest scaffolds the components map)",
+    run: runInit,
+  },
+  {
+    name: "learn",
+    usage: `  a11y-checker learn "<rule>" [--wcag a,b] [--fix "..."] [--source "..."] [dir]`,
+    run: runLearn,
+  },
+  {
+    name: "gen",
+    usage:
+      "  a11y-checker gen [--check] [dir]               regenerate the block (--check exits non-zero on drift)",
+    run: runGen,
+  },
+  {
+    name: "mcp",
+    usage:
+      "  a11y-checker mcp                               start a local stdio MCP server exposing the checker to MCP clients",
+    run: () => startStdioServer(),
+  },
+  {
+    name: "hook",
+    usage:
+      "  a11y-checker hook                              PostToolUse hook: scan the just-edited .tsx (reads event JSON from stdin)",
+    run: () => runHookCli(),
+  },
+];
+
+const USAGE = `usage:\n${COMMANDS.map((c) => c.usage).join("\n")}`;
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  const [command, ...rest] = argv;
+
+  const cmd = COMMANDS.find((c) => c.name === command);
+  if (cmd !== undefined) return cmd.run(rest);
+
+  // Back-compat: bare `a11y-checker <dir>` still runs check.
+  const dir = parseArgs(argv, []).positionals[0];
+  if (dir !== undefined) return runCheck(dir);
+  console.error(USAGE);
+  process.exitCode = 2;
 }
 
 // Run only when invoked directly (the `a11y-checker` bin), not on import — so
