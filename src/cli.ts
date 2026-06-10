@@ -1,5 +1,8 @@
 import { relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { Args, Command, Options } from "@effect/cli";
+import { NodeContext, NodeRuntime } from "@effect/platform-node";
+import { Effect, Option } from "effect";
 import { collectTsx } from "./collect";
 import { scanUrl } from "./collect-dom";
 import { scanSwift } from "./collect-swift";
@@ -538,49 +541,8 @@ async function runCheckSwift(dir: string): Promise<void> {
   });
 }
 
-/**
- * A parsed argv: positionals separated from flags. `valueFlags` are the
- * `--name value` flags that consume the NEXT token as their value — naming
- * them up front is what stops a flag's value (`--wcag 4.1.2`) from being
- * mistaken for a positional. `boolFlags` (e.g. `--check`) consume no value.
- */
-interface ParsedArgs {
-  readonly positionals: readonly string[];
-  readonly values: ReadonlyMap<string, string>;
-  readonly bools: ReadonlySet<string>;
-}
-
-function parseArgs(args: readonly string[], valueFlags: readonly string[]): ParsedArgs {
-  const valueSet = new Set(valueFlags);
-  const positionals: string[] = [];
-  const values = new Map<string, string>();
-  const bools = new Set<string>();
-
-  for (let i = 0; i < args.length; i++) {
-    const tok = args[i];
-    if (tok === undefined || tok === "" || tok === "--") continue;
-    if (tok.startsWith("--")) {
-      const name = tok.slice(2);
-      if (valueSet.has(name)) {
-        const next = args[i + 1];
-        if (next !== undefined) {
-          values.set(name, next);
-          i++; // consumed the value — never a positional
-        }
-      } else {
-        bools.add(name);
-      }
-      continue;
-    }
-    positionals.push(tok);
-  }
-  return { positionals, values, bools };
-}
-
-async function runInit(args: readonly string[]): Promise<void> {
-  const { positionals, bools } = parseArgs(args, []);
-  const suggest = bools.has("suggest");
-  const dir = resolve(positionals[0] ?? ".");
+async function runInit(suggest: boolean, dirArg: string): Promise<void> {
+  const dir = resolve(dirArg);
   const r = await init(dir, { suggest });
   const s = r.contract.stack;
   const router = s.router === null ? "" : ` (${s.router} router)`;
@@ -631,30 +593,20 @@ function printSuggestions(result: SuggestResult): void {
   }
 }
 
-async function runLearn(args: readonly string[]): Promise<void> {
-  const { positionals, values } = parseArgs(args, ["wcag", "fix", "source"]);
-  const rule = positionals[0];
-  if (rule === undefined) {
-    console.error(
-      'usage: a11y-checker learn "<rule text>" [--wcag 4.1.2,1.3.1] [--fix "<code>"] [--source "<who>"] [dir]',
-    );
-    process.exitCode = 2;
-    return;
-  }
+async function runLearn(
+  rule: string,
+  wcag: readonly string[],
+  fix: string | null,
+  source: string,
+  dirArg: string,
+): Promise<void> {
   // The rule is the FIRST positional; an optional dir may follow it.
-  const dir = resolve(positionals[1] ?? ".");
-  const wcagRaw = values.get("wcag");
+  const dir = resolve(dirArg);
   const input: LearnInput = {
     rule,
-    wcag:
-      wcagRaw === undefined
-        ? []
-        : wcagRaw
-            .split(",")
-            .map((s) => s.trim())
-            .filter((s) => s !== ""),
-    fix: values.get("fix") ?? null,
-    source: values.get("source") ?? "manual",
+    wcag: [...wcag],
+    fix,
+    source,
   };
   const r = await learn(dir, input);
   if (r.added) {
@@ -665,10 +617,8 @@ async function runLearn(args: readonly string[]): Promise<void> {
   for (const p of r.blockPaths) console.log(`  block: ${relative(dir, p)}`);
 }
 
-async function runGen(args: readonly string[]): Promise<void> {
-  const { positionals, bools } = parseArgs(args, []);
-  const check = bools.has("check");
-  const dir = resolve(positionals[0] ?? ".");
+async function runGen(check: boolean, dirArg: string): Promise<void> {
+  const dir = resolve(dirArg);
   const r = await gen(dir, check);
   if (!r.check) {
     console.log(`a11y-checker gen — ${dir}`);
@@ -689,114 +639,170 @@ async function runGen(args: readonly string[]): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// @effect/cli command tree
+// ---------------------------------------------------------------------------
+//
+// The PARSING + DISPATCH layer. Each subcommand declares its flags/args with
+// `@effect/cli` `Options`/`Args`, then its handler parses them and calls the
+// matching `runX` runner unchanged. Effect stays ISOLATED to this layer — the
+// runners are still plain async functions that own their own `process.exitCode`
+// side effects (blocking findings → 1, bad URL → 2), and `NodeRuntime.runMain`
+// reads that exit code after a clean run, so the findings-based exit codes the
+// CI gate depends on survive untouched.
+//
+// The runner bodies are wrapped in `Effect.promise` (not `tryPromise`): a runner
+// that throws is a genuine bug, and letting it reject surfaces the stack via
+// `runMain` exactly as the old top-level `.catch` did.
+
+const dirArg = Args.text({ name: "dir" });
+const optionalDir = Args.text({ name: "dir" }).pipe(Args.withDefault("."));
+
+const checkCommand = Command.make(
+  "check",
+  { dir: dirArg, json: Options.boolean("json") },
+  ({ dir, json }) => Effect.promise(() => runCheck(dir, json)),
+).pipe(Command.withDescription("scan .tsx for a11y findings (--json: machine-readable output)"));
+
+const checkUrlCommand = Command.make(
+  "check-url",
+  { target: Args.text({ name: "target" }) },
+  ({ target }) => Effect.promise(() => runCheckUrl(target)),
+).pipe(
+  Command.withDescription(
+    "render a live URL (or local path) and run axe-core (non-React / source-less pages)",
+  ),
+);
+
+const checkSwiftCommand = Command.make(
+  "check-swift",
+  { dir: dirArg },
+  ({ dir }) => Effect.promise(() => runCheckSwift(dir)),
+).pipe(Command.withDescription("scan .swift for SwiftUI accessibility findings (static)"));
+
+const initCommand = Command.make(
+  "init",
+  { suggest: Options.boolean("suggest"), dir: optionalDir },
+  ({ suggest, dir }) => Effect.promise(() => runInit(suggest, dir)),
+).pipe(
+  Command.withDescription(
+    "detect stack, write binclusive.json + AGENTS/CLAUDE block (--suggest scaffolds the components map)",
+  ),
+);
+
+// `--wcag a,b` is one flag carrying a comma list; split it in the option so the
+// handler sees an Array (canon: options.md "Comma / repeated value flag", form B).
+const wcagOption = Options.text("wcag").pipe(
+  Options.map((s) =>
+    s
+      .split(",")
+      .map((x) => x.trim())
+      .filter((x) => x !== ""),
+  ),
+  Options.withDefault([] as readonly string[]),
+);
+
+const learnCommand = Command.make(
+  "learn",
+  {
+    rule: Args.text({ name: "rule" }),
+    wcag: wcagOption,
+    fix: Options.text("fix").pipe(Options.optional),
+    source: Options.text("source").pipe(Options.withDefault("manual")),
+    dir: optionalDir,
+  },
+  ({ rule, wcag, fix, source, dir }) =>
+    Effect.promise(() =>
+      runLearn(rule, wcag, Option.getOrNull(fix), source, dir),
+    ),
+).pipe(Command.withDescription(`record a team rule into binclusive.json and the AGENTS/CLAUDE block`));
+
+const genCommand = Command.make(
+  "gen",
+  { check: Options.boolean("check"), dir: optionalDir },
+  ({ check, dir }) => Effect.promise(() => runGen(check, dir)),
+).pipe(Command.withDescription("regenerate the block (--check exits non-zero on drift)"));
+
+const mcpCommand = Command.make("mcp", {}, () =>
+  Effect.promise(() => startStdioServer()),
+).pipe(
+  Command.withDescription("start a local stdio MCP server exposing the checker to MCP clients"),
+);
+
+const hookCommand = Command.make("hook", {}, () =>
+  Effect.promise(() => runHookCli()),
+).pipe(
+  Command.withDescription(
+    "PostToolUse hook: scan the just-edited .tsx (reads event JSON from stdin)",
+  ),
+);
+
+// Back-compat: a bare `a11y-checker <dir>` (no subcommand) still runs `check` on
+// that dir — the shortcut `origin/main`'s `main()` carried explicitly. The root
+// gets an OPTIONAL positional dir + a handler (canon: subcommands.md "the root's
+// own handler still runs when no subcommand is given"; args.md optional-arg). A
+// supplied dir → runCheck; absent → print the root help/usage. All 8 subcommands
+// still bind via withSubcommands and take precedence when a known verb is typed.
+const rootDir = Args.text({ name: "dir" }).pipe(Args.optional);
+
+const rootCommand = Command.make("a11y-checker", { dir: rootDir }, ({ dir }) =>
+  Option.match(dir, {
+    onNone: () => Effect.promise(() => printRootHelp()),
+    onSome: (d) => Effect.promise(() => runCheck(d)),
+  }),
+).pipe(
+  Command.withDescription(
+    "Local accessibility checker for React/TSX, Swift, and live URLs — grounded in a real-world audit corpus.",
+  ),
+  Command.withSubcommands([
+    checkCommand,
+    checkUrlCommand,
+    checkSwiftCommand,
+    initCommand,
+    learnCommand,
+    genCommand,
+    mcpCommand,
+    hookCommand,
+  ]),
+);
+
 /**
- * The CLI verbs, as a flat list: each row is a `name`, its one-line `usage`
- * text, and the `run(rest)` that dispatches it (where `rest` is argv after the
- * verb). This is a plain command table, not a producer registry — three or four
- * runners don't earn an interface + descriptor + generic, so routing and the
- * USAGE banner are just `.find` and `.map` over this array. Order here is the
- * order printed in USAGE.
+ * Turn the root command into a runnable `(argv) => Effect`. Exported so tests
+ * can drive a subcommand with a synthetic argv (no process spawn) by providing
+ * `NodeContext.layer` themselves — see `.patterns/effect-cli/running.md`
+ * ("Running a command in a test (no process)").
  */
-const COMMANDS: readonly {
-  readonly name: string;
-  readonly usage: string;
-  run(rest: readonly string[]): void | Promise<void>;
-}[] = [
-  {
-    name: "check",
-    usage:
-      "  a11y-checker check <dir> [--json]              scan .tsx for a11y findings (--json: machine-readable output)",
-    run(rest) {
-      const parsed = parseArgs(rest, []);
-      const dir = parsed.positionals[0];
-      if (dir === undefined) {
-        console.error("usage: a11y-checker check <dir> [--json]");
-        process.exitCode = 2;
-        return;
-      }
-      return runCheck(dir, parsed.bools.has("json"));
-    },
-  },
-  {
-    name: "check-url",
-    usage:
-      "  a11y-checker check-url <url>                   render a live URL and run axe-core (non-React / source-less pages)",
-    run(rest) {
-      const url = parseArgs(rest, []).positionals[0];
-      if (url === undefined) {
-        console.error("usage: a11y-checker check-url <url>");
-        process.exitCode = 2;
-        return;
-      }
-      return runCheckUrl(url);
-    },
-  },
-  {
-    name: "check-swift",
-    usage:
-      "  a11y-checker check-swift <dir>                 scan .swift for SwiftUI accessibility findings (static)",
-    run(rest) {
-      const dir = parseArgs(rest, []).positionals[0];
-      if (dir === undefined) {
-        console.error("usage: a11y-checker check-swift <dir>");
-        process.exitCode = 2;
-        return;
-      }
-      return runCheckSwift(dir);
-    },
-  },
-  {
-    name: "init",
-    usage:
-      "  a11y-checker init [--suggest] [dir]           detect stack, write binclusive.json + AGENTS/CLAUDE block (--suggest scaffolds the components map)",
-    run: runInit,
-  },
-  {
-    name: "learn",
-    usage: `  a11y-checker learn "<rule>" [--wcag a,b] [--fix "..."] [--source "..."] [dir]`,
-    run: runLearn,
-  },
-  {
-    name: "gen",
-    usage:
-      "  a11y-checker gen [--check] [dir]               regenerate the block (--check exits non-zero on drift)",
-    run: runGen,
-  },
-  {
-    name: "mcp",
-    usage:
-      "  a11y-checker mcp                               start a local stdio MCP server exposing the checker to MCP clients",
-    run: () => startStdioServer(),
-  },
-  {
-    name: "hook",
-    usage:
-      "  a11y-checker hook                              PostToolUse hook: scan the just-edited .tsx (reads event JSON from stdin)",
-    run: () => runHookCli(),
-  },
-];
+export const runCli = Command.run(rootCommand, {
+  name: "a11y-checker",
+  version: "0.1.0",
+});
 
-const USAGE = `usage:\n${COMMANDS.map((c) => c.usage).join("\n")}`;
+/**
+ * The no-subcommand, no-dir case: print the root help/usage. effect/cli owns the
+ * help printer (canon: help.md "you never write a help printer") — so we delegate
+ * to the built-in `--help` by re-entering the parser, providing the same Node
+ * platform context. This renders the description + the full `COMMANDS` list, the
+ * back-compat replacement for `origin/main`'s `console.error(USAGE)`.
+ */
+function printRootHelp(): Promise<void> {
+  return Effect.runPromise(
+    runCli(["node", "a11y-checker", "--help"]).pipe(Effect.provide(NodeContext.layer)),
+  );
+}
 
-async function main(): Promise<void> {
-  const argv = process.argv.slice(2);
-  const [command, ...rest] = argv;
-
-  const cmd = COMMANDS.find((c) => c.name === command);
-  if (cmd !== undefined) return cmd.run(rest);
-
-  // Back-compat: bare `a11y-checker <dir>` still runs check.
-  const dir = parseArgs(argv, []).positionals[0];
-  if (dir !== undefined) return runCheck(dir);
-  console.error(USAGE);
-  process.exitCode = 2;
+/**
+ * The published-bin entry point: hand the whole `process.argv` to the parser,
+ * provide the Node platform context (FileSystem | Path | Terminal), and let
+ * `NodeRuntime.runMain` execute it, wire SIGINT, and set the process exit code.
+ * A runner that already set `process.exitCode` (blocking findings → 1, bad URL
+ * → 2) keeps it: `runMain` only overrides it on an Effect failure.
+ */
+export function startCli(argv: readonly string[] = process.argv): void {
+  runCli(argv).pipe(Effect.provide(NodeContext.layer), NodeRuntime.runMain);
 }
 
 // Run only when invoked directly (the `a11y-checker` bin), not on import — so
 // the pure render helpers above stay unit-testable without firing the CLI.
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((err: unknown) => {
-    console.error(err instanceof Error ? err.stack : String(err));
-    process.exitCode = 1;
-  });
+  startCli();
 }
