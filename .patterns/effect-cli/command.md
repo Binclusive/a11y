@@ -85,7 +85,7 @@ or read a parent command's config.
 **Pattern:**
 
 ```typescript
-import { Command, Options } from "@effect/cli"
+import { Args, Command, Options } from "@effect/cli"
 import { Console, Effect } from "effect"
 
 const ship = Command.make("ship", { verbose: Options.boolean("verbose") })

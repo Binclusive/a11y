@@ -119,7 +119,7 @@ const count = Args.integer().pipe(Args.withDefault(1))
 
 ```typescript
 import { Args } from "@effect/cli"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { HelpDoc } from "@effect/cli"
 
 const upper = Args.text({ name: "name" }).pipe(Args.map((s) => s.toUpperCase()))

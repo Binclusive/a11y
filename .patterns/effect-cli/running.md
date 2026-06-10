@@ -98,8 +98,11 @@ import { Effect } from "effect"
 
 const run = command.pipe(Command.run({ name: "git", version: "1.0.0" }))
 
-// Pass a synthetic argv; the first two entries are treated as node + script.
-yield* run(["node", "git.js", "add", "file"]).pipe(Effect.provide(NodeContext.layer))
+// `yield*` is only legal inside a generator — drive the run from an Effect.gen
+// test body. Pass a synthetic argv; the first two entries are treated as node + script.
+const test = Effect.gen(function*() {
+  yield* run(["node", "git.js", "add", "file"]).pipe(Effect.provide(NodeContext.layer))
+})
 ```
 
 ## Decision guide

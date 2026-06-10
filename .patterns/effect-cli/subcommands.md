@@ -42,7 +42,7 @@ config of `command` gains a `subcommand: Option<...>` discriminating which child
 **Pattern:**
 
 ```typescript
-import { Command } from "@effect/cli"
+import { Command, Options } from "@effect/cli"
 
 const shipGroup = Command.make("ship", { verbose: Options.boolean("verbose") })
 const mineGroup = Command.make("mine")
@@ -90,7 +90,7 @@ const command = root.pipe(Command.withSubcommands([check]))
 
 ```typescript
 import { Args, Command, Options } from "@effect/cli"
-import { Console, Effect, Option } from "effect"
+import { Array, Console, Effect, Option } from "effect"
 
 const root = Command.make("tool", {
   configs: Options.keyValueMap("c").pipe(Options.optional)

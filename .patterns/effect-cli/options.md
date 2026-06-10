@@ -104,17 +104,19 @@ const wcag = Options.text("wcag").pipe(
 **Pattern:**
 
 ```typescript
-import { Options } from "@effect/cli"
-import { Option } from "effect"
+import { Command, Options } from "@effect/cli"
+import { Array, Console, Option } from "effect"
 
 const config = Options.keyValueMap("c").pipe(Options.optional)
 //    ^? Options<Option<HashMap<string, string>>>
 
-// In the handler, branch on presence:
-Option.match(config, {
-  onNone: () => Console.log("no config"),
-  onSome: (map) => Console.log(`config: ${Array.fromIterable(map).length}`)
-})
+// In the handler, `config` is the PARSED value (Option<HashMap>); branch on presence:
+const cmd = Command.make("run", { config }, ({ config }) =>
+  Option.match(config, {
+    onNone: () => Console.log("no config"),
+    onSome: (map) => Console.log(`config: ${Array.fromIterable(map).length}`)
+  })
+)
 ```
 
 ### Flag with a default
@@ -151,8 +153,8 @@ const configs = Options.keyValueMap("c") // Options<HashMap<string,string>>
 
 ```typescript
 import { Options } from "@effect/cli"
-import { Effect, Option } from "effect"
-import { ValidationError } from "@effect/cli"
+import { Effect, Option, Schema } from "effect"
+import { HelpDoc, ValidationError } from "@effect/cli"
 
 // Pure transform:
 const upper = Options.text("name").pipe(Options.map((s) => s.toUpperCase()))
