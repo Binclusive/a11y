@@ -142,17 +142,23 @@ const run = promisify(execFile);
 describe("CLI: check-swift usage", () => {
   // Spawns the real CLI through the local `tsx` loader; the first cold start of
   // the TS transform can take several seconds, so the timeout is generous.
+  // `check-swift` declares `dir` as a REQUIRED positional (`Args.text`), so
+  // `@effect/cli` rejects a missing arg before the runner is ever reached — the
+  // parse error + non-zero exit now come from the framework (issue #7), not the
+  // hand-rolled per-verb usage line.
   it(
-    "exits 2 with a usage message when no dir is given",
+    "fails with a missing-argument error when no dir is given",
     async () => {
       const tsx = join(here, "..", "node_modules", ".bin", "tsx");
       try {
         await run(tsx, [cli, "check-swift"], { cwd: join(here, "..") });
         throw new Error("expected non-zero exit");
       } catch (err) {
-        const e = err as { code?: number; stderr?: string };
-        expect(e.code).toBe(2);
-        expect(e.stderr ?? "").toMatch(/usage: a11y-checker check-swift <dir>/);
+        const e = err as { code?: number; stderr?: string; stdout?: string };
+        expect(e.code).not.toBe(0);
+        // @effect/cli names the unsatisfied positional in its parse error.
+        const output = `${e.stderr ?? ""}${e.stdout ?? ""}`;
+        expect(output).toMatch(/Missing argument <dir>/);
       }
     },
     30_000,
