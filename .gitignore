@@ -4,3 +4,7 @@ dist/
 .DS_Store
 .turbo/
 coverage/
+
+# python bytecode (demo cast generators)
+__pycache__/
+*.pyc

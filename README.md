@@ -10,6 +10,16 @@ This is a private review build. Clone it, point it at any React codebase (yours,
 
 ---
 
+## See it in 30 seconds
+
+On **shadcn/ui's own `taxonomy` app**, `eslint-plugin-jsx-a11y` (the linter everyone runs) passes the docs search box **clean** — while a11y-checker catches its unlabeled `<Input>`, ranks it (`22/26 orgs`), and hands you the fix.
+
+![a11y-checker vs eslint on shadcn/ui taxonomy](demo/taxonomy.gif)
+
+**▶ [Watch all five demos →](demo/README.md)** — the head-to-head above, a getting-started walkthrough on the cal.com monorepo, the `binclusive.json` config reference, the state of accessibility across 31 OSS repos, and the agentic self-fix loop. Each is a replayable [asciinema](https://asciinema.org) cast (`asciinema play demo/<name>.cast`), not just a GIF.
+
+---
+
 ## Try it (≈3 minutes)
 
 Requires **Node ≥ 20** and **pnpm** (or npm).

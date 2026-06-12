@@ -1,9 +1,0 @@
-# Generated LIVE by `a11y-checker init` during the demo — never committed.
-# The pristine post-declare config lives in binclusive.declared.json instead;
-# the demo copies it over binclusive.json to show the "declare" step.
-binclusive.json
-AGENTS.md
-CLAUDE.md
-
-# This sample app is never installed (that's the point — @acme/ui stays opaque).
-node_modules/
