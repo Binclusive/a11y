@@ -1,15 +1,41 @@
-export {
-  BLOCK_BEGIN,
-  BLOCK_END,
-  extractBlock,
-  renderBlock,
-  slugify,
-  spliceBlock,
-} from "./agents-block";
+/**
+ * `@binclusive/a11y` — the engine library surface.
+ *
+ * The curated public API (see `docs/ENGINE-API.md`): the functions a CLI
+ * (`b8e`, a lean shim) and agents call, organized into four clusters —
+ * Scan, Contract lifecycle, Agent integration, Corpus.
+ *
+ * Engine INTERNALS are deliberately NOT re-exported here: component resolution,
+ * source tracing, the registry, module-scope, workspace/tsconfig resolution,
+ * the enforce pass, and the `distill/` corpus build-tool. They are implementation,
+ * not contract — import them by path if you're working inside the engine.
+ */
+
+// ── 1 · Scan & enrich — the read path ────────────────────────────────────────
 export { collectTsx } from "./collect";
-export { type DomScanOptions, type DomScanResult, scanUrl, scFromTags } from "./collect-dom";
+export { checkFiles, type Finding, type FindingProvenance, type ScanResult, scan } from "./core";
+export { type DomScanOptions, type DomScanResult, scanUrl } from "./collect-dom";
+export { type SwiftScanResult, scanSwift } from "./collect-swift";
 export {
-  appendLearned,
+  type DisplayContract,
+  type EnrichedFinding,
+  enrich,
+  enrichAll,
+  resolveDisplay,
+} from "./corpus";
+// Types that `ScanResult` and the CLI presentation reference (the functions that
+// produce them — `resolveComponents` — stay internal):
+export {
+  type ComponentResolution,
+  type Coverage,
+  type OpaqueKind,
+  type Provenance,
+  type ResolvedComponents,
+  type ResolvedProvenance,
+} from "./resolve-components";
+
+// ── 2 · Contract lifecycle — init / config ──────────────────────────────────
+export {
   BLOCK_TARGETS,
   CONTRACT_FILE,
   type DriftEntry,
@@ -24,7 +50,6 @@ export {
   loadContract,
 } from "./commands";
 export {
-  commonBaseDir,
   contractForFiles,
   type EnforcementLevel,
   enforcementFor,
@@ -44,11 +69,38 @@ export {
   type LearnedRule,
   parseContract,
   type Router,
-  type Stack,
   serializeContract,
+  type Stack,
 } from "./contract";
-export { checkFiles, type Finding, type FindingProvenance, type ScanResult, scan } from "./core";
+export { detectStack } from "./detect-stack";
 export {
+  type ComponentSuggestion,
+  type SuggestConfidence,
+  type SuggestOptions,
+  type SuggestResult,
+  suggestComponentMap,
+} from "./suggest";
+
+// ── 3 · Agent integration — hook + MCP ──────────────────────────────────────
+export { type HookOutput, runHook } from "./hook";
+export {
+  buildServer,
+  type CheckA11yResult,
+  type CheckFinding,
+  type CheckUrlResult,
+  checkA11y,
+  checkUrl,
+  type GetA11yRulesResult,
+  getA11yRules,
+  type LearnA11yRuleResult,
+  learnA11yRule,
+  startStdioServer,
+} from "./mcp";
+
+// ── 4 · Corpus — the moat, read-only ─────────────────────────────────────────
+export {
+  type BaselineRuleInfo,
+  baselineRules,
   type CorpusCriterion,
   type CorpusEvidence,
   type CorpusPattern,
@@ -60,74 +112,7 @@ export {
   corpusSeverity,
   corpusTier,
   type CorpusTier,
-  type DisplayContract,
   type DistilledPatternRef,
-  type EnrichedFinding,
-  enrich,
-  enrichAll,
-  resolveDisplay,
 } from "./corpus";
-export {
-  detectDesignSystem,
-  detectStack,
-} from "./detect-stack";
-export {
-  type DistilledPattern,
-  type DropLedger,
-  distill,
-  type FrequencyTier,
-  MIN_ORGS,
-  type RawFinding,
-  tierForOrgs,
-} from "./distill/distill";
-export {
-  categorizeJourney,
-  JOURNEY_CATEGORIES,
-  type JourneyCategory,
-} from "./distill/journey-category";
-export { compareSC, normalizeCriterion } from "./distill/normalize-sc";
-export {
-  type ControlType,
-  type EnforceContext,
-  enforceContent,
-} from "./enforce";
-export {
-  isFrameworkPrimitive,
-  isOwnModule,
-  packageNameOf,
-} from "./module-scope";
-export {
-  GUARANTEED_LIBRARIES,
-  type GuaranteedLibrary,
-  ICON_LIBRARIES,
-  isIconLibrary,
-  lookupGuaranteed,
-  lookupRegistry,
-  REGISTRY,
-  type RegistryRule,
-} from "./registry";
-export {
-  type ComponentResolution,
-  type Coverage,
-  type OpaqueKind,
-  type Provenance,
-  type ResolvedComponents,
-  type ResolvedProvenance,
-  resolveComponents,
-} from "./resolve-components";
-export {
-  collectLocalImports,
-  type ImportBinding,
-  resolveRoute,
-  type TraceResult,
-  traceComponent,
-} from "./source-trace";
-export {
-  type ComponentSuggestion,
-  type SuggestConfidence,
-  type SuggestOptions,
-  type SuggestResult,
-  suggestComponentMap,
-} from "./suggest";
+export { BLOCK_BEGIN, BLOCK_END, extractBlock, renderBlock, spliceBlock } from "./agents-block";
 export { RULE_ID_TO_WCAG, wcagForRuleId } from "./wcag-map";
-export { resolveWorkspaceImport } from "./workspace-resolve";
