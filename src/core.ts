@@ -16,6 +16,7 @@ import { type Coverage, type ResolvedComponents, resolveComponents } from "./res
 import {
   ariaHiddenLineRanges,
   isContentSuppressed,
+  spreadChildrenLineRanges,
   transInjectedLineRanges,
 } from "./suppression-ranges";
 import { wcagForRuleId } from "./wcag-map";
@@ -243,6 +244,7 @@ export async function scan(filePaths: readonly string[]): Promise<ScanResult> {
             return [
               ...transInjectedLineRanges(file, injectsChildren),
               ...ariaHiddenLineRanges(file),
+              ...spreadChildrenLineRanges(file),
             ];
           })();
     suppressRangesCache.set(filePath, ranges);

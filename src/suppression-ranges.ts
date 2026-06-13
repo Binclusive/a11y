@@ -185,6 +185,71 @@ export function ariaHiddenLineRanges(sf: ts.SourceFile): LineRange[] {
   return ranges;
 }
 
+/**
+ * Line ranges of JSX elements whose children are forwarded through a `{...props}`
+ * (or `{...rest}`) SPREAD, so the content-family rules cannot prove the element
+ * is empty. This is the design-system primitive shape jsx-a11y is structurally
+ * blind to:
+ *
+ *     const AlertTitle = forwardRef(({ className, ...props }, ref) => (
+ *       <h5 ref={ref} className={cn(...)} {...props} />   // children arrive via {...props}
+ *     ))
+ *     const TabLink = ({ ...props }) => <a className="…" {...props} />
+ *
+ * The `<h5/>` / `<a/>` look childless in the JSX, so `heading-has-content` /
+ * `anchor-has-content` fire — but the consumer passes the heading text / link
+ * label as children, which flow in through the spread. Every shadcn/Radix-style
+ * primitive that wraps a native `<h1-6>` / `<a>` and forwards props hits this,
+ * turning the checker's own "find bugs inside your design system" surface into a
+ * wall of false CRITICALs.
+ *
+ * Same scope + safety contract as the runtime-injection ranges above: ONLY
+ * content-family findings (via {@link isContentSuppressed}) are suppressed, so an
+ * ARIA/role/handler bug on the same spread element still surfaces. A spread can
+ * carry `children` (or `dangerouslySetInnerHTML`); we cannot prove it doesn't, so
+ * the "empty element" premise is unprovable here — exactly as it is for a
+ * `render={<El/>}` delegation — and the content-family finding is withheld rather
+ * than asserted as a false positive.
+ *
+ * Recorded only when the element has NO static contentful children of its own: an
+ * element that already spells out children needs no spread to be contentful and
+ * never fired a content finding anyway, so leaving it unrecorded keeps the range
+ * set tight.
+ */
+export function spreadChildrenLineRanges(sf: ts.SourceFile): LineRange[] {
+  const ranges: LineRange[] = [];
+  const lineOf = (pos: number): number => sf.getLineAndCharacterOfPosition(pos).line + 1;
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const opening = ts.isJsxElement(node) ? node.openingElement : node;
+      const hasSpread = opening.attributes.properties.some((p) => ts.isJsxSpreadAttribute(p));
+      if (hasSpread && !hasStaticChildren(node)) {
+        ranges.push({ start: lineOf(node.getStart(sf)), end: lineOf(node.getEnd()) });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return ranges;
+}
+
+/**
+ * Whether a JSX element has static, contentful children written directly in the
+ * JSX — non-whitespace text, a nested element/fragment, or an expression child.
+ * A self-closing element has none. This is the inverse of "needs the spread to
+ * be contentful": when true, the element is contentful on its own and is not a
+ * spread-injection candidate.
+ */
+function hasStaticChildren(node: ts.JsxElement | ts.JsxSelfClosingElement): boolean {
+  if (!ts.isJsxElement(node)) return false;
+  return node.children.some((child) => {
+    if (ts.isJsxText(child)) return child.text.trim() !== "";
+    if (ts.isJsxExpression(child)) return child.expression !== undefined;
+    return ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child) || ts.isJsxFragment(child);
+  });
+}
+
 /** The `aria-hidden` attribute name. */
 const ARIA_HIDDEN_PROP = "aria-hidden";
 
