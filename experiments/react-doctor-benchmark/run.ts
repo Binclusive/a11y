@@ -55,6 +55,11 @@ const TARGETS: readonly Target[] = [
   // Next.js App Router + a hand-vendored shadcn/ui — the shape that exposed the
   // barrel-origin gap and the {...props} content FP. The reference cell.
   { repo: "senchabot-opensource/monorepo", branch: "dev", app: "apps/web", src: "apps/web/src" },
+  // A SECOND design system, imported directly (not a local barrel): Google's own
+  // ga-dev-tools — MUI v5 + TypeScript, 64 files importing `@mui/material`. Shows
+  // react-doctor's wrapper blind spot is not shadcn-specific — it's any design
+  // system used as components, which is every design system.
+  { repo: "googleanalytics/ga-dev-tools", branch: "main", app: ".", src: "src" },
 ];
 
 /** One finding, normalized across both tools so they can be diffed by site. */

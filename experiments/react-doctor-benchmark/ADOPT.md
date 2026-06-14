@@ -1,8 +1,10 @@
 # Adopt — follow-ups from the react-doctor benchmark
 
-Two things worth borrowing from react-doctor, surfaced by [REPORT.md](./REPORT.md). Both are cheap, both make findings land harder, and neither touches the source-level component resolution that is our actual edge.
+Three things worth borrowing from react-doctor, surfaced by [REPORT.md](./REPORT.md). None touches the source-level component resolution that is our actual edge.
 
-These are drafted as ready-to-file GitHub issues. File with:
+**Status:** #1 → [issue #14](../../../issues/14) · #2 → [issue #15](../../../issues/15) · #3 below is a draft (surfaced by the cell-2 MUI run; file when ready).
+
+File a draft with:
 
 ```sh
 gh issue create --title "<title>" --body-file -   # paste the body
@@ -63,3 +65,30 @@ Native semantics are more robust than role overlays (default keyboard behavior, 
 - [ ] Fire on literal `role="…"` string literals (skip dynamic `role={x}`).
 - [ ] Respect existing component resolution (the element may be a traced host).
 - [ ] Corpus tier / WCAG SC tagging consistent with other rules.
+
+---
+
+## Issue 3 (draft) — native-control label coverage
+
+**Title:** `a11y: catch unlabeled native form controls (control-has-associated-label gap)`
+
+### What we missed
+
+Cell 2 of the benchmark (MUI ga-dev-tools): react-doctor flagged a real bug we don't —
+
+> `numeric-input.tsx:18` — a literal `<input type="numeric">` with no label, `aria-label`, or associated `<label for>`.
+
+Our `enforce/input-no-name` fires on *resolved wrapper* controls, but a bare native `<input>` with no label slips through: we don't run jsx-a11y's `control-has-associated-label`, and `enforce` defers literals to jsx-a11y.
+
+### The catch — do it TIGHTER than react-doctor
+
+react-doctor runs the stock rule and pays for it: on the same app it produced a **12-finding false-positive cluster**, firing `control-has-associated-label` on empty `<td className={…}></td>` layout cells ("this control has no label" on a presentational table cell). The breadth imported the noise.
+
+### Proposal
+
+Add native-control label coverage **scoped to genuine form controls** — `<input>` (excluding `type=hidden|submit|button|reset|image`), `<select>`, `<textarea>` — not "every element," which is what makes the stock rule noisy. Reuse the same accessible-name logic `enforce/input-no-name` already has (aria-label / aria-labelledby / id+`<label for>` / wrapping `<label>` / title).
+
+- [ ] Fire on unlabeled native `<input|select|textarea>` (skip non-name-bearing input types).
+- [ ] Reuse the `enforce/*-no-name` accessible-name checks; do NOT flag layout elements.
+- [ ] Add a fixture from `numeric-input.tsx` (real) + an empty-`<td>` (must NOT flag — the react-doctor FP).
+- [ ] Corpus tier / WCAG SC (1.3.1 / 3.3.2) tagging consistent with `input-no-name`.
