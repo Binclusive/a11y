@@ -194,6 +194,35 @@ const HOST_TO_TYPE: Readonly<Record<string, ControlType>> = {
 };
 
 /**
+ * The native form-control intrinsics that get the input name-check directly —
+ * not via a resolved wrapper. jsx-a11y would normally own a bare `<input>`, but
+ * we don't run its `control-has-associated-label`, so an unlabeled native input
+ * slips through every recognition path in {@link classify}. We recognize EXACTLY
+ * these three lowercase tags and nothing else: a `<td>` / `<div>` is not a
+ * control, which is precisely why react-doctor's `control-has-associated-label`
+ * false-positives on layout cells and this never can.
+ */
+const NATIVE_FORM_CONTROLS: ReadonlySet<string> = new Set(["input", "select", "textarea"]);
+
+/**
+ * Native `<input>` `type` values that exempt it from the name check. submit /
+ * button / reset are named by their `value`; hidden / image are not text-name-
+ * bearing (an image input's name is alt's job); checkbox / radio are externally
+ * labelled toggles, skipped exactly as {@link TOGGLE_NAMES} are. A DYNAMIC
+ * `type={x}` is unknowable, so — uncertain → skip — it is exempt too. A MISSING
+ * `type` defaults to `"text"` and is NOT exempt: a bare text input must be named.
+ */
+const NAME_EXEMPT_INPUT_TYPES: ReadonlySet<string> = new Set([
+  "hidden",
+  "submit",
+  "button",
+  "reset",
+  "image",
+  "checkbox",
+  "radio",
+]);
+
+/**
  * Toggle controls — checkbox / switch / radio / toggle. These have a host of
  * `button` (Radix) or `input` (MUI/Chakra), so they'd otherwise be checked as a
  * button or a text input. But a toggle's accessible name almost always comes
@@ -273,6 +302,16 @@ function classify(
   // convention — we can't verify their name at the call site, so skip them
   // outright before any host/name recognition claims them as button/input.
   if (TOGGLE_NAMES.has(leafName(tagName))) return null;
+
+  // Native form-control intrinsics (`<input>`/`<select>`/`<textarea>`) are real
+  // host controls jsx-a11y would own — but we don't run its
+  // `control-has-associated-label`, so an unlabelled one slips through. Route
+  // them through the SAME conservative input name-check `evaluate` runs for input
+  // HOSTS. The exact-three set means no other intrinsic (`<td>`/`<div>`) is ever
+  // claimed — the structural guard against the layout-cell false positives the
+  // stock rule produces. (`tagName` is the bare lowercase tag; a capitalized
+  // `Input` component is handled by resolution/registry below.)
+  if (NATIVE_FORM_CONTROLS.has(tagName)) return { type: "input", strength: "host" };
 
   // The local binding (namespace local for `NS.Member`).
   const local = tagName.includes(".") ? tagName.slice(0, tagName.indexOf(".")) : tagName;
@@ -406,6 +445,75 @@ function anyNameAttr(
   names: readonly string[],
 ): boolean {
   return names.some((n) => attrState(opening, sf, n) !== "missing");
+}
+
+/**
+ * Whether an input's `type` exempts it from the name check (see
+ * {@link NAME_EXEMPT_INPUT_TYPES}). A static exempt value or a dynamic
+ * `type={x}` (unknowable → skip) exempts; a missing or non-exempt static `type`
+ * does not. Only meaningful for inputs — `<select>`/`<textarea>` carry no `type`,
+ * so this is always `false` for them (they are always checked).
+ */
+function isNameExemptInputType(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  sf: ts.SourceFile,
+): boolean {
+  for (const attr of opening.attributes.properties) {
+    if (!ts.isJsxAttribute(attr) || attr.name.getText(sf) !== "type") continue;
+    const init = attr.initializer;
+    if (init === undefined) return false; // bare `type` — degenerate, treat as text
+    if (ts.isStringLiteral(init)) return NAME_EXEMPT_INPUT_TYPES.has(init.text.trim().toLowerCase());
+    if (ts.isJsxExpression(init)) {
+      const expr = init.expression;
+      if (expr !== undefined && ts.isStringLiteral(expr)) {
+        return NAME_EXEMPT_INPUT_TYPES.has(expr.text.trim().toLowerCase());
+      }
+      return true; // `type={x}` — unknowable, exempt (uncertain → skip)
+    }
+    return true;
+  }
+  return false; // no `type` → defaults to "text" → checked
+}
+
+/**
+ * Whether a control is statically HIDDEN or removed from the tab order, so an
+ * absent label is not a real finding (uncertain → skip, FN-safe):
+ *   - `tabIndex={-1}` / `tabIndex="-1"` — not keyboard-reachable in normal flow;
+ *     in practice a hidden sentinel (react-select's required-field `<input>`) or
+ *     a programmatically-focused target, externally driven, not a typed control;
+ *   - the HTML `hidden` attribute (bare or `={true}`) — not rendered;
+ *   - a `display:none` utility class (the standalone `hidden` token, Tailwind &
+ *     co.) — removed from the accessibility tree, so it is never announced.
+ * This mirrors the wide-sample false positives the native-control path would
+ * otherwise produce (~7%): all six were one of these three shapes.
+ */
+function isHiddenOrUntabbable(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  sf: ts.SourceFile,
+): boolean {
+  for (const attr of opening.attributes.properties) {
+    if (!ts.isJsxAttribute(attr)) continue;
+    const name = attr.name.getText(sf);
+    const init = attr.initializer;
+    if (name === "hidden") {
+      if (init === undefined) return true; // bare `hidden`
+      if (ts.isJsxExpression(init) && init.expression?.kind === ts.SyntaxKind.TrueKeyword) return true;
+      continue;
+    }
+    if (name === "tabIndex" && init !== undefined) {
+      if (init.getText(sf).replace(/[{}"'\s]/g, "") === "-1") return true;
+      continue;
+    }
+    if (name === "className" || name === "class") {
+      let str: string | null = null;
+      if (init !== undefined && ts.isStringLiteral(init)) str = init.text;
+      else if (init !== undefined && ts.isJsxExpression(init) && init.expression !== undefined && ts.isStringLiteral(init.expression)) {
+        str = init.expression.text;
+      }
+      if (str !== null && /(^|\s)hidden(\s|$)/.test(str)) return true;
+    }
+  }
+  return false;
 }
 
 /** The accessible-name attributes that, if present/dynamic, satisfy a control. */
@@ -597,6 +705,77 @@ const RULES: Record<string, EnforceRule> = {
   },
 };
 
+/**
+ * Landmark / structural ARIA roles that ONE native HTML element provides
+ * implicitly — the SAFE subset of `prefer-tag-over-role`. Deliberately excludes
+ * widget roles (`combobox`, `img`, `status`, `presentation`, `menu`, `dialog`…):
+ * those have no single clean native tag, or the role override IS the correct
+ * pattern — an inline `<svg role="img" aria-label>` must NOT become `<img>`.
+ * Running the stock jsx-a11y rule over every role is ~90% noise on real apps
+ * (it fires on exactly those svg/status/combobox shapes); this is the landmark
+ * slice that is unambiguous. `natives` are the tags already carrying the role.
+ */
+const SAFE_ROLE_TO_TAG: Readonly<
+  Record<string, { readonly suggest: string; readonly natives: readonly string[] }>
+> = {
+  region: { suggest: "<section>", natives: ["section"] },
+  navigation: { suggest: "<nav>", natives: ["nav"] },
+  banner: { suggest: "<header>", natives: ["header"] },
+  contentinfo: { suggest: "<footer>", natives: ["footer"] },
+  main: { suggest: "<main>", natives: ["main"] },
+  article: { suggest: "<article>", natives: ["article"] },
+  list: { suggest: "<ul>/<ol>", natives: ["ul", "ol", "menu"] },
+  listitem: { suggest: "<li>", natives: ["li"] },
+  button: { suggest: "<button>", natives: ["button"] },
+  heading: { suggest: "<h1>–<h6>", natives: ["h1", "h2", "h3", "h4", "h5", "h6"] },
+};
+
+const PREFER_TAG_RULE_ID = "enforce/prefer-tag-over-role";
+const PREFER_TAG_WCAG: readonly string[] = ["1.3.1"];
+
+/**
+ * prefer-tag-over-role (scoped): a BARE intrinsic element (`<div>`/`<span>`/…)
+ * carrying a static landmark/structural `role` a native tag provides implicitly
+ * should use that tag. Fires ONLY on intrinsics (a resolved `<Button
+ * role="combobox">` is a component — its semantics are the component's job, and
+ * combobox is not a safe role anyway), ONLY for {@link SAFE_ROLE_TO_TAG}, and
+ * never when the element ALREADY is a native equivalent (`<section
+ * role="region">`). Returns the `role` attribute's line (the precise fix locus)
+ * plus a per-role message, or null.
+ */
+function preferTagOverRole(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  sf: ts.SourceFile,
+): { readonly line: number; readonly message: string } | null {
+  if (!ts.isIdentifier(opening.tagName)) return null; // intrinsic only (no NS.Member)
+  const tag = opening.tagName.text;
+  if (!/^[a-z]/.test(tag)) return null; // lowercase = intrinsic host element
+  for (const attr of opening.attributes.properties) {
+    if (!ts.isJsxAttribute(attr) || attr.name.getText(sf) !== "role") continue;
+    const init = attr.initializer;
+    let value: string | null = null;
+    if (init !== undefined && ts.isStringLiteral(init)) value = init.text.trim().toLowerCase();
+    else if (
+      init !== undefined &&
+      ts.isJsxExpression(init) &&
+      init.expression !== undefined &&
+      ts.isStringLiteral(init.expression)
+    ) {
+      value = init.expression.text.trim().toLowerCase();
+    }
+    if (value === null) return null; // dynamic / missing role value
+    const native = SAFE_ROLE_TO_TAG[value];
+    if (native === undefined) return null; // not a safe landmark role
+    if (native.natives.includes(tag)) return null; // already the native element
+    const line = sf.getLineAndCharacterOfPosition(attr.getStart(sf)).line + 1;
+    return {
+      line,
+      message: `This <${tag}> sets role="${value}", which ${native.suggest} conveys natively. Use ${native.suggest} instead of the role so the semantics work without ARIA (corpus: 1.3.1-prefer-tag-over-role).`,
+    };
+  }
+  return null;
+}
+
 /** What `evaluate` needs to know about the element's surroundings. */
 interface EvalContext {
   /** How confidently the control was recognized (host = proven, name = weak). */
@@ -697,7 +876,15 @@ function evaluate(
       return RULES.dialogNoName;
     }
     case "input": {
-      // Inputs only reach here via a real input HOST (never the name heuristic).
+      // Inputs reach here via a real input HOST — a resolved wrapper, or a native
+      // `<input>`/`<select>`/`<textarea>` intrinsic (never the name heuristic).
+      // A submit/button/reset is named by its `value`, hidden/image/checkbox/radio
+      // are not text-name-bearing or are externally-labelled toggles — exempt by
+      // `type` before any name check (a `<input type="submit"/>` is not nameless).
+      if (isNameExemptInputType(opening, sf)) return null;
+      // Hidden / untabbable controls (display:none, `hidden`, `tabIndex={-1}`
+      // sentinels) aren't operable/announced controls — an absent label is moot.
+      if (isHiddenOrUntabbable(opening, sf)) return null;
       // A name can come from aria-label/labelledby, a label/title prop, an id
       // paired with a <label for>, OR a label ANCESTOR (FormLabel/Box as="label").
       // Any of those = "could be labelled" -> conservative skip; placeholder is
@@ -706,10 +893,20 @@ function evaluate(
       if (anyNameAttr(opening, sf, NAME_ATTRS)) return null;
       if (attrState(opening, sf, "label") !== "missing") return null;
       if (attrState(opening, sf, "id") !== "missing") return null;
-      // A real text input is self-closing. CHILDREN on an input-host element
-      // mean a composite control that labels itself with its content — skip
-      // (this is conservative; genuine text inputs never carry children).
-      if (ts.isJsxElement(element) && element.children.some((c) => !isWhitespace(c))) return null;
+      // CHILDREN on a WRAPPER input host mean a composite that labels itself with
+      // its content — skip (conservative; a real text input is self-closing). But
+      // a NATIVE `<select>`/`<textarea>` ALWAYS has children — its `<option>`s or
+      // default value — which are NOT a label, so the guard must not reach them,
+      // or every native select/textarea would go unchecked.
+      const isNativeFormControl =
+        ts.isIdentifier(opening.tagName) && NATIVE_FORM_CONTROLS.has(opening.tagName.text);
+      if (
+        !isNativeFormControl &&
+        ts.isJsxElement(element) &&
+        element.children.some((c) => !isWhitespace(c))
+      ) {
+        return null;
+      }
       return RULES.inputNoName;
     }
   }
@@ -804,6 +1001,69 @@ function isNameInjectingWrapper(
   return attrState(opening, sf, "title") !== "missing" || anyNameAttr(opening, sf, LABEL_ATTRS);
 }
 
+/** A located enforce finding before it is decorated with file/enforcement/provenance. */
+interface EnforceFinding {
+  readonly line: number;
+  readonly ruleId: string;
+  readonly message: string;
+  readonly wcag: readonly string[];
+}
+
+/** Everything an element check needs about one JSX element and its surroundings. */
+interface ElementCheckArgs {
+  readonly info: OpeningInfo;
+  /** The JSX tag (`div`, `Button`, `NS.Member`), already flattened. */
+  readonly tag: string;
+  readonly sf: ts.SourceFile;
+  readonly imports: ReadonlyMap<string, ImportBinding>;
+  readonly resolvedHosts: ReadonlyMap<string, ResolvedHost>;
+  /** Enclosing `<label>`/form-field depth; > 0 ⇒ an input here is labelled by an ancestor. */
+  readonly labelDepth: number;
+  /** Enclosing titled-`<Tooltip>` depth; > 0 ⇒ a control here is named at runtime. */
+  readonly nameAncestorDepth: number;
+}
+
+/**
+ * One enforce rule, as a pure `(element) -> finding | null`. This is the seam
+ * that keeps the visitor open/closed: a new rule is a new check appended to
+ * {@link ELEMENT_CHECKS}, never a new branch threaded through the walk. Each
+ * check owns its own rule id, WCAG, message, AND reported line (control-name
+ * reports the element opening; prefer-tag the role attribute).
+ */
+type ElementCheck = (args: ElementCheckArgs) => EnforceFinding | null;
+
+/**
+ * Control-name family: `classify` the tag to a control type, then `evaluate`
+ * whether that control lacks an accessible name. The original enforce rule set
+ * (button/input/link/image/dialog), sourcing its metadata from {@link RULES}.
+ */
+const controlNameCheck: ElementCheck = (a) => {
+  const recognized = classify(a.tag, a.resolvedHosts, a.imports);
+  if (recognized === null) return null;
+  const rule = evaluate(recognized.type, a.info, a.sf, a.imports, {
+    strength: recognized.strength,
+    hasLabelAncestor: a.labelDepth > 0,
+    hasNameAncestor: a.nameAncestorDepth > 0,
+  });
+  if (rule === null) return null;
+  const line = a.sf.getLineAndCharacterOfPosition(a.info.opening.getStart(a.sf)).line + 1;
+  return { line, ruleId: rule.ruleId, message: rule.message, wcag: rule.wcag };
+};
+
+/** prefer-tag-over-role family: a bare intrinsic with a landmark role + native tag. */
+const preferTagCheck: ElementCheck = (a) => {
+  const ptr = preferTagOverRole(a.info.opening, a.sf);
+  if (ptr === null) return null;
+  return { line: ptr.line, ruleId: PREFER_TAG_RULE_ID, message: ptr.message, wcag: PREFER_TAG_WCAG };
+};
+
+/**
+ * Every enforce element check, run against EVERY JSX element in source order.
+ * To add a rule, append a check here — the visitor neither knows nor cares what
+ * each one does. Order is finding order, so keep the original families first.
+ */
+const ELEMENT_CHECKS: readonly ElementCheck[] = [controlNameCheck, preferTagCheck];
+
 /**
  * Run the enforce content check across the given `.tsx` files. Produces a
  * `Finding` per clear, static, app-owned content gap on a recognized control —
@@ -834,7 +1094,6 @@ export function enforceContent(filePaths: readonly string[], ctx: EnforceContext
       ...transInjectedLineRanges(sf, injectsChildren),
       ...ariaHiddenLineRanges(sf),
     ];
-    const lineOf = (pos: number): number => sf.getLineAndCharacterOfPosition(pos).line + 1;
     const isSuppressed = (line: number): boolean =>
       suppressed.some((r) => line >= r.start && line <= r.end);
 
@@ -865,22 +1124,25 @@ export function enforceContent(filePaths: readonly string[], ctx: EnforceContext
             ? `${tagNode.expression.text}.${tagNode.name.text}`
             : null;
         if (tag !== null) {
-          const recognized = classify(tag, resolvedHosts, imports);
-          if (recognized !== null) {
-            const rule = evaluate(recognized.type, info, sf, imports, {
-              strength: recognized.strength,
-              hasLabelAncestor: labelDepth > 0,
-              hasNameAncestor: nameAncestorDepth > 0,
-            });
-            const line = lineOf(info.opening.getStart(sf));
-            if (rule !== null && !isSuppressed(line)) {
+          const args: ElementCheckArgs = {
+            info,
+            tag,
+            sf,
+            imports,
+            resolvedHosts,
+            labelDepth,
+            nameAncestorDepth,
+          };
+          for (const check of ELEMENT_CHECKS) {
+            const finding = check(args);
+            if (finding !== null && !isSuppressed(finding.line)) {
               out.push({
                 file: filePath,
-                line,
-                ruleId: rule.ruleId,
-                message: rule.message,
-                wcag: rule.wcag,
-                enforcement: enforcementFor(rule.wcag, ctx.contract),
+                line: finding.line,
+                ruleId: finding.ruleId,
+                message: finding.message,
+                wcag: finding.wcag,
+                enforcement: enforcementFor(finding.wcag, ctx.contract),
                 provenance: "enforce",
               });
             }

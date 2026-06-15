@@ -4,7 +4,12 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { isIconLibrary, isStructural, lookupGuaranteed, lookupRegistry } from "../src/registry";
 import { resolveComponents } from "../src/resolve-components";
-import { collectLocalImports, resolveRoute, traceComponent } from "../src/source-trace";
+import {
+  collectLocalImports,
+  resolveRoute,
+  traceComponent,
+  traceWrapperOrigin,
+} from "../src/source-trace";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, "fixtures");
@@ -13,6 +18,7 @@ const myButton = join(fixtures, "my-button.tsx");
 const fancyLink = join(fixtures, "forwardref-link.tsx");
 const opaqueBuckets = join(fixtures, "opaque-buckets.tsx");
 const roleToggleConsumer = join(fixtures, "role-toggle-consumer.tsx");
+const shadcnConsumer = join(fixtures, "shadcn-consumer.tsx");
 
 function sourceFileOf(path: string): ts.SourceFile {
   const text = ts.sys.readFile(path);
@@ -98,6 +104,47 @@ describe("source-trace: carries a toggle role through the trace (#5)", () => {
     expect(map.RoleSwitch).toBeUndefined();
     // A plain button (no toggle role) is mapped exactly as before.
     expect(map.PlainButton).toBe("button");
+  });
+});
+
+describe("source-trace: barrel-origin of shadcn-style re-exports (senchabot)", () => {
+  it("follows a `const X = NS.Member` value alias to the namespace's module", () => {
+    // const Dialog = DialogPrimitive.Root  →  @radix-ui/react-dialog
+    expect(traceWrapperOrigin("./shadcn-barrel", "Dialog", consumer)).toBe(
+      "@radix-ui/react-dialog",
+    );
+  });
+
+  it("follows a single-tag forwardRef wrapper to the inner primitive's module", () => {
+    // const DialogTitle = forwardRef((p,ref) => <DialogPrimitive.Title {...p}/>)
+    expect(traceWrapperOrigin("./shadcn-barrel", "DialogTitle", consumer)).toBe(
+      "@radix-ui/react-dialog",
+    );
+  });
+
+  it("returns null for a genuine multi-element composite (no over-promotion)", () => {
+    // DialogPanel renders Portal + Overlay + Content — not thin, stays declare.
+    expect(traceWrapperOrigin("./shadcn-barrel", "DialogPanel", consumer)).toBeNull();
+  });
+});
+
+describe("resolveComponents: own-code barrel re-export → trusted (senchabot regression)", () => {
+  it("buckets Radix re-exported through a local barrel as trusted, composite as declare", () => {
+    const { resolutions } = resolveComponents([shadcnConsumer]);
+    const byName = new Map(resolutions.map((r) => [r.name, r]));
+
+    // The value alias and the thin forwardRef wrapper resolve to Radix → trusted,
+    // even though the call site imports them from the local `./shadcn-barrel`.
+    for (const name of ["Dialog", "DialogTitle"]) {
+      const r = byName.get(name);
+      expect(r?.provenance).toBe("opaque");
+      expect(r?.provenance === "opaque" && r.opaqueKind).toBe("trusted");
+      expect(r?.provenance === "opaque" && r.library).toBe("Radix");
+    }
+
+    // The multi-element composite is NOT vouched for — it stays a real unknown.
+    const panel = byName.get("DialogPanel");
+    expect(panel?.provenance === "opaque" && panel.opaqueKind).toBe("declare");
   });
 });
 

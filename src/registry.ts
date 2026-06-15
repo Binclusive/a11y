@@ -294,6 +294,10 @@ export const GUARANTEED_LIBRARIES: readonly GuaranteedLibrary[] = [
   // Headless UI — the single `@headlessui/react` package; every export is an
   // accessible-by-construction primitive of this one design system.
   { library: "HeadlessUI", module: "@headlessui/react", guaranteedBy: true },
+  // cmdk — the command-menu primitive (`Command`, `Command.Input/List/Item/…`)
+  // shadcn's `command.tsx` wraps. An accessible-by-construction combobox/listbox;
+  // the single `cmdk` package, every export a primitive of this one library.
+  { library: "cmdk", module: "cmdk", guaranteedBy: true },
 ] as const;
 
 /**
@@ -454,6 +458,16 @@ const STRUCTURAL_MODULES: readonly string[] = [
   "@ant-design/plots",
   "@ant-design/charts",
   "@react-email",
+  // sonner — the `Toaster` is a transient toast region mounted once at the app
+  // root, not an interactive control on the page; its only other export is the
+  // imperative `toast()` fn. No host to check → plumbing, not a `declare` gap.
+  "sonner",
+  // nextjs-toploader — a top-of-page route-progress bar. Renders no interactive
+  // control; mounted once at the root, like the toast region above.
+  "nextjs-toploader",
+  // @next/third-parties — Google Analytics / Tag Manager `<script>` injectors.
+  // They mount tracking scripts, not interactive UI; no host to check.
+  "@next/third-parties",
 ];
 
 /** The leaf of a JSX name (`NS.Member` -> `Member`, else the name itself). */

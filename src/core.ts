@@ -16,6 +16,7 @@ import { type Coverage, type ResolvedComponents, resolveComponents } from "./res
 import {
   ariaHiddenLineRanges,
   isContentSuppressed,
+  spreadChildrenLineRanges,
   transInjectedLineRanges,
 } from "./suppression-ranges";
 import { wcagForRuleId } from "./wcag-map";
@@ -110,6 +111,11 @@ const SCORED_RULES: readonly string[] = [
   "no-static-element-interactions",
   "heading-has-content",
 ];
+// NOTE: jsx-a11y's `prefer-tag-over-role` is deliberately NOT enabled here. Run
+// wholesale it is ~90% noise — it fires on `<svg role="img" aria-label>` (the
+// correct accessible-SVG pattern), `role="status"`, custom `role="combobox"`
+// widgets, etc. We ship a SCOPED version instead (`enforce/prefer-tag-over-role`
+// in enforce.ts) limited to landmark/structural roles with one clean native tag.
 
 function buildRuleConfig(): Linter.RulesRecord {
   const rules: Linter.RulesRecord = {};
@@ -243,6 +249,7 @@ export async function scan(filePaths: readonly string[]): Promise<ScanResult> {
             return [
               ...transInjectedLineRanges(file, injectsChildren),
               ...ariaHiddenLineRanges(file),
+              ...spreadChildrenLineRanges(file),
             ];
           })();
     suppressRangesCache.set(filePath, ranges);

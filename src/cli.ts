@@ -575,7 +575,9 @@ async function runInit(suggest: boolean, dirArg: string): Promise<void> {
 function printSuggestions(result: SuggestResult): void {
   const { suggestions, skipped } = result;
   if (suggestions.length === 0) {
-    console.log("  no leaf-primitive components to suggest (all composite or already declared)");
+    console.log(
+      "  no leaf primitives to hand-map — they're already recognized (registry / trace / trusted library) or composite",
+    );
   } else {
     console.log(
       `  suggested ${suggestions.length} component mapping${suggestions.length === 1 ? "" : "s"} (review them — especially the ⚠):`,

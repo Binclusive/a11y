@@ -8,7 +8,12 @@ import {
   lookupGuaranteed,
   lookupRegistry,
 } from "./registry";
-import { collectLocalImports, resolveRoute, traceComponent } from "./source-trace";
+import {
+  collectLocalImports,
+  resolveRoute,
+  traceComponent,
+  traceWrapperOrigin,
+} from "./source-trace";
 
 /**
  * Resolve, for a set of scanned files, every wrapper component used in JSX to
@@ -448,13 +453,44 @@ export function resolveComponents(
       const isIcons = isIconLibrary(used.module);
       const isPlumbing = !isIcons && isStructural(used.local, used.module);
       const guaranteedLib = isIcons || isPlumbing ? null : lookupGuaranteed(used.module);
-      const opaqueKind: OpaqueKind = isIcons
+      let opaqueKind: OpaqueKind = isIcons
         ? "icons"
         : isPlumbing
           ? "structural"
           : guaranteedLib !== null
             ? "trusted"
             : "declare";
+      let opaqueLibrary = guaranteedLib;
+
+      // Own-code barrel re-export reclassification. The buckets above key on the
+      // literal import specifier, so a local `@/components/ui/dialog` wrapper that
+      // is just a thin alias of a guaranteed primitive (`const Dialog =
+      // DialogPrimitive.Root`) wears its OWN `@/…` specifier and reads `declare` —
+      // even though it is Radix underneath. Follow the wrapper to its ORIGIN
+      // module and re-bucket THERE: the honest classification is where the
+      // primitive really lives. Thin-only (see `traceWrapperOrigin`) — a genuine
+      // app composite resolves to no single origin and stays `declare`, never
+      // promoted. Same icons→structural→trusted precedence as above, run on the
+      // origin module; if the origin is itself unknown, the `declare` stands.
+      if (opaqueKind === "declare") {
+        const origin = traceWrapperOrigin(used.module, used.imported, filePath);
+        if (origin !== null) {
+          const originIcons = isIconLibrary(origin);
+          const originPlumbing = !originIcons && isStructural(used.local, origin);
+          const originGuaranteed =
+            originIcons || originPlumbing ? null : lookupGuaranteed(origin);
+          if (originIcons) {
+            opaqueKind = "icons";
+            opaqueLibrary = null;
+          } else if (originPlumbing) {
+            opaqueKind = "structural";
+            opaqueLibrary = null;
+          } else if (originGuaranteed !== null) {
+            opaqueKind = "trusted";
+            opaqueLibrary = originGuaranteed;
+          }
+        }
+      }
       // When a component lands in `declare` because its specifier is a DECLARED
       // dependency that resolveRoute can't reach on disk (uninstalled — shallow
       // clone / fresh checkout), record the package so the CLI can surface an
@@ -478,7 +514,7 @@ export function resolveComponents(
         host: null,
         provenance: "opaque",
         opaqueKind,
-        library: guaranteedLib,
+        library: opaqueLibrary,
       });
     }
   }
