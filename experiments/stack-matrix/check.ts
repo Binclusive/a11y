@@ -66,7 +66,23 @@ function main() {
     console.log("");
   }
 
-  const current = toBaseline(loadResults());
+  const raw = loadResults();
+
+  // Pin integrity: a repo that fell back to a floating branch clone (fetch-by-sha
+  // refused) is no longer frozen at its manifest sha, so its delta could be
+  // upstream drift, not your code — the exact thing pinning exists to rule out.
+  // Surface it; do not let it pass silently as a code regression.
+  const unpinned = Object.values(raw)
+    .filter((r) => r.pinned === false && !r.error)
+    .map((r) => r.repo);
+  if (unpinned.length > 0) {
+    console.log(
+      `⚠ ${unpinned.length} repo(s) NOT pinned to manifest sha — their deltas may reflect ` +
+        `upstream drift, not your change: ${unpinned.join(", ")}\n`,
+    );
+  }
+
+  const current = toBaseline(raw);
   const { deltas, unchanged } = diffBaseline(current, baseline);
 
   if (deltas.length === 0) {

@@ -30,6 +30,8 @@ interface Finding {
 interface RawResult {
   repo: string;
   sha?: string;
+  /** Whether the clone is parked at the manifest sha. false ⇒ delta may be drift. */
+  pinned?: boolean;
   coverage?: { checked: number; trusted: number; declare: number; icons: number; structural: number; total: number };
   findings?: Finding[];
   summary?: { findings: number; blocking: number; warning: number };
