@@ -1,0 +1,598 @@
+{
+  "BoringBoredom/UEFI-Editor": {
+    "sha": "44e8c9ba4a05dbd6fc4b1c247ed17948b6e58f8d",
+    "findings": 2,
+    "blocking": 2,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 23,
+      "declare": 7,
+      "icons": 4,
+      "structural": 2,
+      "total": 36
+    },
+    "byRule": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "error": null
+  },
+  "DarkInventor/easy-ui": {
+    "sha": "0bfdd128fcb7c0ec36cc0c77ed0081b4b280ec29",
+    "findings": 57,
+    "blocking": 57,
+    "warning": 0,
+    "coverage": {
+      "checked": 27,
+      "trusted": 51,
+      "declare": 105,
+      "icons": 81,
+      "structural": 4,
+      "total": 268
+    },
+    "byRule": {
+      "enforce/button-no-name": 35,
+      "enforce/input-no-name": 4,
+      "jsx-a11y/alt-text": 1,
+      "jsx-a11y/anchor-has-content": 1,
+      "jsx-a11y/anchor-is-valid": 3,
+      "jsx-a11y/heading-has-content": 9,
+      "jsx-a11y/label-has-associated-control": 4
+    },
+    "error": null
+  },
+  "EmaSuriano/gatsby-starter-mate": {
+    "sha": "c2eaec646179faac082a1b2d2216bece547b25f2",
+    "findings": 0,
+    "blocking": 0,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 0,
+      "declare": 34,
+      "icons": 0,
+      "structural": 1,
+      "total": 35
+    },
+    "byRule": {},
+    "error": null
+  },
+  "StenAL/new-tab": {
+    "sha": "52b1a9a87f4ca906c204f4a300b339f2a7ecc3b0",
+    "findings": 1,
+    "blocking": 1,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 0,
+      "declare": 7,
+      "icons": 0,
+      "structural": 3,
+      "total": 10
+    },
+    "byRule": {
+      "jsx-a11y/click-events-have-key-events": 1
+    },
+    "error": null
+  },
+  "Supernova3339/changerawr": {
+    "sha": "a72f1c9e9084bfbc3cfc61f47fabad2c66243a64",
+    "findings": 142,
+    "blocking": 142,
+    "warning": 0,
+    "coverage": {
+      "checked": 40,
+      "trusted": 77,
+      "declare": 174,
+      "icons": 180,
+      "structural": 33,
+      "total": 504
+    },
+    "byRule": {
+      "enforce/button-no-name": 66,
+      "enforce/input-no-name": 4,
+      "enforce/link-no-name": 3,
+      "jsx-a11y/anchor-has-content": 5,
+      "jsx-a11y/anchor-is-valid": 6,
+      "jsx-a11y/click-events-have-key-events": 24,
+      "jsx-a11y/heading-has-content": 1,
+      "jsx-a11y/label-has-associated-control": 8,
+      "jsx-a11y/no-static-element-interactions": 24,
+      "jsx-a11y/role-has-required-aria-props": 1
+    },
+    "error": null
+  },
+  "agarun/turborepo-vite-starter": {
+    "sha": "b806f34e2a467e99033ddd3cb6aac6b4dcb529d6",
+    "findings": 0,
+    "blocking": 0,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 3,
+      "declare": 6,
+      "icons": 0,
+      "structural": 1,
+      "total": 10
+    },
+    "byRule": {},
+    "error": null
+  },
+  "alibaba/lowcode-demo": {
+    "sha": "680a8b4b8f315deed49f88833f488d4de373b857",
+    "findings": 15,
+    "blocking": 15,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 0,
+      "declare": 21,
+      "icons": 0,
+      "structural": 0,
+      "total": 21
+    },
+    "byRule": {
+      "jsx-a11y/alt-text": 8,
+      "jsx-a11y/anchor-has-content": 7
+    },
+    "error": null
+  },
+  "antiwork/shortest": {
+    "sha": "45a8dcfe89992b37ed2dfb1f76618048cff0f45c",
+    "findings": 4,
+    "blocking": 4,
+    "warning": 0,
+    "coverage": {
+      "checked": 9,
+      "trusted": 12,
+      "declare": 22,
+      "icons": 19,
+      "structural": 2,
+      "total": 64
+    },
+    "byRule": {
+      "enforce/button-no-name": 1,
+      "enforce/input-no-name": 1,
+      "jsx-a11y/heading-has-content": 1,
+      "jsx-a11y/role-has-required-aria-props": 1
+    },
+    "error": null
+  },
+  "corbt/agent.exe": {
+    "sha": "e2440622aa0206b9c9223c776f89cb511bbc9f8b",
+    "findings": 2,
+    "blocking": 2,
+    "warning": 0,
+    "coverage": {
+      "checked": 3,
+      "trusted": 5,
+      "declare": 3,
+      "icons": 5,
+      "structural": 3,
+      "total": 19
+    },
+    "byRule": {
+      "enforce/button-no-name": 2
+    },
+    "error": null
+  },
+  "creativetimofficial/purity-ui-dashboard": {
+    "sha": "",
+    "findings": 0,
+    "blocking": 0,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 0,
+      "declare": 0,
+      "icons": 0,
+      "structural": 0,
+      "total": 0
+    },
+    "byRule": {},
+    "error": "no .tsx files found in clone"
+  },
+  "elastic/synthetics-recorder": {
+    "sha": "cbe360ccffb288a5e5bbb2413283bed2b6c3ea22",
+    "findings": 1,
+    "blocking": 1,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 0,
+      "declare": 82,
+      "icons": 0,
+      "structural": 11,
+      "total": 93
+    },
+    "byRule": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "error": null
+  },
+  "googleanalytics/ga-dev-tools": {
+    "sha": "14217f42eca6358cfa973ce0e65bc128038ba42e",
+    "findings": 4,
+    "blocking": 4,
+    "warning": 0,
+    "coverage": {
+      "checked": 6,
+      "trusted": 44,
+      "declare": 102,
+      "icons": 26,
+      "structural": 6,
+      "total": 184
+    },
+    "byRule": {
+      "enforce/button-no-name": 2,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "error": null
+  },
+  "guangqiang-liu/OneM": {
+    "sha": "",
+    "findings": 0,
+    "blocking": 0,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 0,
+      "declare": 0,
+      "icons": 0,
+      "structural": 0,
+      "total": 0
+    },
+    "byRule": {},
+    "error": "no .tsx files found in clone"
+  },
+  "hathora/builder": {
+    "sha": "a4182519ea1e4381def6484ba46a09a16f930769",
+    "findings": 7,
+    "blocking": 7,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 5,
+      "declare": 20,
+      "icons": 1,
+      "structural": 4,
+      "total": 30
+    },
+    "byRule": {
+      "jsx-a11y/alt-text": 5,
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "error": null
+  },
+  "horizon-ui/horizon-ui-chakra": {
+    "sha": "",
+    "findings": 0,
+    "blocking": 0,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 0,
+      "declare": 0,
+      "icons": 0,
+      "structural": 0,
+      "total": 0
+    },
+    "byRule": {},
+    "error": "no .tsx files found in clone"
+  },
+  "iamzhihuix/skills-manage": {
+    "sha": "467d0423beaf71a31c520d4e3795ec88acae5ab2",
+    "findings": 12,
+    "blocking": 12,
+    "warning": 0,
+    "coverage": {
+      "checked": 11,
+      "trusted": 0,
+      "declare": 83,
+      "icons": 57,
+      "structural": 7,
+      "total": 158
+    },
+    "byRule": {
+      "jsx-a11y/click-events-have-key-events": 5,
+      "jsx-a11y/label-has-associated-control": 2,
+      "jsx-a11y/no-static-element-interactions": 4,
+      "jsx-a11y/role-supports-aria-props": 1
+    },
+    "error": null
+  },
+  "jaiarobotics/jaiabot": {
+    "sha": "1df70c4068c7ade04dc749a9ee0a2da271eb4661",
+    "findings": 87,
+    "blocking": 87,
+    "warning": 0,
+    "coverage": {
+      "checked": 5,
+      "trusted": 21,
+      "declare": 118,
+      "icons": 1,
+      "structural": 4,
+      "total": 149
+    },
+    "byRule": {
+      "jsx-a11y/alt-text": 7,
+      "jsx-a11y/click-events-have-key-events": 38,
+      "jsx-a11y/label-has-associated-control": 4,
+      "jsx-a11y/no-static-element-interactions": 38
+    },
+    "error": null
+  },
+  "jolbol1/jolly-ui": {
+    "sha": "aac97a84f8e0c2071a5e255c2f6ec190e238c1c2",
+    "findings": 315,
+    "blocking": 315,
+    "warning": 0,
+    "coverage": {
+      "checked": 88,
+      "trusted": 80,
+      "declare": 325,
+      "icons": 90,
+      "structural": 6,
+      "total": 589
+    },
+    "byRule": {
+      "enforce/button-no-name": 89,
+      "enforce/input-no-name": 120,
+      "jsx-a11y/anchor-has-content": 9,
+      "jsx-a11y/anchor-is-valid": 85,
+      "jsx-a11y/heading-has-content": 12
+    },
+    "error": null
+  },
+  "kamp-us/phoenix": {
+    "sha": "083d6048c437ff701eedab755b059ce86ff0d63b",
+    "findings": 0,
+    "blocking": 0,
+    "warning": 0,
+    "coverage": {
+      "checked": 2,
+      "trusted": 0,
+      "declare": 107,
+      "icons": 0,
+      "structural": 10,
+      "total": 119
+    },
+    "byRule": {},
+    "error": null
+  },
+  "mantinedev/vite-template": {
+    "sha": "6e895de5f6f27b9b8bf4e3d9c19c10304b93fd7b",
+    "findings": 0,
+    "blocking": 0,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 5,
+      "declare": 6,
+      "icons": 0,
+      "structural": 2,
+      "total": 13
+    },
+    "byRule": {},
+    "error": null
+  },
+  "modagavr/pancake-wizard": {
+    "sha": "f9d36e6352eb5a05544aaee92a0b56368b67c82e",
+    "findings": 3,
+    "blocking": 3,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 2,
+      "declare": 6,
+      "icons": 1,
+      "structural": 1,
+      "total": 10
+    },
+    "byRule": {
+      "enforce/dialog-no-name": 2,
+      "jsx-a11y/label-has-associated-control": 1
+    },
+    "error": null
+  },
+  "olros/stats": {
+    "sha": "afb5dc7d00bbeff205187b1ce579966027789888",
+    "findings": 4,
+    "blocking": 4,
+    "warning": 0,
+    "coverage": {
+      "checked": 22,
+      "trusted": 46,
+      "declare": 64,
+      "icons": 7,
+      "structural": 14,
+      "total": 153
+    },
+    "byRule": {
+      "enforce/input-no-name": 2,
+      "jsx-a11y/heading-has-content": 2
+    },
+    "error": null
+  },
+  "patdx/edge-cms": {
+    "sha": "0b30389e5117c4a8bf1e17e2f2146348c269cb1d",
+    "findings": 1,
+    "blocking": 1,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 0,
+      "declare": 13,
+      "icons": 0,
+      "structural": 8,
+      "total": 21
+    },
+    "byRule": {
+      "jsx-a11y/anchor-is-valid": 1
+    },
+    "error": null
+  },
+  "rickypeng99/yugioh_web": {
+    "sha": "",
+    "findings": 0,
+    "blocking": 0,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 0,
+      "declare": 0,
+      "icons": 0,
+      "structural": 0,
+      "total": 0
+    },
+    "byRule": {},
+    "error": "no .tsx files found in clone"
+  },
+  "shadcn-ui/taxonomy": {
+    "sha": "298a8857c7128a0d121e7f699dfd729f23b3966d",
+    "findings": 14,
+    "blocking": 14,
+    "warning": 0,
+    "coverage": {
+      "checked": 31,
+      "trusted": 104,
+      "declare": 67,
+      "icons": 7,
+      "structural": 3,
+      "total": 212
+    },
+    "byRule": {
+      "enforce/input-no-name": 1,
+      "jsx-a11y/anchor-has-content": 1,
+      "jsx-a11y/anchor-is-valid": 3,
+      "jsx-a11y/heading-has-content": 9
+    },
+    "error": null
+  },
+  "sjohnston00/sorted": {
+    "sha": "14a962c6cc28cdefa76c96dda660f764352baf31",
+    "findings": 2,
+    "blocking": 2,
+    "warning": 0,
+    "coverage": {
+      "checked": 3,
+      "trusted": 5,
+      "declare": 36,
+      "icons": 8,
+      "structural": 5,
+      "total": 57
+    },
+    "byRule": {
+      "enforce/button-no-name": 1,
+      "jsx-a11y/alt-text": 1
+    },
+    "error": null
+  },
+  "steven-tey/precedent": {
+    "sha": "3be40205d7cdf56082cd284f07f12251b9208f79",
+    "findings": 1,
+    "blocking": 1,
+    "warning": 0,
+    "coverage": {
+      "checked": 2,
+      "trusted": 11,
+      "declare": 25,
+      "icons": 2,
+      "structural": 3,
+      "total": 43
+    },
+    "byRule": {
+      "jsx-a11y/anchor-has-content": 1
+    },
+    "error": null
+  },
+  "thomasgauvin/claude-agent-sdk-in-cloudflare-containers": {
+    "sha": "12f81a1205b086b596bb06f2b983c1cb993c1844",
+    "findings": 8,
+    "blocking": 8,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 0,
+      "declare": 12,
+      "icons": 6,
+      "structural": 5,
+      "total": 23
+    },
+    "byRule": {
+      "jsx-a11y/label-has-associated-control": 8
+    },
+    "error": null
+  },
+  "umijs/umi": {
+    "sha": "155dc3e52e81daa4de58282364519e252e89218e",
+    "findings": 162,
+    "blocking": 162,
+    "warning": 0,
+    "coverage": {
+      "checked": 13,
+      "trusted": 50,
+      "declare": 176,
+      "icons": 42,
+      "structural": 27,
+      "total": 308
+    },
+    "byRule": {
+      "enforce/button-no-name": 1,
+      "enforce/input-no-name": 14,
+      "jsx-a11y/alt-text": 6,
+      "jsx-a11y/anchor-is-valid": 57,
+      "jsx-a11y/click-events-have-key-events": 44,
+      "jsx-a11y/heading-has-content": 2,
+      "jsx-a11y/no-static-element-interactions": 38
+    },
+    "error": null
+  },
+  "untitleduico/react": {
+    "sha": "d97ce86cdf93fa8703c67610acfae5662c62793a",
+    "findings": 174,
+    "blocking": 174,
+    "warning": 0,
+    "coverage": {
+      "checked": 43,
+      "trusted": 63,
+      "declare": 424,
+      "icons": 0,
+      "structural": 28,
+      "total": 558
+    },
+    "byRule": {
+      "enforce/button-no-name": 15,
+      "enforce/dialog-no-name": 5,
+      "enforce/input-no-name": 4,
+      "jsx-a11y/anchor-has-content": 36,
+      "jsx-a11y/anchor-is-valid": 105,
+      "jsx-a11y/click-events-have-key-events": 3,
+      "jsx-a11y/heading-has-content": 1,
+      "jsx-a11y/no-static-element-interactions": 5
+    },
+    "error": null
+  },
+  "vikejs/bati": {
+    "sha": "10ee521892ec5db66def9cd75ec676999e9e8043",
+    "findings": 3,
+    "blocking": 3,
+    "warning": 0,
+    "coverage": {
+      "checked": 0,
+      "trusted": 9,
+      "declare": 27,
+      "icons": 0,
+      "structural": 3,
+      "total": 39
+    },
+    "byRule": {
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "error": null
+  }
+}

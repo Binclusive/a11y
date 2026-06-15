@@ -40,7 +40,9 @@
     "demo:record": "sh -c 'tsx demo/demo-kit.ts record \"${1:-demo/scenario.json}\"' _",
     "matrix:discover": "tsx experiments/stack-matrix/discover.ts",
     "matrix:run": "tsx experiments/stack-matrix/run.ts",
-    "matrix:report": "tsx experiments/stack-matrix/report.ts"
+    "matrix:report": "tsx experiments/stack-matrix/report.ts",
+    "matrix:baseline": "tsx experiments/stack-matrix/baseline.ts",
+    "matrix:check": "tsx experiments/stack-matrix/check.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.10.2",
