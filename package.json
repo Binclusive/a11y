@@ -37,7 +37,9 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "matrix:discover": "tsx experiments/stack-matrix/discover.ts",
     "matrix:run": "tsx experiments/stack-matrix/run.ts",
-    "matrix:report": "tsx experiments/stack-matrix/report.ts"
+    "matrix:report": "tsx experiments/stack-matrix/report.ts",
+    "matrix:baseline": "tsx experiments/stack-matrix/baseline.ts",
+    "matrix:check": "tsx experiments/stack-matrix/check.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.10.2",

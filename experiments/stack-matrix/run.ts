@@ -15,7 +15,7 @@
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { detectFramework } from "./matrix.ts";
@@ -41,22 +41,46 @@ interface ManifestEntry {
 
 const slug = (repo: string) => repo.replace("/", "__");
 
-/** Shallow-clone repo@branch into `dir`. Reuse if already present. */
-function cloneRepo(repo: string, branch: string, dir: string): void {
-  if (existsSync(join(dir, ".git"))) return; // reuse cache
-  execFileSync(
-    "git",
-    [
-      "clone",
-      "--depth",
-      "1",
-      "--branch",
-      branch,
-      `https://github.com/${repo}.git`,
-      dir,
-    ],
-    { stdio: "ignore", timeout: CLONE_TIMEOUT_MS },
-  );
+const git = (args: string[]) =>
+  execFileSync("git", args, { stdio: "ignore", timeout: CLONE_TIMEOUT_MS });
+
+/**
+ * Park a clone of `repo` at the EXACT pinned `sha` in `dir`. This is what makes
+ * the corpus a regression baseline rather than a moving benchmark: with every
+ * repo frozen at its manifest sha, the only thing that can move the checker's
+ * numbers is the checker's own code — never the upstream repo drifting.
+ *
+ * GitHub serves a fetch of a specific reachable sha (`fetch --depth 1 origin
+ * <sha>`), so we init + fetch-by-sha + checkout. If that is refused (a sha that
+ * has since been force-pushed away), we degrade to a shallow branch clone and
+ * record whatever HEAD we actually got — the result's `sha`/`pinned` fields make
+ * the drift visible rather than silent.
+ */
+function ensureRepoAt(repo: string, sha: string, branch: string, dir: string): void {
+  const url = `https://github.com/${repo}.git`;
+
+  if (existsSync(join(dir, ".git"))) {
+    if (headSha(dir) === sha) return; // cache already pinned
+    try {
+      git(["-C", dir, "fetch", "-q", "--depth", "1", "origin", sha]);
+      git(["-C", dir, "checkout", "-q", sha]);
+    } catch {
+      /* keep cached HEAD; result records the actual sha */
+    }
+    return;
+  }
+
+  try {
+    mkdirSync(dir, { recursive: true });
+    git(["-C", dir, "init", "-q"]);
+    git(["-C", dir, "remote", "add", "origin", url]);
+    git(["-C", dir, "fetch", "-q", "--depth", "1", "origin", sha]);
+    git(["-C", dir, "checkout", "-q", sha]);
+  } catch {
+    // Fetch-by-sha refused — fall back to a floating branch clone.
+    rmSync(dir, { recursive: true, force: true });
+    git(["clone", "--depth", "1", "--branch", branch, url, dir]);
+  }
 }
 
 /** Record the actual HEAD sha of a clone. */
@@ -189,7 +213,7 @@ function runChecker(srcDir: string): unknown {
   return JSON.parse(out.slice(start));
 }
 
-function main() {
+export function runAll() {
   mkdirSync(CACHE_DIR, { recursive: true });
   mkdirSync(RESULTS_DIR, { recursive: true });
 
@@ -201,7 +225,7 @@ function main() {
     const resultPath = join(RESULTS_DIR, `${slug(repo)}.json`);
 
     try {
-      cloneRepo(repo, defaultBranch, dir);
+      ensureRepoAt(repo, sha, defaultBranch, dir);
       const clonedSha = headSha(dir) || sha;
 
       const { dir: tsxRoot, files: tsxFiles } = findTsxRoot(dir);
@@ -222,6 +246,7 @@ function main() {
         designSystem,
         framework,
         sha: clonedSha,
+        pinned: clonedSha === sha,
         tsxRoot: relTsxRoot,
         stars,
         error: null as string | null,
@@ -244,4 +269,4 @@ function main() {
   }
 }
 
-main();
+if (import.meta.url === `file://${process.argv[1]}`) runAll();
