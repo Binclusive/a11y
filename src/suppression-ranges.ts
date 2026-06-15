@@ -140,7 +140,7 @@ export function transInjectedLineRanges(
       // Render-delegation: suppress the delegated element only when the host
       // element supplies children for it to render. A childless host means a
       // genuinely empty delegated element — leave that finding alone.
-      if (hostSuppliesChildren(node)) {
+      if (hasContentfulChildren(node)) {
         const delegated = renderPropElement(opening, sf);
         if (delegated !== null) recordElement(delegated);
       }
@@ -215,7 +215,26 @@ export function ariaHiddenLineRanges(sf: ts.SourceFile): LineRange[] {
  * element that already spells out children needs no spread to be contentful and
  * never fired a content finding anyway, so leaving it unrecorded keeps the range
  * set tight.
+ *
+ * Scoped to CONTENT-RULE CANDIDATES so the range set stays small: the suppressed
+ * {@link CONTENT_RULES} fire only on `<a>` / `<h1-6>`, so a spread on a `<div>` /
+ * `<button>` / `<td>` can never have a content finding to suppress. We keep the
+ * intrinsic `a` / `h1-6` tags AND any capitalized component — a component may
+ * resolve to `a` / a heading via the jsx-a11y `components` map (a shadcn
+ * `<Link {...props}/>` is reported as an anchor), and this pass can't see that
+ * map, so excluding components would re-open those false positives.
  */
+function isContentRuleCandidate(opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement): boolean {
+  const name = opening.tagName;
+  const tag = ts.isIdentifier(name)
+    ? name.text
+    : ts.isPropertyAccessExpression(name)
+      ? name.name.text
+      : null;
+  if (tag === null) return false;
+  return /^[A-Z]/.test(tag) || tag === "a" || /^h[1-6]$/.test(tag);
+}
+
 export function spreadChildrenLineRanges(sf: ts.SourceFile): LineRange[] {
   const ranges: LineRange[] = [];
   const lineOf = (pos: number): number => sf.getLineAndCharacterOfPosition(pos).line + 1;
@@ -224,7 +243,7 @@ export function spreadChildrenLineRanges(sf: ts.SourceFile): LineRange[] {
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
       const opening = ts.isJsxElement(node) ? node.openingElement : node;
       const hasSpread = opening.attributes.properties.some((p) => ts.isJsxSpreadAttribute(p));
-      if (hasSpread && !hasStaticChildren(node)) {
+      if (hasSpread && isContentRuleCandidate(opening) && !hasContentfulChildren(node)) {
         ranges.push({ start: lineOf(node.getStart(sf)), end: lineOf(node.getEnd()) });
       }
     }
@@ -232,22 +251,6 @@ export function spreadChildrenLineRanges(sf: ts.SourceFile): LineRange[] {
   };
   visit(sf);
   return ranges;
-}
-
-/**
- * Whether a JSX element has static, contentful children written directly in the
- * JSX — non-whitespace text, a nested element/fragment, or an expression child.
- * A self-closing element has none. This is the inverse of "needs the spread to
- * be contentful": when true, the element is contentful on its own and is not a
- * spread-injection candidate.
- */
-function hasStaticChildren(node: ts.JsxElement | ts.JsxSelfClosingElement): boolean {
-  if (!ts.isJsxElement(node)) return false;
-  return node.children.some((child) => {
-    if (ts.isJsxText(child)) return child.text.trim() !== "";
-    if (ts.isJsxExpression(child)) return child.expression !== undefined;
-    return ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child) || ts.isJsxFragment(child);
-  });
 }
 
 /** The `aria-hidden` attribute name. */
@@ -311,13 +314,15 @@ function renderPropElement(
 }
 
 /**
- * Whether a host JSX element has children it would forward into a delegated
- * element. A self-closing host has none; an element host has children when any
- * child is non-whitespace JSX text or any nested element/expression. This is
- * the false-negative guard: only a child-bearing host can make an otherwise
- * empty delegated anchor contentful.
+ * Whether a JSX element has contentful children written directly in the JSX —
+ * non-whitespace text, a nested element/fragment, or an expression child; a
+ * self-closing element has none. Two callers, same predicate: render-delegation
+ * uses it as the false-negative guard (only a child-bearing HOST can make an
+ * otherwise-empty delegated anchor contentful), and the spread suppression uses
+ * its inverse (an element with its own children needs no spread to be contentful,
+ * so it is not a spread-injection candidate).
  */
-function hostSuppliesChildren(node: ts.JsxElement | ts.JsxSelfClosingElement): boolean {
+function hasContentfulChildren(node: ts.JsxElement | ts.JsxSelfClosingElement): boolean {
   if (!ts.isJsxElement(node)) return false;
   return node.children.some((child) => {
     if (ts.isJsxText(child)) return child.text.trim() !== "";

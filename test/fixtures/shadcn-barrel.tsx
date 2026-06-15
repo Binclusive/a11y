@@ -28,6 +28,13 @@ export const CardTitle = React.forwardRef<
 >(({ className, ...props }, ref) => <h3 ref={ref} className={className} {...props} />);
 CardTitle.displayName = "CardTitle";
 
+// A GENUINELY empty heading — no children, no spread. This MUST still flag
+// heading-has-content: the spread suppression is false-negative-safe, it only
+// withholds the finding when emptiness is unprovable, never on a real empty one.
+export function EmptyHeading() {
+  return <h2 className="title" />;
+}
+
 // A genuine MULTI-ELEMENT composite (Portal + Overlay + Content). NOT thin — it
 // must stay `declare`, never be promoted to trusted, even though every tag is
 // Radix. The over-promotion guard.

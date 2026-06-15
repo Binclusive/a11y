@@ -121,10 +121,14 @@ describe("scan: prop-spread design-system heading is clean, plain empty heading 
   it("suppresses heading-has-content on `<h3 {...props}/>` but flags a real empty one", async () => {
     const barrel = join(here, "fixtures", "shadcn-barrel.tsx");
     const { findings } = await scan([barrel]);
-    // CardTitle's `<h3 {...props}/>` forwards its children — not a real empty
-    // heading, so no heading-has-content FP. (The senchabot card.tsx regression.)
     const headingContent = findings.filter((f) => f.ruleId === "jsx-a11y/heading-has-content");
-    expect(headingContent.length).toBe(0);
+    // Exactly one: the genuinely-empty `EmptyHeading` (`<h2 />`). CardTitle's
+    // `<h3 {...props}/>` forwards its children, so its FP is suppressed — but the
+    // suppression is false-negative-safe, so the real empty heading still flags.
+    expect(headingContent.length).toBe(1);
+    const text = ts.sys.readFile(barrel) ?? "";
+    const emptyLine = text.split("\n").findIndex((l) => l.includes('<h2 className="title" />')) + 1;
+    expect(headingContent[0]?.line).toBe(emptyLine);
   });
 });
 
