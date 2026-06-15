@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>a11y-checker · demos</title>
+  <link rel="stylesheet" href="vendor/asciinema-player.css" />
+  <style>
+    :root {
+      --bg:#11111b; --panel:#181825; --line:#313244; --text:#cdd6f4;
+      --dim:#7f849c; --cyan:#74c7ec; --mag:#cba6f7; --yel:#f9e2af; --grn:#94e2d5;
+    }
+    * { box-sizing:border-box; }
+    html,body { margin:0; background:var(--bg); color:var(--text);
+      font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Inter,sans-serif; }
+    .mono { font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace; }
+    .wrap { max-width:940px; margin:0 auto; padding:64px 24px 96px; }
+    header { border-bottom:1px solid var(--line); padding-bottom:28px; margin-bottom:8px; }
+    h1 { font-size:30px; margin:0 0 6px; letter-spacing:-.01em; }
+    h1 .accent { color:var(--cyan); }
+    .tag { color:var(--dim); font-size:16px; margin:0; line-height:1.5; }
+    .badge { display:inline-block; margin-top:14px; font-size:12px; color:var(--yel);
+      border:1px solid #45412f; background:#1d1b13; border-radius:999px; padding:3px 10px; }
+    section { padding:40px 0; border-bottom:1px solid var(--line); }
+    .head { display:flex; align-items:baseline; gap:12px; margin-bottom:6px; }
+    .num { color:var(--mag); font-weight:700; font-size:14px; }
+    h2 { font-size:21px; margin:0; }
+    .desc { color:var(--dim); font-size:15px; line-height:1.6; margin:8px 0 18px; max-width:74ch; }
+    .desc b { color:var(--text); font-weight:600; }
+    .player { border:1px solid var(--line); border-radius:10px; overflow:hidden;
+      background:#0e0e16; box-shadow:0 8px 30px rgba(0,0,0,.35); }
+    .meta { margin-top:12px; font-size:13px; color:var(--dim); display:flex; gap:18px; flex-wrap:wrap; }
+    .meta code { color:var(--grn); background:#12121c; border:1px solid var(--line);
+      padding:2px 7px; border-radius:6px; font-size:12px; }
+    footer { padding-top:40px; color:var(--dim); font-size:13.5px; line-height:1.7; }
+    footer a, .meta a { color:var(--cyan); text-decoration:none; }
+    footer a:hover { text-decoration:underline; }
+    .ap-player { font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1><span class="accent">a11y-checker</span> · demos</h1>
+      <p class="tag">Five recorded terminal sessions. Every byte on screen is real output from the
+        checker — replayable, selectable text, not flat GIFs.</p>
+      <span class="badge">private review build · please don't share publicly</span>
+    </header>
+
+    <section>
+      <div class="head"><span class="num">01</span><h2>The wow — eslint passes, we catch it</h2></div>
+      <p class="desc">On <b>shadcn/ui's own taxonomy app</b>, <code class="mono">eslint-plugin-jsx-a11y</code>
+        passes the docs search box <b>clean</b> — while a11y-checker flags its unlabeled
+        <code class="mono">&lt;Input&gt;</code>, ranks it (<b>22/26 orgs</b>), and hands you the fix.</p>
+      <div class="player" data-cast="casts/taxonomy.cast" data-poster="npt:1:00"></div>
+      <div class="meta"><span>~73s</span><span>live: <code>asciinema play demo/taxonomy.cast</code></span></div>
+    </section>
+
+    <section>
+      <div class="head"><span class="num">02</span><h2>Getting started — install → fix → gate</h2></div>
+      <p class="desc">Zero to your first fix on the <b>real cal.com monorepo</b>: <code class="mono">init</code>
+        detects <code class="mono">next · @calcom/ui · ts</code>, the checker traces your design system
+        straight from <code class="mono">packages/ui</code>, finds a real bug in the cancel-booking flow,
+        you fix it in one line, and gate CI.</p>
+      <div class="player" data-cast="casts/tutorial.cast" data-poster="npt:0:43"></div>
+      <div class="meta"><span>~109s</span><span>live: <code>asciinema play demo/tutorial.cast</code></span></div>
+    </section>
+
+    <section>
+      <div class="head"><span class="num">03</span><h2>The config, explained — binclusive.json</h2></div>
+      <p class="desc">A field-by-field tour of the one committed contract: the <b>enforcement</b> lever
+        (block fails CI / warn surfaces), the <b>components</b> escape-hatch +
+        <code class="mono">init --suggest</code> scaffolding 30 mappings, the
+        <code class="mono">injectsChildren</code>/<code class="mono">ignore</code> hatches, and team rules.</p>
+      <div class="player" data-cast="casts/config.cast" data-poster="npt:0:42"></div>
+      <div class="meta"><span>~105s</span><span>live: <code>asciinema play demo/config.cast</code></span></div>
+    </section>
+
+    <section>
+      <div class="head"><span class="num">04</span><h2>It's systemic — the state of OSS a11y</h2></div>
+      <p class="desc">Across <b>31</b> well-known React+TS repos, <b>12</b> ship a control a screen reader
+        can't name — <b>372</b> in total, in shadcn, Google, Alibaba, Untitled UI. eslint passed every
+        one. Not bad engineers — a blind spot in the standard tool.</p>
+      <div class="player" data-cast="casts/oss.cast" data-poster="npt:0:21"></div>
+      <div class="meta"><span>~61s</span><span>live: <code>asciinema play demo/oss.cast</code></span></div>
+    </section>
+
+    <section>
+      <div class="head"><span class="num">05</span><h2>The agentic loop — it self-fixes</h2></div>
+      <p class="desc">A Claude Code session: the AI writes a card the common (broken) way, the
+        <b>PostToolUse auto-whisper hook fires unasked</b>, and the model fixes it in the same turn —
+        before any human sees it. The whisper is real <code class="mono">hook</code> output.</p>
+      <div class="player" data-cast="casts/agent.cast" data-poster="npt:0:12"></div>
+      <div class="meta"><span>~42s</span><span>live: <code>asciinema play demo/agent.cast</code></span></div>
+    </section>
+
+    <footer>
+      <p>Each cast is built deterministically from a <code class="mono">make-&lt;name&gt;-cast.py</code>
+        generator (story + frame-exact pacing) and a <code class="mono">record-&lt;name&gt;.sh</code> script
+        that captures the real tool output — see <code class="mono">demo/README.md</code>. Player by
+        <a href="https://asciinema.org">asciinema</a>, vendored locally — this page makes no third-party calls.</p>
+    </footer>
+  </div>
+
+  <script src="vendor/asciinema-player.min.js"></script>
+  <script>
+    for (const el of document.querySelectorAll('.player')) {
+      AsciinemaPlayer.create(el.dataset.cast, el, {
+        poster: el.dataset.poster,
+        fit: 'width',
+        terminalFontSize: '13px',
+        idleTimeLimit: 2,
+        theme: 'asciinema',
+      });
+    }
+  </script>
+</body>
+</html>

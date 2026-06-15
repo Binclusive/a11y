@@ -704,3 +704,111 @@ export function traceComponent(
   const rendersOwnName = shape.rendersOwnName || innerResult.rendersOwnName;
   return { host: innerResult.host, via: innerResult.via, role, rendersOwnName };
 }
+
+/**
+ * The local identifier a `const X = …` VALUE alias points at, when `X` is bound
+ * to a bare identifier or a member access — NOT a function. The shadcn barrel
+ * convention re-publishes a primitive as `const Dialog = DialogPrimitive.Root`
+ * (member) or `const Toaster = Sonner` (identifier); both are value aliases whose
+ * identity IS the thing on the right. Returns the LEFTMOST identifier (`DialogPrimitive`,
+ * `Sonner`) so the caller can resolve it through the file's import map. Returns
+ * `null` for a function/arrow/`forwardRef(…)` initializer — that is a real
+ * component definition, handled by {@link findComponentFn}, not an alias.
+ */
+function findValueAlias(sf: ts.SourceFile, exportName: string): string | null {
+  for (const stmt of sf.statements) {
+    if (!ts.isVariableStatement(stmt)) continue;
+    for (const decl of stmt.declarationList.declarations) {
+      if (!ts.isIdentifier(decl.name) || decl.name.text !== exportName) continue;
+      const init = decl.initializer;
+      if (init === undefined) continue;
+      // `const X = Other`
+      if (ts.isIdentifier(init)) return init.text;
+      // `const X = NS.Member` (or `NS.Member.Sub`) -> leftmost identifier `NS`.
+      if (ts.isPropertyAccessExpression(init)) {
+        let expr: ts.Expression = init;
+        while (ts.isPropertyAccessExpression(expr)) expr = expr.expression;
+        if (ts.isIdentifier(expr)) return expr.text;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The ORIGIN module a THIN own-code wrapper ultimately aliases — so the coverage
+ * classifier can bucket a local `@/components/ui/*` barrel by where its primitive
+ * REALLY comes from, not by the `@/…` import string it happens to wear.
+ *
+ * `traceComponent` answers "what host does this render?" and returns null for a
+ * host-LESS container primitive (`Dialog`, `Select` — context providers with no
+ * DOM element). Those land in `declare` even though they are guaranteed Radix
+ * underneath. This answers the narrower question that fixes that: "what module
+ * does this wrapper pass through to?", returning e.g. `@radix-ui/react-dialog`.
+ *
+ * THIN — and ONLY thin — resolves, so an app composite is NEVER wrongly vouched
+ * for:
+ *   - value alias `const Dialog = DialogPrimitive.Root` -> the namespace's module;
+ *   - single-tag, props-forwarding wrapper `forwardRef((p,r) => <X.Title {...p}/>)`
+ *     (the same gate {@link traceComponent} uses) -> the inner element's module;
+ *   - barrel re-export `export { Dialog } from "@scope/x"` -> that module.
+ *
+ * A multi-element render (Portal + Overlay + Content) is not thin -> `null`: it
+ * stays an opaque unknown, exactly where a genuine composite belongs. Bounded by
+ * {@link MAX_DEPTH} so an alias/wrapper chain can't loop.
+ *
+ * @param specifier  module the wrapper is imported from (relative to `fromFile`)
+ * @param exportName the imported export name (`Dialog`, `Toaster`, …)
+ * @param fromFile   the file doing the importing (resolution context)
+ */
+export function traceWrapperOrigin(
+  specifier: string,
+  exportName: string,
+  fromFile: string,
+  depth = 0,
+): string | null {
+  if (depth >= MAX_DEPTH) return null;
+
+  const defFile = resolveRoute(specifier, fromFile);
+  if (defFile === null) return null;
+  const sf = readSource(defFile);
+  if (sf === null) return null;
+
+  const imports = collectLocalImports(sf);
+
+  // (a) value alias: `const X = NS.Member` / `const X = Other`. Its identity is
+  // whatever it points at — resolve that local to its import, else hop locally.
+  const aliasLocal = findValueAlias(sf, exportName);
+  if (aliasLocal !== null) {
+    const inner = imports.get(aliasLocal);
+    if (inner !== undefined) return inner.module;
+    return traceWrapperOrigin(specifier, aliasLocal, fromFile, depth + 1);
+  }
+
+  const fn = findComponentFn(sf, exportName);
+  if (fn === null) {
+    // (c) barrel re-export: `export { X } from "mod"`. An external `mod` IS the
+    // origin; an own-code `mod` is one more hop toward it.
+    for (const hop of findReExports(sf, exportName)) {
+      if (resolveRoute(hop.module, defFile) === null) return hop.module;
+      const traced = traceWrapperOrigin(hop.module, hop.exportName, defFile, depth + 1);
+      if (traced !== null) return traced;
+    }
+    return null;
+  }
+
+  // (b) thin single-tag forwarding wrapper. Same conservative gate traceComponent
+  // applies — exactly one root tag, props forwarded — but here we want the inner
+  // element's MODULE (the host-less primitive traceComponent couldn't map).
+  const shape = renderShapeOf(fn, transparentLocalNames(imports));
+  if (shape.tags.size !== 1 || !shape.spreadsProps) return null;
+  const [tag] = [...shape.tags];
+  // An intrinsic host (`<button>`) is a real host traceComponent already maps to
+  // `checked`; it never reaches the opaque path, so it is not an origin alias.
+  if (HOST_TAG.test(tag)) return null;
+  const dot = tag.indexOf(".");
+  const local = dot === -1 ? tag : tag.slice(0, dot);
+  const inner = imports.get(local);
+  if (inner !== undefined) return inner.module;
+  return traceWrapperOrigin(specifier, local, fromFile, depth + 1);
+}
