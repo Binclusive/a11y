@@ -705,6 +705,77 @@ const RULES: Record<string, EnforceRule> = {
   },
 };
 
+/**
+ * Landmark / structural ARIA roles that ONE native HTML element provides
+ * implicitly — the SAFE subset of `prefer-tag-over-role`. Deliberately excludes
+ * widget roles (`combobox`, `img`, `status`, `presentation`, `menu`, `dialog`…):
+ * those have no single clean native tag, or the role override IS the correct
+ * pattern — an inline `<svg role="img" aria-label>` must NOT become `<img>`.
+ * Running the stock jsx-a11y rule over every role is ~90% noise on real apps
+ * (it fires on exactly those svg/status/combobox shapes); this is the landmark
+ * slice that is unambiguous. `natives` are the tags already carrying the role.
+ */
+const SAFE_ROLE_TO_TAG: Readonly<
+  Record<string, { readonly suggest: string; readonly natives: readonly string[] }>
+> = {
+  region: { suggest: "<section>", natives: ["section"] },
+  navigation: { suggest: "<nav>", natives: ["nav"] },
+  banner: { suggest: "<header>", natives: ["header"] },
+  contentinfo: { suggest: "<footer>", natives: ["footer"] },
+  main: { suggest: "<main>", natives: ["main"] },
+  article: { suggest: "<article>", natives: ["article"] },
+  list: { suggest: "<ul>/<ol>", natives: ["ul", "ol", "menu"] },
+  listitem: { suggest: "<li>", natives: ["li"] },
+  button: { suggest: "<button>", natives: ["button"] },
+  heading: { suggest: "<h1>–<h6>", natives: ["h1", "h2", "h3", "h4", "h5", "h6"] },
+};
+
+const PREFER_TAG_RULE_ID = "enforce/prefer-tag-over-role";
+const PREFER_TAG_WCAG: readonly string[] = ["1.3.1"];
+
+/**
+ * prefer-tag-over-role (scoped): a BARE intrinsic element (`<div>`/`<span>`/…)
+ * carrying a static landmark/structural `role` a native tag provides implicitly
+ * should use that tag. Fires ONLY on intrinsics (a resolved `<Button
+ * role="combobox">` is a component — its semantics are the component's job, and
+ * combobox is not a safe role anyway), ONLY for {@link SAFE_ROLE_TO_TAG}, and
+ * never when the element ALREADY is a native equivalent (`<section
+ * role="region">`). Returns the `role` attribute's line (the precise fix locus)
+ * plus a per-role message, or null.
+ */
+function preferTagOverRole(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  sf: ts.SourceFile,
+): { readonly line: number; readonly message: string } | null {
+  if (!ts.isIdentifier(opening.tagName)) return null; // intrinsic only (no NS.Member)
+  const tag = opening.tagName.text;
+  if (!/^[a-z]/.test(tag)) return null; // lowercase = intrinsic host element
+  for (const attr of opening.attributes.properties) {
+    if (!ts.isJsxAttribute(attr) || attr.name.getText(sf) !== "role") continue;
+    const init = attr.initializer;
+    let value: string | null = null;
+    if (init !== undefined && ts.isStringLiteral(init)) value = init.text.trim().toLowerCase();
+    else if (
+      init !== undefined &&
+      ts.isJsxExpression(init) &&
+      init.expression !== undefined &&
+      ts.isStringLiteral(init.expression)
+    ) {
+      value = init.expression.text.trim().toLowerCase();
+    }
+    if (value === null) return null; // dynamic / missing role value
+    const native = SAFE_ROLE_TO_TAG[value];
+    if (native === undefined) return null; // not a safe landmark role
+    if (native.natives.includes(tag)) return null; // already the native element
+    const line = sf.getLineAndCharacterOfPosition(attr.getStart(sf)).line + 1;
+    return {
+      line,
+      message: `This <${tag}> sets role="${value}", which ${native.suggest} conveys natively. Use ${native.suggest} instead of the role so the semantics work without ARIA (corpus: 1.3.1-prefer-tag-over-role).`,
+    };
+  }
+  return null;
+}
+
 /** What `evaluate` needs to know about the element's surroundings. */
 interface EvalContext {
   /** How confidently the control was recognized (host = proven, name = weak). */
@@ -1010,6 +1081,21 @@ export function enforceContent(filePaths: readonly string[], ctx: EnforceContext
                 provenance: "enforce",
               });
             }
+          }
+
+          // prefer-tag-over-role is independent of control classification: any
+          // bare intrinsic with a landmark/structural role a native tag conveys.
+          const ptr = preferTagOverRole(info.opening, sf);
+          if (ptr !== null && !isSuppressed(ptr.line)) {
+            out.push({
+              file: filePath,
+              line: ptr.line,
+              ruleId: PREFER_TAG_RULE_ID,
+              message: ptr.message,
+              wcag: PREFER_TAG_WCAG,
+              enforcement: enforcementFor(PREFER_TAG_WCAG, ctx.contract),
+              provenance: "enforce",
+            });
           }
         }
       }

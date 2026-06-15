@@ -2,7 +2,7 @@
 
 Three things worth borrowing from react-doctor, surfaced by [REPORT.md](./REPORT.md). None touches the source-level component resolution that is our actual edge.
 
-**Status:** #1 → [issue #14](../../../issues/14) · #2 → [issue #15](../../../issues/15) · #3 → [issue #16](../../../issues/16), **implemented in this PR** (native `<input>`/`<select>`/`<textarea>` coverage).
+**Status:** #1 → [issue #14](../../../issues/14) (open) · #2 → [issue #15](../../../issues/15), **implemented** (scoped `enforce/prefer-tag-over-role`) · #3 → [issue #16](../../../issues/16), **implemented** (native `<input>`/`<select>`/`<textarea>` coverage). Both #15 and #16 are in this PR.
 
 File a draft with:
 

@@ -6,10 +6,10 @@ react-doctor `0.5.4`.
 
 | cell | app | design system | a11y-checker | react-doctor |
 |---|---|---|---:|---:|
-| 1 | [senchabot](https://github.com/senchabot-opensource/monorepo) `apps/web` @ `729ae7b` | shadcn/ui (local barrel) | **12** | 4 |
+| 1 | [senchabot](https://github.com/senchabot-opensource/monorepo) `apps/web` @ `729ae7b` | shadcn/ui (local barrel) | **13** | 4 |
 | 2 | [ga-dev-tools](https://github.com/googleanalytics/ga-dev-tools) `src` @ `14217f4` | MUI v5 (direct import) | 5 | **15** |
 
-The two cells point in different directions — that is the honest finding. They have **different rule coverage and different blind spots**, and the diff makes both legible. The cell-2 gap that this benchmark first exposed (a real unlabeled native `<input>` only react-doctor caught) is now **closed** — see [issue #16](../../../issues/16), implemented in this PR; react-doctor's remaining 12-finding lead on cell 2 is now **entirely its empty-`<td>` false-positive cluster**.
+The two cells point in different directions — that is the honest finding. They have **different rule coverage and different blind spots**, and the diff makes both legible. Both real-finding gaps this benchmark exposed are now closed in this PR: the unlabelled native `<input>` ([#16](../../../issues/16)) and the `prefer-tag-over-role` landmark rule ([#15](../../../issues/15)). **After both, every finding unique to react-doctor across the two cells is a false positive** — 2 spread-heading FPs on cell 1, 12 empty-`<td>` FPs on cell 2 — while every *real* finding it has is now shared, and we still uniquely surface 13 wrapper/landmark bugs it is structurally blind to.
 
 ## Improvement from PR #13 (the reason this benchmark exists post-fix)
 
@@ -28,18 +28,18 @@ Before the fix we'd have shipped **5 false positives** on senchabot — *more* t
 
 ## Cell 1 — senchabot (shadcn): our component resolution wins
 
-| | react-doctor | a11y-checker |
+| | react-doctor | a11y-checker (after #15) |
 |---|---:|---:|
-| a11y findings | 4 | 12 |
+| a11y findings | 4 | 13 |
 | false positives | **2** | 0 |
 | real bugs inside design-system wrappers | 0 | **11** |
-| overlap | 1 | 1 |
+| overlap | 2 | 2 |
 
-- **Shared (1):** `role-has-required-aria-props` @ `_sidebar/entities-dropdown.tsx:50` — a `combobox` missing `aria-controls`. Literal-element bug, both catch it.
-- **Only react-doctor (3):** `heading-has-content` @ `card.tsx:36` and `alert.tsx:40` — **both false positives**, `<hN {...props}/>` forwarding children through the spread (exactly what PR #13 suppresses); plus `prefer-tag-over-role` @ `page.tsx:520` (a real rule we lack).
+- **Shared (2):** `role-has-required-aria-props` @ `entities-dropdown.tsx:50` (a `combobox` missing `aria-controls`); and `prefer-tag-over-role` @ `page.tsx:520` — a `<div role="region">` that should be `<section>`. The second was react-doctor-only until [#15](../../../issues/15) added a *scoped* version of that rule; we now catch it too (reporting the role-attribute line, so it aligns to the same site).
+- **Only react-doctor (2):** `heading-has-content` @ `card.tsx:36` and `alert.tsx:40` — **both false positives**, `<hN {...props}/>` forwarding children through the spread (what PR #13 suppresses). After #15, react-doctor's *entire* unique-to-it set on this cell is these two FPs.
 - **Only a11y-checker (11):** every one a real unlabeled control — 5 unlabeled `<Input>` (incl. the `commands-list.tsx:34` search box) and 6 icon-only `<Button>` — living **inside design-system wrappers react-doctor cannot see**.
 
-react-doctor's port is also internally inconsistent: its `anchor-has-content` bails on a `{...props}` spread, but `heading-has-content` does not — so spread headings flag while spread anchors don't.
+Note our `prefer-tag-over-role` is *scoped*: it does **not** fire on `entities-dropdown.tsx:48` (`<Button role="combobox">`), because `combobox` has no clean native tag — the stock jsx-a11y rule would (suggesting `<input list>`), and over all roles it is ~90% noise (`<svg role="img" aria-label>` → "use `<img>`", `role="status"`, etc.). We ship only the landmark/structural slice. react-doctor's port is also internally inconsistent: its `anchor-has-content` bails on a `{...props}` spread, but `heading-has-content` does not.
 
 ## Cell 2 — ga-dev-tools (MUI): the gap we found here is now closed; react-doctor's lead is now pure noise
 
@@ -76,5 +76,5 @@ The honest one-liner: **a11y-checker finds the bugs inside your components that 
 ## What to adopt (improver mode)
 
 1. **Impact-first message voice** — lead with who is harmed, not the rule id. ([#14](../../../issues/14))
-2. **`prefer-tag-over-role`** — `role="region"` → `<section>`, etc. ([#15](../../../issues/15))
+2. ~~**`prefer-tag-over-role`**~~ — **done (#15, this PR).** `enforce/prefer-tag-over-role`, scoped to landmark/structural roles (region→`<section>`, navigation→`<nav>`, list→`<ul>`, button→`<button>`, …) on bare intrinsics only. We deliberately did **not** enable jsx-a11y's stock rule: over all roles it is ~90% noise (12 clean landmark findings vs 89 from the stock rule, on the same repo sample).
 3. ~~**Native-control label coverage**~~ — **done (#16, this PR).** Native `<input>`/`<select>`/`<textarea>` now get the conservative `input-no-name` check, scoped to genuine form controls with hidden / `tabIndex={-1}` / name-by-value exemptions — ~100% precision on a 15-repo sample, and structurally incapable of the empty-`<td>` cluster react-doctor ships.
