@@ -1001,6 +1001,69 @@ function isNameInjectingWrapper(
   return attrState(opening, sf, "title") !== "missing" || anyNameAttr(opening, sf, LABEL_ATTRS);
 }
 
+/** A located enforce finding before it is decorated with file/enforcement/provenance. */
+interface EnforceFinding {
+  readonly line: number;
+  readonly ruleId: string;
+  readonly message: string;
+  readonly wcag: readonly string[];
+}
+
+/** Everything an element check needs about one JSX element and its surroundings. */
+interface ElementCheckArgs {
+  readonly info: OpeningInfo;
+  /** The JSX tag (`div`, `Button`, `NS.Member`), already flattened. */
+  readonly tag: string;
+  readonly sf: ts.SourceFile;
+  readonly imports: ReadonlyMap<string, ImportBinding>;
+  readonly resolvedHosts: ReadonlyMap<string, ResolvedHost>;
+  /** Enclosing `<label>`/form-field depth; > 0 ⇒ an input here is labelled by an ancestor. */
+  readonly labelDepth: number;
+  /** Enclosing titled-`<Tooltip>` depth; > 0 ⇒ a control here is named at runtime. */
+  readonly nameAncestorDepth: number;
+}
+
+/**
+ * One enforce rule, as a pure `(element) -> finding | null`. This is the seam
+ * that keeps the visitor open/closed: a new rule is a new check appended to
+ * {@link ELEMENT_CHECKS}, never a new branch threaded through the walk. Each
+ * check owns its own rule id, WCAG, message, AND reported line (control-name
+ * reports the element opening; prefer-tag the role attribute).
+ */
+type ElementCheck = (args: ElementCheckArgs) => EnforceFinding | null;
+
+/**
+ * Control-name family: `classify` the tag to a control type, then `evaluate`
+ * whether that control lacks an accessible name. The original enforce rule set
+ * (button/input/link/image/dialog), sourcing its metadata from {@link RULES}.
+ */
+const controlNameCheck: ElementCheck = (a) => {
+  const recognized = classify(a.tag, a.resolvedHosts, a.imports);
+  if (recognized === null) return null;
+  const rule = evaluate(recognized.type, a.info, a.sf, a.imports, {
+    strength: recognized.strength,
+    hasLabelAncestor: a.labelDepth > 0,
+    hasNameAncestor: a.nameAncestorDepth > 0,
+  });
+  if (rule === null) return null;
+  const line = a.sf.getLineAndCharacterOfPosition(a.info.opening.getStart(a.sf)).line + 1;
+  return { line, ruleId: rule.ruleId, message: rule.message, wcag: rule.wcag };
+};
+
+/** prefer-tag-over-role family: a bare intrinsic with a landmark role + native tag. */
+const preferTagCheck: ElementCheck = (a) => {
+  const ptr = preferTagOverRole(a.info.opening, a.sf);
+  if (ptr === null) return null;
+  return { line: ptr.line, ruleId: PREFER_TAG_RULE_ID, message: ptr.message, wcag: PREFER_TAG_WCAG };
+};
+
+/**
+ * Every enforce element check, run against EVERY JSX element in source order.
+ * To add a rule, append a check here — the visitor neither knows nor cares what
+ * each one does. Order is finding order, so keep the original families first.
+ */
+const ELEMENT_CHECKS: readonly ElementCheck[] = [controlNameCheck, preferTagCheck];
+
 /**
  * Run the enforce content check across the given `.tsx` files. Produces a
  * `Finding` per clear, static, app-owned content gap on a recognized control —
@@ -1031,7 +1094,6 @@ export function enforceContent(filePaths: readonly string[], ctx: EnforceContext
       ...transInjectedLineRanges(sf, injectsChildren),
       ...ariaHiddenLineRanges(sf),
     ];
-    const lineOf = (pos: number): number => sf.getLineAndCharacterOfPosition(pos).line + 1;
     const isSuppressed = (line: number): boolean =>
       suppressed.some((r) => line >= r.start && line <= r.end);
 
@@ -1062,40 +1124,28 @@ export function enforceContent(filePaths: readonly string[], ctx: EnforceContext
             ? `${tagNode.expression.text}.${tagNode.name.text}`
             : null;
         if (tag !== null) {
-          const recognized = classify(tag, resolvedHosts, imports);
-          if (recognized !== null) {
-            const rule = evaluate(recognized.type, info, sf, imports, {
-              strength: recognized.strength,
-              hasLabelAncestor: labelDepth > 0,
-              hasNameAncestor: nameAncestorDepth > 0,
-            });
-            const line = lineOf(info.opening.getStart(sf));
-            if (rule !== null && !isSuppressed(line)) {
+          const args: ElementCheckArgs = {
+            info,
+            tag,
+            sf,
+            imports,
+            resolvedHosts,
+            labelDepth,
+            nameAncestorDepth,
+          };
+          for (const check of ELEMENT_CHECKS) {
+            const finding = check(args);
+            if (finding !== null && !isSuppressed(finding.line)) {
               out.push({
                 file: filePath,
-                line,
-                ruleId: rule.ruleId,
-                message: rule.message,
-                wcag: rule.wcag,
-                enforcement: enforcementFor(rule.wcag, ctx.contract),
+                line: finding.line,
+                ruleId: finding.ruleId,
+                message: finding.message,
+                wcag: finding.wcag,
+                enforcement: enforcementFor(finding.wcag, ctx.contract),
                 provenance: "enforce",
               });
             }
-          }
-
-          // prefer-tag-over-role is independent of control classification: any
-          // bare intrinsic with a landmark/structural role a native tag conveys.
-          const ptr = preferTagOverRole(info.opening, sf);
-          if (ptr !== null && !isSuppressed(ptr.line)) {
-            out.push({
-              file: filePath,
-              line: ptr.line,
-              ruleId: PREFER_TAG_RULE_ID,
-              message: ptr.message,
-              wcag: PREFER_TAG_WCAG,
-              enforcement: enforcementFor(PREFER_TAG_WCAG, ctx.contract),
-              provenance: "enforce",
-            });
           }
         }
       }
