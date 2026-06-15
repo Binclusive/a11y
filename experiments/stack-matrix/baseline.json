@@ -20,24 +20,23 @@
   },
   "DarkInventor/easy-ui": {
     "sha": "0bfdd128fcb7c0ec36cc0c77ed0081b4b280ec29",
-    "findings": 57,
-    "blocking": 57,
+    "findings": 52,
+    "blocking": 52,
     "warning": 0,
     "coverage": {
       "checked": 27,
-      "trusted": 51,
-      "declare": 105,
+      "trusted": 91,
+      "declare": 64,
       "icons": 81,
-      "structural": 4,
+      "structural": 5,
       "total": 268
     },
     "byRule": {
       "enforce/button-no-name": 35,
-      "enforce/input-no-name": 4,
+      "enforce/input-no-name": 8,
       "jsx-a11y/alt-text": 1,
-      "jsx-a11y/anchor-has-content": 1,
       "jsx-a11y/anchor-is-valid": 3,
-      "jsx-a11y/heading-has-content": 9,
+      "jsx-a11y/heading-has-content": 1,
       "jsx-a11y/label-has-associated-control": 4
     },
     "error": null
@@ -78,25 +77,24 @@
   },
   "Supernova3339/changerawr": {
     "sha": "a72f1c9e9084bfbc3cfc61f47fabad2c66243a64",
-    "findings": 142,
-    "blocking": 142,
+    "findings": 145,
+    "blocking": 145,
     "warning": 0,
     "coverage": {
       "checked": 40,
-      "trusted": 77,
-      "declare": 174,
+      "trusted": 144,
+      "declare": 107,
       "icons": 180,
       "structural": 33,
       "total": 504
     },
     "byRule": {
       "enforce/button-no-name": 66,
-      "enforce/input-no-name": 4,
+      "enforce/input-no-name": 8,
       "enforce/link-no-name": 3,
       "jsx-a11y/anchor-has-content": 5,
       "jsx-a11y/anchor-is-valid": 6,
       "jsx-a11y/click-events-have-key-events": 24,
-      "jsx-a11y/heading-has-content": 1,
       "jsx-a11y/label-has-associated-control": 8,
       "jsx-a11y/no-static-element-interactions": 24,
       "jsx-a11y/role-has-required-aria-props": 1
@@ -140,13 +138,13 @@
   },
   "antiwork/shortest": {
     "sha": "45a8dcfe89992b37ed2dfb1f76618048cff0f45c",
-    "findings": 4,
-    "blocking": 4,
+    "findings": 3,
+    "blocking": 3,
     "warning": 0,
     "coverage": {
       "checked": 9,
-      "trusted": 12,
-      "declare": 22,
+      "trusted": 19,
+      "declare": 15,
       "icons": 19,
       "structural": 2,
       "total": 64
@@ -154,7 +152,6 @@
     "byRule": {
       "enforce/button-no-name": 1,
       "enforce/input-no-name": 1,
-      "jsx-a11y/heading-has-content": 1,
       "jsx-a11y/role-has-required-aria-props": 1
     },
     "error": null
@@ -213,8 +210,8 @@
   },
   "googleanalytics/ga-dev-tools": {
     "sha": "14217f42eca6358cfa973ce0e65bc128038ba42e",
-    "findings": 4,
-    "blocking": 4,
+    "findings": 5,
+    "blocking": 5,
     "warning": 0,
     "coverage": {
       "checked": 6,
@@ -226,6 +223,7 @@
     },
     "byRule": {
       "enforce/button-no-name": 2,
+      "enforce/input-no-name": 1,
       "jsx-a11y/click-events-have-key-events": 1,
       "jsx-a11y/no-static-element-interactions": 1
     },
@@ -249,8 +247,8 @@
   },
   "hathora/builder": {
     "sha": "a4182519ea1e4381def6484ba46a09a16f930769",
-    "findings": 7,
-    "blocking": 7,
+    "findings": 12,
+    "blocking": 12,
     "warning": 0,
     "coverage": {
       "checked": 0,
@@ -261,6 +259,7 @@
       "total": 30
     },
     "byRule": {
+      "enforce/input-no-name": 5,
       "jsx-a11y/alt-text": 5,
       "jsx-a11y/click-events-have-key-events": 1,
       "jsx-a11y/no-static-element-interactions": 1
@@ -285,18 +284,19 @@
   },
   "iamzhihuix/skills-manage": {
     "sha": "467d0423beaf71a31c520d4e3795ec88acae5ab2",
-    "findings": 12,
-    "blocking": 12,
+    "findings": 14,
+    "blocking": 14,
     "warning": 0,
     "coverage": {
       "checked": 11,
-      "trusted": 0,
-      "declare": 83,
+      "trusted": 12,
+      "declare": 70,
       "icons": 57,
-      "structural": 7,
+      "structural": 8,
       "total": 158
     },
     "byRule": {
+      "enforce/prefer-tag-over-role": 2,
       "jsx-a11y/click-events-have-key-events": 5,
       "jsx-a11y/label-has-associated-control": 2,
       "jsx-a11y/no-static-element-interactions": 4,
@@ -306,8 +306,8 @@
   },
   "jaiarobotics/jaiabot": {
     "sha": "1df70c4068c7ade04dc749a9ee0a2da271eb4661",
-    "findings": 87,
-    "blocking": 87,
+    "findings": 118,
+    "blocking": 118,
     "warning": 0,
     "coverage": {
       "checked": 5,
@@ -318,6 +318,7 @@
       "total": 149
     },
     "byRule": {
+      "enforce/input-no-name": 31,
       "jsx-a11y/alt-text": 7,
       "jsx-a11y/click-events-have-key-events": 38,
       "jsx-a11y/label-has-associated-control": 4,
@@ -327,13 +328,13 @@
   },
   "jolbol1/jolly-ui": {
     "sha": "aac97a84f8e0c2071a5e255c2f6ec190e238c1c2",
-    "findings": 315,
-    "blocking": 315,
+    "findings": 295,
+    "blocking": 295,
     "warning": 0,
     "coverage": {
       "checked": 88,
-      "trusted": 80,
-      "declare": 325,
+      "trusted": 324,
+      "declare": 81,
       "icons": 90,
       "structural": 6,
       "total": 589
@@ -341,16 +342,15 @@
     "byRule": {
       "enforce/button-no-name": 89,
       "enforce/input-no-name": 120,
-      "jsx-a11y/anchor-has-content": 9,
       "jsx-a11y/anchor-is-valid": 85,
-      "jsx-a11y/heading-has-content": 12
+      "jsx-a11y/heading-has-content": 1
     },
     "error": null
   },
   "kamp-us/phoenix": {
     "sha": "083d6048c437ff701eedab755b059ce86ff0d63b",
-    "findings": 0,
-    "blocking": 0,
+    "findings": 7,
+    "blocking": 7,
     "warning": 0,
     "coverage": {
       "checked": 2,
@@ -360,7 +360,9 @@
       "structural": 10,
       "total": 119
     },
-    "byRule": {},
+    "byRule": {
+      "enforce/input-no-name": 7
+    },
     "error": null
   },
   "mantinedev/vite-template": {
@@ -381,8 +383,8 @@
   },
   "modagavr/pancake-wizard": {
     "sha": "f9d36e6352eb5a05544aaee92a0b56368b67c82e",
-    "findings": 3,
-    "blocking": 3,
+    "findings": 5,
+    "blocking": 5,
     "warning": 0,
     "coverage": {
       "checked": 0,
@@ -394,26 +396,26 @@
     },
     "byRule": {
       "enforce/dialog-no-name": 2,
+      "enforce/input-no-name": 2,
       "jsx-a11y/label-has-associated-control": 1
     },
     "error": null
   },
   "olros/stats": {
     "sha": "afb5dc7d00bbeff205187b1ce579966027789888",
-    "findings": 4,
-    "blocking": 4,
+    "findings": 2,
+    "blocking": 2,
     "warning": 0,
     "coverage": {
       "checked": 22,
-      "trusted": 46,
-      "declare": 64,
+      "trusted": 86,
+      "declare": 24,
       "icons": 7,
       "structural": 14,
       "total": 153
     },
     "byRule": {
-      "enforce/input-no-name": 2,
-      "jsx-a11y/heading-has-content": 2
+      "enforce/input-no-name": 2
     },
     "error": null
   },
@@ -453,22 +455,20 @@
   },
   "shadcn-ui/taxonomy": {
     "sha": "298a8857c7128a0d121e7f699dfd729f23b3966d",
-    "findings": 14,
-    "blocking": 14,
+    "findings": 4,
+    "blocking": 4,
     "warning": 0,
     "coverage": {
       "checked": 31,
-      "trusted": 104,
-      "declare": 67,
+      "trusted": 129,
+      "declare": 42,
       "icons": 7,
       "structural": 3,
       "total": 212
     },
     "byRule": {
       "enforce/input-no-name": 1,
-      "jsx-a11y/anchor-has-content": 1,
-      "jsx-a11y/anchor-is-valid": 3,
-      "jsx-a11y/heading-has-content": 9
+      "jsx-a11y/anchor-is-valid": 3
     },
     "error": null
   },
@@ -493,8 +493,8 @@
   },
   "steven-tey/precedent": {
     "sha": "3be40205d7cdf56082cd284f07f12251b9208f79",
-    "findings": 1,
-    "blocking": 1,
+    "findings": 0,
+    "blocking": 0,
     "warning": 0,
     "coverage": {
       "checked": 2,
@@ -504,15 +504,13 @@
       "structural": 3,
       "total": 43
     },
-    "byRule": {
-      "jsx-a11y/anchor-has-content": 1
-    },
+    "byRule": {},
     "error": null
   },
   "thomasgauvin/claude-agent-sdk-in-cloudflare-containers": {
     "sha": "12f81a1205b086b596bb06f2b983c1cb993c1844",
-    "findings": 8,
-    "blocking": 8,
+    "findings": 14,
+    "blocking": 14,
     "warning": 0,
     "coverage": {
       "checked": 0,
@@ -523,26 +521,27 @@
       "total": 23
     },
     "byRule": {
+      "enforce/input-no-name": 6,
       "jsx-a11y/label-has-associated-control": 8
     },
     "error": null
   },
   "umijs/umi": {
     "sha": "155dc3e52e81daa4de58282364519e252e89218e",
-    "findings": 162,
-    "blocking": 162,
+    "findings": 167,
+    "blocking": 167,
     "warning": 0,
     "coverage": {
       "checked": 13,
-      "trusted": 50,
-      "declare": 176,
+      "trusted": 51,
+      "declare": 175,
       "icons": 42,
       "structural": 27,
       "total": 308
     },
     "byRule": {
       "enforce/button-no-name": 1,
-      "enforce/input-no-name": 14,
+      "enforce/input-no-name": 19,
       "jsx-a11y/alt-text": 6,
       "jsx-a11y/anchor-is-valid": 57,
       "jsx-a11y/click-events-have-key-events": 44,
@@ -558,8 +557,8 @@
     "warning": 0,
     "coverage": {
       "checked": 43,
-      "trusted": 63,
-      "declare": 424,
+      "trusted": 91,
+      "declare": 396,
       "icons": 0,
       "structural": 28,
       "total": 558
@@ -568,18 +567,18 @@
       "enforce/button-no-name": 15,
       "enforce/dialog-no-name": 5,
       "enforce/input-no-name": 4,
-      "jsx-a11y/anchor-has-content": 36,
+      "enforce/prefer-tag-over-role": 2,
+      "jsx-a11y/anchor-has-content": 35,
       "jsx-a11y/anchor-is-valid": 105,
       "jsx-a11y/click-events-have-key-events": 3,
-      "jsx-a11y/heading-has-content": 1,
       "jsx-a11y/no-static-element-interactions": 5
     },
     "error": null
   },
   "vikejs/bati": {
     "sha": "10ee521892ec5db66def9cd75ec676999e9e8043",
-    "findings": 3,
-    "blocking": 3,
+    "findings": 4,
+    "blocking": 4,
     "warning": 0,
     "coverage": {
       "checked": 0,
@@ -590,6 +589,7 @@
       "total": 39
     },
     "byRule": {
+      "enforce/input-no-name": 1,
       "jsx-a11y/click-events-have-key-events": 2,
       "jsx-a11y/no-static-element-interactions": 1
     },
