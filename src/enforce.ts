@@ -194,6 +194,35 @@ const HOST_TO_TYPE: Readonly<Record<string, ControlType>> = {
 };
 
 /**
+ * The native form-control intrinsics that get the input name-check directly —
+ * not via a resolved wrapper. jsx-a11y would normally own a bare `<input>`, but
+ * we don't run its `control-has-associated-label`, so an unlabeled native input
+ * slips through every recognition path in {@link classify}. We recognize EXACTLY
+ * these three lowercase tags and nothing else: a `<td>` / `<div>` is not a
+ * control, which is precisely why react-doctor's `control-has-associated-label`
+ * false-positives on layout cells and this never can.
+ */
+const NATIVE_FORM_CONTROLS: ReadonlySet<string> = new Set(["input", "select", "textarea"]);
+
+/**
+ * Native `<input>` `type` values that exempt it from the name check. submit /
+ * button / reset are named by their `value`; hidden / image are not text-name-
+ * bearing (an image input's name is alt's job); checkbox / radio are externally
+ * labelled toggles, skipped exactly as {@link TOGGLE_NAMES} are. A DYNAMIC
+ * `type={x}` is unknowable, so — uncertain → skip — it is exempt too. A MISSING
+ * `type` defaults to `"text"` and is NOT exempt: a bare text input must be named.
+ */
+const NAME_EXEMPT_INPUT_TYPES: ReadonlySet<string> = new Set([
+  "hidden",
+  "submit",
+  "button",
+  "reset",
+  "image",
+  "checkbox",
+  "radio",
+]);
+
+/**
  * Toggle controls — checkbox / switch / radio / toggle. These have a host of
  * `button` (Radix) or `input` (MUI/Chakra), so they'd otherwise be checked as a
  * button or a text input. But a toggle's accessible name almost always comes
@@ -273,6 +302,16 @@ function classify(
   // convention — we can't verify their name at the call site, so skip them
   // outright before any host/name recognition claims them as button/input.
   if (TOGGLE_NAMES.has(leafName(tagName))) return null;
+
+  // Native form-control intrinsics (`<input>`/`<select>`/`<textarea>`) are real
+  // host controls jsx-a11y would own — but we don't run its
+  // `control-has-associated-label`, so an unlabelled one slips through. Route
+  // them through the SAME conservative input name-check `evaluate` runs for input
+  // HOSTS. The exact-three set means no other intrinsic (`<td>`/`<div>`) is ever
+  // claimed — the structural guard against the layout-cell false positives the
+  // stock rule produces. (`tagName` is the bare lowercase tag; a capitalized
+  // `Input` component is handled by resolution/registry below.)
+  if (NATIVE_FORM_CONTROLS.has(tagName)) return { type: "input", strength: "host" };
 
   // The local binding (namespace local for `NS.Member`).
   const local = tagName.includes(".") ? tagName.slice(0, tagName.indexOf(".")) : tagName;
@@ -406,6 +445,75 @@ function anyNameAttr(
   names: readonly string[],
 ): boolean {
   return names.some((n) => attrState(opening, sf, n) !== "missing");
+}
+
+/**
+ * Whether an input's `type` exempts it from the name check (see
+ * {@link NAME_EXEMPT_INPUT_TYPES}). A static exempt value or a dynamic
+ * `type={x}` (unknowable → skip) exempts; a missing or non-exempt static `type`
+ * does not. Only meaningful for inputs — `<select>`/`<textarea>` carry no `type`,
+ * so this is always `false` for them (they are always checked).
+ */
+function isNameExemptInputType(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  sf: ts.SourceFile,
+): boolean {
+  for (const attr of opening.attributes.properties) {
+    if (!ts.isJsxAttribute(attr) || attr.name.getText(sf) !== "type") continue;
+    const init = attr.initializer;
+    if (init === undefined) return false; // bare `type` — degenerate, treat as text
+    if (ts.isStringLiteral(init)) return NAME_EXEMPT_INPUT_TYPES.has(init.text.trim().toLowerCase());
+    if (ts.isJsxExpression(init)) {
+      const expr = init.expression;
+      if (expr !== undefined && ts.isStringLiteral(expr)) {
+        return NAME_EXEMPT_INPUT_TYPES.has(expr.text.trim().toLowerCase());
+      }
+      return true; // `type={x}` — unknowable, exempt (uncertain → skip)
+    }
+    return true;
+  }
+  return false; // no `type` → defaults to "text" → checked
+}
+
+/**
+ * Whether a control is statically HIDDEN or removed from the tab order, so an
+ * absent label is not a real finding (uncertain → skip, FN-safe):
+ *   - `tabIndex={-1}` / `tabIndex="-1"` — not keyboard-reachable in normal flow;
+ *     in practice a hidden sentinel (react-select's required-field `<input>`) or
+ *     a programmatically-focused target, externally driven, not a typed control;
+ *   - the HTML `hidden` attribute (bare or `={true}`) — not rendered;
+ *   - a `display:none` utility class (the standalone `hidden` token, Tailwind &
+ *     co.) — removed from the accessibility tree, so it is never announced.
+ * This mirrors the wide-sample false positives the native-control path would
+ * otherwise produce (~7%): all six were one of these three shapes.
+ */
+function isHiddenOrUntabbable(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  sf: ts.SourceFile,
+): boolean {
+  for (const attr of opening.attributes.properties) {
+    if (!ts.isJsxAttribute(attr)) continue;
+    const name = attr.name.getText(sf);
+    const init = attr.initializer;
+    if (name === "hidden") {
+      if (init === undefined) return true; // bare `hidden`
+      if (ts.isJsxExpression(init) && init.expression?.kind === ts.SyntaxKind.TrueKeyword) return true;
+      continue;
+    }
+    if (name === "tabIndex" && init !== undefined) {
+      if (init.getText(sf).replace(/[{}"'\s]/g, "") === "-1") return true;
+      continue;
+    }
+    if (name === "className" || name === "class") {
+      let str: string | null = null;
+      if (init !== undefined && ts.isStringLiteral(init)) str = init.text;
+      else if (init !== undefined && ts.isJsxExpression(init) && init.expression !== undefined && ts.isStringLiteral(init.expression)) {
+        str = init.expression.text;
+      }
+      if (str !== null && /(^|\s)hidden(\s|$)/.test(str)) return true;
+    }
+  }
+  return false;
 }
 
 /** The accessible-name attributes that, if present/dynamic, satisfy a control. */
@@ -697,7 +805,15 @@ function evaluate(
       return RULES.dialogNoName;
     }
     case "input": {
-      // Inputs only reach here via a real input HOST (never the name heuristic).
+      // Inputs reach here via a real input HOST — a resolved wrapper, or a native
+      // `<input>`/`<select>`/`<textarea>` intrinsic (never the name heuristic).
+      // A submit/button/reset is named by its `value`, hidden/image/checkbox/radio
+      // are not text-name-bearing or are externally-labelled toggles — exempt by
+      // `type` before any name check (a `<input type="submit"/>` is not nameless).
+      if (isNameExemptInputType(opening, sf)) return null;
+      // Hidden / untabbable controls (display:none, `hidden`, `tabIndex={-1}`
+      // sentinels) aren't operable/announced controls — an absent label is moot.
+      if (isHiddenOrUntabbable(opening, sf)) return null;
       // A name can come from aria-label/labelledby, a label/title prop, an id
       // paired with a <label for>, OR a label ANCESTOR (FormLabel/Box as="label").
       // Any of those = "could be labelled" -> conservative skip; placeholder is
@@ -706,10 +822,20 @@ function evaluate(
       if (anyNameAttr(opening, sf, NAME_ATTRS)) return null;
       if (attrState(opening, sf, "label") !== "missing") return null;
       if (attrState(opening, sf, "id") !== "missing") return null;
-      // A real text input is self-closing. CHILDREN on an input-host element
-      // mean a composite control that labels itself with its content — skip
-      // (this is conservative; genuine text inputs never carry children).
-      if (ts.isJsxElement(element) && element.children.some((c) => !isWhitespace(c))) return null;
+      // CHILDREN on a WRAPPER input host mean a composite that labels itself with
+      // its content — skip (conservative; a real text input is self-closing). But
+      // a NATIVE `<select>`/`<textarea>` ALWAYS has children — its `<option>`s or
+      // default value — which are NOT a label, so the guard must not reach them,
+      // or every native select/textarea would go unchecked.
+      const isNativeFormControl =
+        ts.isIdentifier(opening.tagName) && NATIVE_FORM_CONTROLS.has(opening.tagName.text);
+      if (
+        !isNativeFormControl &&
+        ts.isJsxElement(element) &&
+        element.children.some((c) => !isWhitespace(c))
+      ) {
+        return null;
+      }
       return RULES.inputNoName;
     }
   }

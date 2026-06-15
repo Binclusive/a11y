@@ -2,7 +2,7 @@
 
 Three things worth borrowing from react-doctor, surfaced by [REPORT.md](./REPORT.md). None touches the source-level component resolution that is our actual edge.
 
-**Status:** #1 → [issue #14](../../../issues/14) · #2 → [issue #15](../../../issues/15) · #3 below is a draft (surfaced by the cell-2 MUI run; file when ready).
+**Status:** #1 → [issue #14](../../../issues/14) · #2 → [issue #15](../../../issues/15) · #3 → [issue #16](../../../issues/16), **implemented in this PR** (native `<input>`/`<select>`/`<textarea>` coverage).
 
 File a draft with:
 

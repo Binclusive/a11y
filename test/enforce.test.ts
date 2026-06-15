@@ -15,6 +15,7 @@ const dedupe = fx("dedupe.tsx");
 const dialogs = fx("dialogs.tsx");
 const nameGate = fx("name-gate.tsx");
 const roleToggle = fx("role-toggle.tsx");
+const nativeControls = fx("native-controls.tsx");
 // A wrapper that resolves to host `button` but renders its OWN static name
 // internally (sr-only span / aria-label) — the shadcn carousel-arrow FP.
 const srOnlyConsumer = join(here, "fixtures", "sr-only-name-consumer.tsx");
@@ -408,5 +409,28 @@ describe("enforce: control-type classification surface", () => {
   it("exposes ControlType for the five recognized families", () => {
     const families: ControlType[] = ["button", "icon-button", "link", "image", "dialog", "input"];
     expect(families.length).toBe(6);
+  });
+});
+
+describe("enforce: native form controls (#16 — control-has-associated-label gap)", () => {
+  it("flags ONLY the four genuinely-nameless native controls", () => {
+    // input[type=text], placeholder-only input, <select>, <textarea> — and
+    // nothing else. The exemptions (aria-label / id / <label> ancestor / submit /
+    // checkbox / radio / hidden / tabIndex=-1 / display:none / spread) and the
+    // empty <td> (the react-doctor layout-cell false positive) all stay clean.
+    const findings = enforceContent([nativeControls], CTX);
+    const inputHits = findings.filter((f) => f.ruleId === "enforce/input-no-name");
+    expect(inputHits.length).toBe(4);
+  });
+
+  it("does NOT flag a presentational <td> — the react-doctor empty-cell FP we avoid", () => {
+    // classify() recognizes EXACTLY input/select/textarea, so a layout cell is
+    // never a control. This is the structural reason our native coverage can't
+    // produce the 12-finding empty-<td> cluster react-doctor ships.
+    const findings = enforceContent([nativeControls], CTX);
+    // The fixture's two <td> cells occupy the last rows; no finding may land there.
+    const onTd = findings.some((f) => f.message.includes("table") || f.ruleId.includes("td"));
+    expect(onTd).toBe(false);
+    expect(findings.every((f) => f.ruleId === "enforce/input-no-name")).toBe(true);
   });
 });

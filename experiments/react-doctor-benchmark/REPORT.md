@@ -7,9 +7,9 @@ react-doctor `0.5.4`.
 | cell | app | design system | a11y-checker | react-doctor |
 |---|---|---|---:|---:|
 | 1 | [senchabot](https://github.com/senchabot-opensource/monorepo) `apps/web` @ `729ae7b` | shadcn/ui (local barrel) | **12** | 4 |
-| 2 | [ga-dev-tools](https://github.com/googleanalytics/ga-dev-tools) `src` @ `14217f4` | MUI v5 (direct import) | 4 | **15** |
+| 2 | [ga-dev-tools](https://github.com/googleanalytics/ga-dev-tools) `src` @ `14217f4` | MUI v5 (direct import) | 5 | **15** |
 
-The two cells point opposite directions on purpose — that is the honest finding. Neither tool dominates; they have **different rule coverage and different blind spots**, and the diff makes both legible.
+The two cells point in different directions — that is the honest finding. They have **different rule coverage and different blind spots**, and the diff makes both legible. The cell-2 gap that this benchmark first exposed (a real unlabeled native `<input>` only react-doctor caught) is now **closed** — see [issue #16](../../../issues/16), implemented in this PR; react-doctor's remaining 12-finding lead on cell 2 is now **entirely its empty-`<td>` false-positive cluster**.
 
 ## Improvement from PR #13 (the reason this benchmark exists post-fix)
 
@@ -41,23 +41,24 @@ Before the fix we'd have shipped **5 false positives** on senchabot — *more* t
 
 react-doctor's port is also internally inconsistent: its `anchor-has-content` bails on a `{...props}` spread, but `heading-has-content` does not — so spread headings flag while spread anchors don't.
 
-## Cell 2 — ga-dev-tools (MUI): react-doctor's broader ruleset finds a real bug we miss, plus noise
+## Cell 2 — ga-dev-tools (MUI): the gap we found here is now closed; react-doctor's lead is now pure noise
 
-| | react-doctor | a11y-checker |
+This cell was the honest counter-weight: the first run showed react-doctor 15, a11y-checker 4, because react-doctor's broader rule set caught a real unlabeled native `<input>` our enabled rules didn't. **Issue #16 (implemented in this PR) closes that gap** — native `<input>`/`<select>`/`<textarea>` now get the conservative `input-no-name` check — *without* importing react-doctor's noise.
+
+| | react-doctor | a11y-checker (after #16) |
 |---|---:|---:|
-| a11y findings | 15 | 4 |
+| a11y findings | 15 | 5 |
 | of which a noisy cluster | **12** (empty `<td>`) | 0 |
-| real bug the other misses | 1 (unlabeled `<input>`) | 2 (MUI `<IconButton>`) |
-| overlap | 1 | 1 |
+| real bug the other misses | **0** | 2 (MUI `<IconButton>`) |
+| overlap | 2 | 2 |
 
-- **Shared (1):** `ga-console.tsx:80` — a `<div onClick>` with no keyboard handler / interactive role. Both catch it.
-- **Only react-doctor (13):** all `control-has-associated-label` — **a rule we don't have.** One is real and we miss it: `numeric-input.tsx:18`, a literal `<input type="numeric">` with no label. The other **12 are a false-positive cluster** — the rule fires on empty `<td className={collapseColumn}></td>` layout cells in `cart.tsx`, calling each "an interactive control with no label." A presentational table cell is not a control.
+- **Shared (2):** `ga-console.tsx:80` — a `<div onClick>` with no keyboard handler; and `numeric-input.tsx:18` — the unlabeled native `<input>`. After #16 we catch the input too, so it moves from react-doctor-only to shared.
+- **Only react-doctor (12):** **all `control-has-associated-label`, all in `cart.tsx`, all a false-positive cluster** — the rule fires on empty `<td className={collapseColumn}></td>` layout cells, calling each "an interactive control with no label." A presentational table cell is not a control. After #16, react-doctor's *entire* remaining lead on this cell is this one noise cluster.
 - **Only a11y-checker (2):** `button-no-name` on MUI `<IconButton>` — `Compatible.tsx:193` (an icon-only reset button, clearly real) and `cart-button.tsx:18`. react-doctor misses both: its `getElementType` returns `"IconButton"`, not `button`, so no rule fires.
 
-The takeaway from cell 2 is two-sided and worth holding both halves:
-1. **react-doctor has rules we lack.** `control-has-associated-label` catches a real unlabeled native `<input>` our enabled rule set doesn't. That's a genuine gap (see "What to adopt" #3).
-2. **react-doctor is noisier when it does.** That same rule produced a 12-finding FP cluster on layout cells. The breadth has a precision cost.
-3. **Our component resolution still uniquely fires** — even on MUI, on the `<IconButton>` wrappers it's structurally blind to.
+The takeaway from cell 2, post-#16:
+1. **We closed the one real gap it exposed** — and did it *tighter*: a 15-repo wide sample showed the native-control path at ~100% precision after exempting hidden / `tabIndex={-1}` / `type=submit` controls. react-doctor's stock rule, on the same app, produces the 12-`<td>` cluster.
+2. **Our component resolution still uniquely fires** — even on MUI, on the `<IconButton>` wrappers react-doctor is structurally blind to.
 
 ## How react-doctor does a11y
 
@@ -70,10 +71,10 @@ The takeaway from cell 2 is two-sided and worth holding both halves:
 
 react-doctor is **broader, faster, and more polished as a product**, with a fuller jsx-a11y rule set — but on accessibility it carries **two structural costs we don't**: it's blind to every design-system wrapper (manual-config-only resolution), and it's noisier (false positives on spread headings and on layout table cells). Our edge — **source-level component resolution** — is the one thing that holds across both design systems: on shadcn and on MUI alike, we uniquely surface real bugs inside the components, which is where modern React a11y bugs actually live.
 
-The honest one-liner: **a11y-checker finds the bugs inside your components that linters structurally can't; react-doctor finds more of the literal-element bugs (with more noise) as one slice of a broader health audit.** Different tools. The gap to close on our side is native-element label coverage (#3); the gap on theirs is the wrapper blind spot, which they can't close without a resolver.
+The honest one-liner: **a11y-checker finds the bugs inside your components that linters structurally can't; react-doctor finds more of the literal-element bugs (with more noise) as one slice of a broader health audit.** Different tools. The one native-element gap cell 2 exposed is now closed (#16) — and closed *tighter* than react-doctor; the gap on theirs is the wrapper blind spot, which they can't close without a resolver.
 
 ## What to adopt (improver mode)
 
 1. **Impact-first message voice** — lead with who is harmed, not the rule id. ([#14](../../../issues/14))
 2. **`prefer-tag-over-role`** — `role="region"` → `<section>`, etc. ([#15](../../../issues/15))
-3. **Native-control label coverage** — cell 2 shows we miss an unlabeled literal `<input>` because we don't run `control-has-associated-label`. Add a **tightened** version (scoped to genuine form controls — NOT every element, to avoid the empty-`<td>` FP cluster react-doctor ships). See [ADOPT.md](./ADOPT.md).
+3. ~~**Native-control label coverage**~~ — **done (#16, this PR).** Native `<input>`/`<select>`/`<textarea>` now get the conservative `input-no-name` check, scoped to genuine form controls with hidden / `tabIndex={-1}` / name-by-value exemptions — ~100% precision on a 15-repo sample, and structurally incapable of the empty-`<td>` cluster react-doctor ships.
