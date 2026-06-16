@@ -14,14 +14,20 @@ import {
 } from "../src/corpus";
 import type { Finding } from "../src/core";
 
-/** A minimal axe finding, with only the fields enrich/baseline read. */
+/**
+ * A minimal axe finding for the baseline-fallback path. Defaults to
+ * `color-contrast-enhanced` (SC 1.4.6), an SC the audit corpus does NOT distil,
+ * so enrich() correctly resolves it to `source:"baseline"`. (1.4.3 used to be
+ * the "uncovered" fixture, but Phase 0 un-stranded it — it now resolves to
+ * `audit`, so the fixture moved to a still-uncovered, same-severity contrast SC.)
+ */
 function axeFinding(over: Partial<Finding>): Finding {
   return {
     file: "https://example.com",
     line: 0,
-    ruleId: "color-contrast",
-    message: "Elements must meet minimum color contrast ratio thresholds",
-    wcag: ["1.4.3"],
+    ruleId: "color-contrast-enhanced",
+    message: "Elements must meet enhanced color contrast ratio thresholds",
+    wcag: ["1.4.6"],
     enforcement: "block",
     provenance: "axe",
     ...over,
@@ -79,7 +85,7 @@ describe("baseline generator: buildBaselineCatalog output shape", () => {
 });
 
 describe("baselineRules: query the catalog by ruleId / SC", () => {
-  it("answers for an SC the corpus has never distilled (1.4.3 color-contrast)", () => {
+  it("answers from the axe catalog for any SC (1.4.3 color-contrast)", () => {
     const rules = baselineRules({ sc: "1.4.3" });
     expect(rules.length).toBeGreaterThan(0);
     const cc = rules.find((r) => r.ruleId === "color-contrast");
@@ -95,12 +101,12 @@ describe("baselineRules: query the catalog by ruleId / SC", () => {
 });
 
 describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
-  it("falls back to baseline for an SC absent from the corpus (1.4.3)", () => {
-    // 1.4.3 (color-contrast) is NOT in the seed snapshot — the classic dead end.
+  it("falls back to baseline for an SC absent from the corpus (1.4.6)", () => {
+    // 1.4.6 (color-contrast-enhanced) is NOT distilled — the classic dead end.
     const e = enrich(axeFinding({ severity: undefined }));
     expect(e.corpus.source).toBe("baseline");
     if (e.corpus.source !== "baseline") throw new Error("unreachable");
-    expect(e.corpus.sc).toBe("1.4.3");
+    expect(e.corpus.sc).toBe("1.4.6");
     // The union no longer carries tier/orgs on a baseline variant — not audit
     // data — which is exactly the invariant the discriminated union now encodes.
     expect("tier" in e.corpus).toBe(false);
@@ -124,7 +130,7 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
       line: 5,
       ruleId: "jsx-a11y/some-rule",
       message: "x",
-      wcag: ["1.4.3"],
+      wcag: ["1.4.6"],
       enforcement: "warn",
       provenance: "jsx-a11y",
     });
@@ -152,6 +158,49 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
     expect(e.corpus.orgs).toBe(17);
     expect(e.corpus.fix).not.toBeNull();
     expect(corpusBestPractice(e.corpus)).toBe(false);
+  });
+
+  // RFC Phase 0 guard: these 5 SCs had distilled patterns but were stranded
+  // behind the hand-authored snapshot (it gated source:"audit" and lacked them).
+  // Gating now keys on the distilled patterns, so they must enrich as audit. A
+  // regression here silently strips real-world corpus grounding from a finding.
+  it.each(["1.3.5", "1.4.3", "2.4.6", "2.4.7", "3.2.5"])(
+    "un-strands SC %s — its distilled pattern now reaches source 'audit'",
+    (sc) => {
+      const e = enrich({
+        file: "/x.tsx",
+        line: 1,
+        ruleId: "jsx-a11y/some-rule",
+        message: "x",
+        wcag: [sc],
+        enforcement: "warn",
+        provenance: "jsx-a11y",
+      });
+      expect(e.corpus.source).toBe("audit");
+      if (e.corpus.source !== "audit") throw new Error("unreachable");
+      expect(e.corpus.sc).toBe(sc);
+      // No snapshot entry for these → no org integer; tier derived from patterns.
+      expect(e.corpus.orgs).toBeNull();
+      expect(e.corpus.tier).toBeDefined();
+    },
+  );
+
+  it("derives very-common for 2.1.1 from the org integer, not the stale typed tier", () => {
+    // Snapshot hand-typed 2.1.1 as "common"; tierForOrgs(15) = very-common. The
+    // derived tier wins (BUG 2 fix), proving tiers are computed, not read.
+    const e = enrich({
+      file: "/x.tsx",
+      line: 1,
+      ruleId: "jsx-a11y/click-events-have-key-events",
+      message: "x",
+      wcag: ["2.1.1"],
+      enforcement: "block",
+      provenance: "jsx-a11y",
+    });
+    expect(e.corpus.source).toBe("audit");
+    if (e.corpus.source !== "audit") throw new Error("unreachable");
+    expect(e.corpus.tier).toBe("very-common");
+    expect(e.corpus.orgs).toBe(15);
   });
 
   it("falls back to baseline-by-ruleId for an axe best-practice rule with no SC", () => {
@@ -204,7 +253,7 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
 
 describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus fix", () => {
   // The credibility bug: `aria-progressbar-name` is an axe rule tagged WCAG
-  // 1.1.1 — an SC the audit corpus HAS (common, 16/26), whose generic fix is
+  // 1.1.1 — an SC the audit corpus HAS (very-common, 16/26), whose generic fix is
   // written for that SC's most-common failure ("Provide alt text for
   // informative images …"). Rendering that fix under a progressbar rule
   // contradicts the rule. axe's per-rule help is rule-accurate, so the displayed
@@ -225,7 +274,10 @@ describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus f
     expect(e.corpus.source).toBe("audit");
     if (e.corpus.source !== "audit") throw new Error("unreachable");
     expect(e.corpus.sc).toBe("1.1.1");
-    expect(e.corpus.tier).toBe("common");
+    // Tier is DERIVED from the org integer (tierForOrgs(16) = very-common), not
+    // read from the snapshot's stale hand-typed "common". This is the RFC's
+    // required outcome (BUG 2 auto-corrected).
+    expect(e.corpus.tier).toBe("very-common");
     expect(e.corpus.orgs).toBe(16);
     // The raw corpus fix IS the SC-generic image-alt fix — the trap.
     expect(e.corpus.fix).toMatch(/alt text/i);
@@ -244,7 +296,7 @@ describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus f
     const lines = detailLines(enrich(progressbar()));
     const text = lines.join("\n");
     // The moat — SC-level frequency fact — is still present.
-    expect(text).toContain("corpus: [COMMON] SC 1.1.1 — 16/26 orgs");
+    expect(text).toContain("corpus: [VERY COMMON] SC 1.1.1 — 16/26 orgs");
     // The canonical per-rule fix page is linked.
     expect(text).toContain(
       "ref:    https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name?application=axeAPI",
@@ -276,7 +328,7 @@ describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus f
     expect(corpusFix(e.corpus)).toBe(e.corpus.fix);
 
     const text = detailLines(e).join("\n");
-    expect(text).toContain("corpus: [COMMON] SC 1.1.1 — 16/26 orgs");
+    expect(text).toContain("corpus: [VERY COMMON] SC 1.1.1 — 16/26 orgs");
     expect(text).toMatch(/fix:\s+Provide alt text/); // corpus fix still rendered
   });
 });

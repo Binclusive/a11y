@@ -15,6 +15,7 @@ import patterns412 from "../data/corpus/patterns-4.1.2.json" with { type: "json"
 import patterns413 from "../data/corpus/patterns-4.1.3.json" with { type: "json" };
 import baselineCatalog from "../data/baseline-rules.json" with { type: "json" };
 import snapshot from "../data/corpus-snapshot.json" with { type: "json" };
+import { tierForOrgs } from "./distill/distill";
 import type { Finding } from "./core";
 
 /** Severity levels, ordered least → most severe. axe's runtime impact vocabulary. */
@@ -48,14 +49,21 @@ export interface DistilledPatternRef {
  * even when `source !== "audit"`). The three variants are non-overlapping
  * sources of truth that never mix:
  *
- *   - `"audit"`    — matched the real-audit corpus snapshot (`data/corpus-snapshot.json`).
- *                    The moat: truthful, partial (~15 SCs). Carries the real
- *                    `orgs` count, the frequency `tier`, the SC-generic `fix`,
- *                    and the distilled `patterns`. `severity`/`helpUrl` are the
- *                    finding's runtime axe values, falling back to the baseline
- *                    catalog's published default for the matched SC — they let
- *                    the report show a severity and (for axe findings) a `ref`
- *                    even though the moat itself has no per-rule metadata.
+ *   - `"audit"`    — the SC has >= 1 distilled pattern (`data/corpus/patterns-*.json`).
+ *                    The moat: truthful, partial (15 SCs). The GATE is presence
+ *                    of a distilled pattern for the SC — NOT membership in the
+ *                    hand-authored snapshot. The frequency `tier` is DERIVED:
+ *                    `tierForOrgs(snapshot orgs)` for the 10 SCs the transitional
+ *                    snapshot still covers (never the stale typed string), and
+ *                    the strongest `frequencyTier` across the SC's patterns for
+ *                    the 5 stranded SCs the snapshot lacks. `orgs` is the
+ *                    transitional snapshot aggregate (number) for those 10 SCs,
+ *                    else `null` for the 5 stranded ones. Carries the SC-generic
+ *                    `fix` and the distilled `patterns`. `severity`/`helpUrl` are
+ *                    the finding's runtime axe values, falling back to the
+ *                    baseline catalog's published default for the matched SC —
+ *                    they let the report show a severity and (for axe findings) a
+ *                    `ref` even though the moat itself has no per-rule metadata.
  *   - `"baseline"` — no corpus match, but axe-core's baseline catalog
  *                    (`data/baseline-rules.json`) knows the rule. Coverage, NOT
  *                    audit-frequency data: carries axe's `severity` + standard
@@ -80,7 +88,7 @@ export type CorpusEvidence =
       readonly source: "audit";
       readonly sc: string;
       readonly tier: CorpusTier;
-      readonly orgs: number;
+      readonly orgs: number | null;
       readonly fix: string;
       readonly patterns: readonly DistilledPatternRef[];
       /**
@@ -119,9 +127,16 @@ interface CriterionEntry {
 }
 
 /**
- * The snapshot is loaded as `unknown` at the JSON boundary and narrowed here.
- * We index `criteria` by SC string; values are validated structurally before
- * use so a malformed snapshot fails loud rather than smuggling `any` inward.
+ * TRANSITIONAL. The snapshot is loaded as `unknown` at the JSON boundary and
+ * narrowed here, but `CRITERIA` no longer gates `source:"audit"` (the distilled
+ * patterns do — see {@link buildScSummary}). It is parsed ONLY to supply, for
+ * the 10 SCs it covers, the org INTEGER and the SC-generic `fix`. Its `tier`
+ * field is NO LONGER READ: the SC-level tier is recomputed via `tierForOrgs`
+ * from the org integer, so a stale hand-typed tier can never re-arm BUG 2.
+ *
+ * Values are validated structurally before use so a malformed snapshot fails
+ * loud rather than smuggling `any` inward. (The `tier` field is still parsed for
+ * back-compat / structural validation; it is simply ignored downstream.)
  */
 function readCriteria(raw: unknown): ReadonlyMap<string, CriterionEntry> {
   const map = new Map<string, CriterionEntry>();
@@ -270,6 +285,78 @@ const DISTILLED = readDistilled(
   patterns413,
 );
 
+/** Tier strength ranking — lower rank = stronger (more widespread). */
+const TIER_RANK: Record<CorpusTier, number> = {
+  "very-common": 0,
+  common: 1,
+  occasional: 2,
+  unknown: 3,
+};
+
+/** The strongest (most-widespread) tier across a list — min TIER_RANK wins. */
+function maxTier(tiers: readonly CorpusTier[]): CorpusTier {
+  // Only SCs with >= 1 pattern enter the summary, so the list is never empty;
+  // the `occasional` seed is a defensive floor that the reduce never returns.
+  return tiers.reduce<CorpusTier>(
+    (best, t) => (TIER_RANK[t] < TIER_RANK[best] ? t : best),
+    "occasional",
+  );
+}
+
+/**
+ * The DERIVED per-SC summary — the single source of truth for `source:"audit"`.
+ * One entry per distilled SC (all 15), so the gate is "has a distilled pattern",
+ * not snapshot membership. `tier` is DERIVED, never hand-typed:
+ *
+ *   - 10 SCs covered by the transitional snapshot → `tierForOrgs(orgs)` from the
+ *     org INTEGER (auto-corrects the 5 mis-typed snapshot tiers; e.g. 1.1.1 with
+ *     16 orgs becomes very-common), `orgs` = the snapshot integer.
+ *   - 5 stranded SCs (1.3.5/1.4.3/2.4.6/2.4.7/3.2.5) → max `frequencyTier` across
+ *     the SC's patterns, `orgs` = null (no snapshot org integer survives, and the
+ *     distiller cannot re-run to recover one).
+ *
+ * `fix` is the SC-generic snapshot fix for covered SCs, else the strongest-tier
+ * pattern's fix for stranded ones.
+ */
+interface ScSummaryEntry {
+  readonly tier: CorpusTier;
+  readonly orgs: number | null;
+  readonly fix: string;
+}
+
+function buildScSummary(
+  distilled: ReadonlyMap<string, DistilledPatternRef[]>,
+  criteria: ReadonlyMap<string, CriterionEntry>,
+): ReadonlyMap<string, ScSummaryEntry> {
+  const map = new Map<string, ScSummaryEntry>();
+  for (const sc of distilled.keys()) {
+    const covered = criteria.get(sc);
+    if (covered !== undefined) {
+      // Derived from the org INTEGER — the BUG-2 fix. The snapshot's typed tier
+      // is intentionally ignored.
+      map.set(sc, {
+        tier: tierForOrgs(covered.orgs),
+        orgs: covered.orgs,
+        fix: covered.fix,
+      });
+    } else {
+      const refs = [...(distilled.get(sc) ?? [])].sort(
+        // Strongest tier first; tie-break on id so `refs[0].fix` is deterministic
+        // even if a stranded SC ever gains a second pattern at the same tier.
+        (a, b) => TIER_RANK[a.frequencyTier] - TIER_RANK[b.frequencyTier] || a.id.localeCompare(b.id),
+      );
+      map.set(sc, {
+        tier: maxTier(refs.map((r) => r.frequencyTier)),
+        orgs: null,
+        fix: refs[0]?.fix ?? "",
+      });
+    }
+  }
+  return map;
+}
+
+const SC_SUMMARY = buildScSummary(DISTILLED, CRITERIA);
+
 /**
  * Find the first of a finding's SCs that the baseline catalog knows, with the
  * matched entry. Source-pass findings (jsx-a11y / enforce) and WCAG-tagged axe
@@ -306,11 +393,21 @@ function baselineBySc(finding: Finding): { sc: string; entry: BaselineRuleEntry 
  * the catalog's static severity.
  */
 export function enrich(finding: Finding): EnrichedFinding {
-  let best: { sc: string; entry: CriterionEntry } | null = null;
+  // GATE on the DERIVED per-SC summary (presence of a distilled pattern), not on
+  // snapshot membership. A finding can carry several SC; pick the strongest one
+  // present in the summary — by tier (strongest first), tie-broken by higher
+  // orgs (org-less stranded SCs sort -1) then lowest SC string for determinism.
+  let best: { sc: string; entry: ScSummaryEntry } | null = null;
   for (const sc of finding.wcag) {
-    const entry = CRITERIA.get(sc);
+    const entry = SC_SUMMARY.get(sc);
     if (entry === undefined) continue;
-    if (best === null || entry.orgs > best.entry.orgs) {
+    if (best === null) {
+      best = { sc, entry };
+      continue;
+    }
+    const tierDelta = TIER_RANK[entry.tier] - TIER_RANK[best.entry.tier];
+    const orgsDelta = (entry.orgs ?? -1) - (best.entry.orgs ?? -1);
+    if (tierDelta < 0 || (tierDelta === 0 && orgsDelta > 0) || (tierDelta === 0 && orgsDelta === 0 && sc < best.sc)) {
       best = { sc, entry };
     }
   }
@@ -487,20 +584,28 @@ export function resolveDisplay(f: EnrichedFinding): DisplayContract {
 /** A corpus SC entry surfaced for contract generation: SC + frequency + fix. */
 export interface CorpusCriterion {
   readonly sc: string;
-  readonly orgs: number;
+  readonly orgs: number | null;
   readonly tier: CorpusTier;
   readonly fix: string;
 }
 
 /**
- * Every corpus SC, ordered most-widespread first. This is the source of truth
- * the contract layer reads from: enforcement defaults split on `tier`, and the
- * AGENTS.md block leads with the top SC. Pure data — no finding required.
+ * Every distilled corpus SC (all 15), ordered most-widespread first. This is the
+ * source of truth the contract layer reads from: enforcement defaults split on
+ * the DERIVED `tier`, and the AGENTS.md block leads with the top SC. `orgs` is
+ * null for the 5 stranded SCs the snapshot never covered. Pure data — no finding
+ * required.
  */
 export function corpusCriteria(): readonly CorpusCriterion[] {
-  return [...CRITERIA.entries()]
+  return [...SC_SUMMARY.entries()]
     .map(([sc, e]) => ({ sc, orgs: e.orgs, tier: e.tier, fix: e.fix }))
-    .sort((a, b) => b.orgs - a.orgs);
+    .sort((a, b) => {
+      const t = TIER_RANK[a.tier] - TIER_RANK[b.tier];
+      if (t !== 0) return t;
+      const o = (b.orgs ?? -1) - (a.orgs ?? -1);
+      if (o !== 0) return o;
+      return a.sc < b.sc ? -1 : a.sc > b.sc ? 1 : 0;
+    });
 }
 
 /**
@@ -520,13 +625,6 @@ export interface CorpusPattern {
   readonly fix: string;
 }
 
-const TIER_RANK: Record<CorpusTier, number> = {
-  "very-common": 0,
-  common: 1,
-  occasional: 2,
-  unknown: 3,
-};
-
 /**
  * Every distilled pattern, deduped by id and ordered by frequency tier
  * (very-common → common → occasional) then SC then id for a stable diff.
@@ -540,7 +638,7 @@ export function corpusPatterns(): readonly CorpusPattern[] {
   // Pick the most-widespread SC per pattern id (most orgs; tie → lowest SC).
   const bySc = new Map<string, { ref: DistilledPatternRef; sc: string; orgs: number | null }>();
   for (const [sc, refs] of DISTILLED.entries()) {
-    const orgs = CRITERIA.get(sc)?.orgs ?? null;
+    const orgs = SC_SUMMARY.get(sc)?.orgs ?? null;
     for (const ref of refs) {
       const existing = bySc.get(ref.id);
       const better =

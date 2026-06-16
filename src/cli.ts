@@ -64,7 +64,9 @@ export function detailLines(f: EnrichedFinding): string[] {
     case "audit":
       // The moat: real audit-frequency data — org count + frequency tier. The
       // tier line is an accurate SC-LEVEL fact and is always shown.
-      lines.push(`    corpus: [${TIER_LABEL[c.tier]}] SC ${c.sc} — ${c.orgs}/26 orgs`);
+      lines.push(
+        `    corpus: [${TIER_LABEL[c.tier]}] SC ${c.sc}${c.orgs === null ? "" : ` — ${c.orgs}/26 orgs`}`,
+      );
       if (d.fixLine !== null) lines.push(`    fix:    ${d.fixLine}`);
       if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
       if (d.showPatterns) {
