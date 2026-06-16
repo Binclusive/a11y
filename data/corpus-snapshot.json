@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "note": "SEED snapshot derived by hand from evidence.md, NOT the full distillation. Frequencies are real: 643 findings across 26 orgs in Binclusive's dynamic-audit corpus. Tiers: very-common >=15 orgs, common 8-14, occasional 3-7. To be REPLACED by the full distillation pipeline (corpus -> SC frequency -> representative fix) once that lands. Keyed by WCAG Success Criterion.",
+    "note": "TRANSITIONAL. This file no longer GATES source:'audit' (the distilled data/corpus/patterns-*.json do) and its per-SC `tier` fields are IGNORED by code — the SC-level tier is recomputed from `orgs` via tierForOrgs (very-common >=15, common 8-14, occasional 3-7), so a stale hand-typed tier can never re-arm a mis-tier bug. The file is retained ONLY to supply, for the 10 SCs it covers, the org INTEGER (rendered as N/26 orgs) and the SC-generic `fix`. These org integers are unrecoverable from the committed patterns (the distiller stripped org_id after the k>=3 gate; _meta.corpusOrgs is corpus-wide, not per-SC) and the distiller cannot re-run, so deleting this file would lose them. Frequencies are real: 643 findings across 26 orgs in Binclusive's dynamic-audit corpus. Keyed by WCAG Success Criterion.",
     "source": "evidence.md",
     "corpusFindings": 643,
     "corpusOrgs": 26,

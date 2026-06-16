@@ -25,8 +25,9 @@ describe("check_url handler: axe findings emit axe's rule fix, not the SC corpus
 
   it("emits axe's per-rule guidance for aria-progressbar-name, keeps the corpus tier", async () => {
     // `aria-progressbar-name` is tagged WCAG 1.1.1 — an SC the audit corpus HAS
-    // (common, 16/26), whose generic fix is the image-alt fix. The emitted
-    // `fix` must be axe's rule guidance, never that contradictory corpus fix.
+    // (very-common, 16/26 — tier derived from the org integer), whose generic fix
+    // is the image-alt fix. The emitted `fix` must be axe's rule guidance, never
+    // that contradictory corpus fix.
     const result: DomScanResult = {
       url: "file:///page.html",
       findings: [
@@ -52,7 +53,7 @@ describe("check_url handler: axe findings emit axe's rule fix, not the SC corpus
     expect(f).toBeDefined();
     // Corpus SC-level frequency fact survives (the moat).
     expect(f?.source).toBe("audit");
-    expect(f?.tier).toBe("common");
+    expect(f?.tier).toBe("very-common");
     expect(f?.wcag).toContain("1.1.1");
     // The EMITTED fix is axe's rule guidance, NOT the 1.1.1 image-alt corpus fix.
     expect(f?.fix).toBe("ARIA progressbar nodes must have an accessible name");
