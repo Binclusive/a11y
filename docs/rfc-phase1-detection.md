@@ -1,6 +1,6 @@
 # RFC Phase 1: Corpus → Agent Detection (the recall layer)
 
-Status: **Design spike complete — awaiting 4 decisions** · Date: 2026-06-16
+Status: **Design approved — ready to build (1a unblocked)** · Date: 2026-06-16
 Companion to `docs/rfc-corpus-as-detection.md` (§4). Produced via a gated design
 workflow (ground → 3 design approaches → adversarial critique → synthesis).
 
@@ -142,18 +142,12 @@ tracked, only soft-floored. The eval drives the **exact shipped path**
 Note 1a–1d are deterministic and ship with normal CI; the model only enters at
 1e. The precision spine exists *before* the first grounded call.
 
-## Open decisions (need Can — recommendations inline)
+## Resolved decisions (approved 2026-06-16)
 
-1. **Precision floor: 0.95 or 0.98 Wilson lower-bound?** → *Rec: 0.95 to start*
-   (the Wilson bound is already conservative), ratchet up with data. 0.98 if you
-   want the recall layer to never risk floor trust even early.
-2. **G4 abstention-veto in Phase 1, or defer?** It changes `enforce`'s contract
-   (emit "considered-and-skipped"). → *Rec: include* (it's sequenced in 1b and
-   closes the "floor stayed silent ≠ flag" residue) — but it's the one piece
-   that touches the floor's code, so it carries the most regression risk.
-3. **Eval cadence: nightly non-blocking, or per-PR gate?** K=5 × ~50 fixtures ≈
-   250 grounded passes/run. → *Rec: nightly non-blocking to start*; promote to
-   per-PR once precision proves stable.
-4. **`occasional` tier stays context-only (N=20 cap + G6)?** A deliberate
-   precision-for-recall trade. → *Rec: yes for Phase 1*, revisit only with eval
-   evidence that precision holds.
+1. **Precision floor = 0.95 Wilson lower-bound.** Ratchet up with data.
+2. **G4 abstention-veto is in Phase 1 scope** (sequenced in 1b). Accept the
+   `enforce.ts` contract change; `matrix:check` guards the regression risk.
+3. **`recall:eval` runs nightly, non-blocking.** Promote to per-PR only once
+   precision proves stable.
+4. **`occasional` tier stays context-only** (N=20 cap + G6). Revisit only with
+   eval evidence.
