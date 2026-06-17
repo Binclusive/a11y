@@ -1,0 +1,149 @@
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import type { Finding } from "../src/core";
+import { type ReviewCandidate, reviewA11y } from "../src/review";
+
+// The deterministic gate stack is driven with SYNTHETIC nominations (no model):
+// each candidate is engineered to die at — or clear — exactly one gate, so the
+// drop counters and survivor shape pin G0-G8 down mechanically. The fixture's
+// static floor produces NO findings (PlainLink is named, TooltipSuppressed is
+// suppressed, SpreadButton abstains), so a survivor is never deduped away.
+
+const FIXTURE = resolve(fileURLToPath(new URL("./fixtures/enforce/review.tsx", import.meta.url)));
+
+/** A nomination anchored at the named PlainLink survivor anchor by default. */
+function candidate(over: Partial<ReviewCandidate> = {}): ReviewCandidate {
+  return {
+    file: FIXTURE,
+    line: 11, // `export const PlainLink = () => <a href="/home">Home</a>;`
+    patternId: "2.4.4-link-no-name", // common-tier, in this fixture's slice
+    codeQuote: "<a href",
+    wcag: ["2.4.4"],
+    confidence: "high",
+    message: "Link has no discernible name.",
+    justification: "The floor missed this opaque link; the quote is a real <a> with no name.",
+    ...over,
+  };
+}
+
+async function verifyOne(c: ReviewCandidate): Promise<readonly Finding[]> {
+  const r = await reviewA11y({ verify: true, files: [FIXTURE], candidates: [c] });
+  if (r.mode !== "verify") throw new Error("expected verify mode");
+  return r.recall;
+}
+
+describe("reviewA11y verify — the deterministic G0-G8 gate stack", () => {
+  it("G1: drops a candidate whose patternId is NOT in the retrieved slice", async () => {
+    // `color-contrast-…` is real WCAG but never a distilled slice pattern here.
+    expect(await verifyOne(candidate({ patternId: "color-contrast-not-in-corpus" }))).toEqual([]);
+  });
+
+  it("G2: drops a candidate whose codeQuote is not a verbatim substring of the cited line", async () => {
+    expect(await verifyOne(candidate({ codeQuote: "THIS TEXT IS NOT ON THE LINE" }))).toEqual([]);
+  });
+
+  it("G2: drops a candidate anchored to a line that is not a real JSX element", async () => {
+    // Line 5 is an import statement — a real source line, but no JSX element.
+    expect(await verifyOne(candidate({ line: 5, codeQuote: "import" }))).toEqual([]);
+  });
+
+  it("G3: drops a candidate on a Tooltip-suppressed line (suppressor veto)", async () => {
+    // Line 17 is the <IconButton> inside a titled <Tooltip> → name-injecting-wrapper.
+    const c = candidate({
+      line: 17,
+      patternId: "4.1.2-button-no-name",
+      codeQuote: "<IconButton>",
+      wcag: ["4.1.2"],
+    });
+    expect(await verifyOne(c)).toEqual([]);
+  });
+
+  it("G4: drops a candidate on an abstained line+sc (abstention veto)", async () => {
+    // Line 26 is `<Button {...props}>` — the floor ABSTAINS on 4.1.2 (spread).
+    const c = candidate({
+      line: 26,
+      patternId: "4.1.2-button-no-name",
+      codeQuote: "<Button",
+      wcag: ["4.1.2"],
+    });
+    expect(await verifyOne(c)).toEqual([]);
+  });
+
+  it("G5: drops a low-confidence candidate", async () => {
+    expect(await verifyOne(candidate({ confidence: "low" }))).toEqual([]);
+    expect(await verifyOne(candidate({ confidence: "medium" }))).toEqual([]);
+  });
+
+  it("G6: drops an occasional-tier patternId (context-only, never flags)", async () => {
+    // `1.1.1-decorative-icon-announced` is occasional → in the slice as context,
+    // but eligibleToFlag=false, so the tier floor vetoes it.
+    const c = candidate({ patternId: "1.1.1-decorative-icon-announced", wcag: ["1.1.1"] });
+    expect(await verifyOne(c)).toEqual([]);
+  });
+
+  it("SURVIVES: a valid high-confidence common-tier candidate on a real un-suppressed line", async () => {
+    const recall = await verifyOne(candidate());
+    expect(recall).toHaveLength(1);
+    const f = recall[0]!;
+    // G8 advisory framing — the survivor's full quarantine shape.
+    expect(f.provenance).toBe("corpus-agent");
+    expect(f.layer).toBe("recall");
+    expect(f.enforcement).toBe("warn");
+    expect(f.patternId).toBe("2.4.4-link-no-name");
+    expect(f.line).toBe(11);
+    expect(f.file).toBe(FIXTURE);
+    expect(f.wcag).toEqual(["2.4.4"]);
+  });
+
+  it("reports per-gate drop counts and surfaces only the survivor", async () => {
+    const cands: ReviewCandidate[] = [
+      candidate(), // survives
+      candidate({ patternId: "color-contrast-not-in-corpus" }), // G1
+      candidate({ codeQuote: "ABSENT" }), // G2
+      candidate({ line: 17, patternId: "4.1.2-button-no-name", codeQuote: "<IconButton>", wcag: ["4.1.2"] }), // G3
+      candidate({ line: 26, patternId: "4.1.2-button-no-name", codeQuote: "<Button", wcag: ["4.1.2"] }), // G4
+      candidate({ confidence: "low" }), // G5
+      candidate({ patternId: "1.1.1-decorative-icon-announced", wcag: ["1.1.1"] }), // G6
+    ];
+    const r = await reviewA11y({ verify: true, files: [FIXTURE], candidates: cands });
+    if (r.mode !== "verify") throw new Error("expected verify mode");
+    expect(r.recall).toHaveLength(1);
+    expect(r.dropped).toEqual({ G0: 0, G1: 1, G2: 1, G3: 1, G4: 1, G5: 1, G6: 1 });
+  });
+});
+
+describe("reviewA11y verify — G0 anchor", () => {
+  it("drops EVERY candidate when the grounding slice is empty (no grounding)", async () => {
+    // A file with no R1/R2/R3 retrieval match → empty slice → G0 vetoes all.
+    const empty = resolve(
+      fileURLToPath(new URL("./fixtures/enforce/g0-empty.tsx", import.meta.url)),
+    );
+    const c = candidate({ file: empty, line: 1, patternId: "2.4.4-link-no-name", codeQuote: "x" });
+    const r = await reviewA11y({ verify: true, files: [empty], candidates: [c] });
+    if (r.mode !== "verify") throw new Error("expected verify mode");
+    expect(r.recall).toEqual([]);
+    expect(r.dropped.G0).toBe(1);
+  });
+});
+
+describe("reviewA11y verify — quarantine: recall never gates the build", () => {
+  it("survivors are all enforcement=warn (advisory, never block)", async () => {
+    const recall = await verifyOne(candidate());
+    expect(recall.every((f) => f.enforcement === "warn")).toBe(true);
+  });
+});
+
+describe("reviewA11y retrieve — the grounding contract", () => {
+  it("returns the slice, the static findings, the suppressor facts, and an instruction", async () => {
+    const r = await reviewA11y({ files: [FIXTURE] });
+    if (r.mode !== "retrieve") throw new Error("expected retrieve mode");
+    // The fixture's floor is silent — recall exists for exactly this gap.
+    expect(r.staticFindings).toEqual([]);
+    // The corpus context is the closed vocabulary the agent may nominate from.
+    expect(r.corpusContext.some((p) => p.id === "2.4.4-link-no-name")).toBe(true);
+    // Per-line suppressor facts surface the Tooltip-injected name on line 17.
+    expect(r.suppressorMap[FIXTURE]?.[17]).toContain("name-injecting-wrapper");
+    expect(r.instruction).toMatch(/closed vocabulary|patternId/i);
+  });
+});

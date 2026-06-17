@@ -51,6 +51,7 @@ import {
   type Severity,
 } from "./corpus";
 import type { Coverage } from "./resolve-components";
+import { type ReviewCandidate, type ReviewInput, reviewA11y, reviewA11yDir } from "./review";
 
 /** A single finding flattened to the shape the MCP tool returns. */
 export interface CheckFinding {
@@ -308,6 +309,59 @@ export function registerTools(server: McpServer): void {
     async ({ rule, wcag, fix, source, dir }) =>
       jsonContent(await learnA11yRule({ rule, wcag, fix, source, dir })),
   );
+
+  // The one model nomination, validated at the wire. Mirrors {@link ReviewCandidate}.
+  const candidateSchema = z.object({
+    file: z.string().describe("Absolute path to the file the finding is in."),
+    line: z.number().int().positive().describe("1-based line of the offending JSX element."),
+    patternId: z
+      .string()
+      .describe("A patternId FROM corpusContext (closed vocabulary — others are dropped)."),
+    codeQuote: z
+      .string()
+      .describe("Verbatim substring of the cited line (re-checked server-side)."),
+    wcag: z.array(z.string()).describe("WCAG success criteria this candidate asserts."),
+    confidence: z
+      .enum(["high", "medium", "low"])
+      .describe("Only `high` survives; medium/low are dropped."),
+    message: z.string().describe("Advisory message for the surfaced finding."),
+    justification: z
+      .string()
+      .describe(
+        "Adversarial self-justification (G7): why is this real, not an FP, and why did the floor miss it?",
+      ),
+  });
+
+  server.tool(
+    "review_a11y",
+    "The corpus-grounded RECALL pass — a two-step tool that finds accessibility failures the static check missed, WITHOUT introducing false positives. Step 1 (retrieve): call with `{ dir }` to get the static findings, the corpus patterns you MAY flag (closed vocabulary), the per-line do-not-flag suppressor facts, and an instruction. Read those and nominate candidates. Step 2 (verify): call with `{ verify: true, files, candidates }`; the server re-runs a deterministic gate stack over your nominations and returns only the survivors, as ADVISORY findings (never gating the build). Use this AFTER check_a11y to catch what the static floor can't see.",
+    {
+      dir: z
+        .string()
+        .optional()
+        .describe("Retrieve mode: directory to scan for .tsx and ground the review."),
+      verify: z.boolean().optional().describe("Set true with `files` + `candidates` to verify."),
+      files: z
+        .array(z.string())
+        .optional()
+        .describe("Verify mode: the files the candidates point at."),
+      candidates: z
+        .array(candidateSchema)
+        .optional()
+        .describe("Verify mode: your nominations from the retrieve step."),
+    },
+    async ({ dir, verify, files, candidates }) => {
+      if (verify === true) {
+        const input: ReviewInput = {
+          verify: true,
+          files: files ?? [],
+          candidates: (candidates ?? []) as ReviewCandidate[],
+        };
+        return jsonContent(await reviewA11y(input));
+      }
+      return jsonContent(await reviewA11yDir(dir ?? process.cwd()));
+    },
+  );
 }
 
 /** Build the configured server (no transport attached). */
@@ -323,6 +377,7 @@ export function buildServer(): McpServer {
         "check_url renders a live URL in a real browser and runs axe-core, reporting the same corpus-tiered findings for source-less or server-rendered pages.",
         "get_a11y_rules returns the rules for a component or WCAG SC so you can apply them before writing code.",
         "learn_a11y_rule records a team rule into binclusive.json and the AGENTS.md/CLAUDE.md block.",
+        "review_a11y is a two-step corpus-grounded recall pass: retrieve grounding then verify your nominations through a deterministic gate stack, surfacing advisory findings the static floor missed.",
       ].join(" "),
     },
   );
