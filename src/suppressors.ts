@@ -217,3 +217,68 @@ export function isNameInjectingWrapper(
   // The title must actually be there to inject a name (present or dynamic).
   return attrState(opening, sf, "title") !== "missing" || anyNameAttr(opening, sf, LABEL_ATTRS);
 }
+
+/** The enclosing-ancestor suppressor state at one JSX element (see {@link walkAncestorSuppressors}). */
+export interface AncestorFlags {
+  /** An enclosing `<label>` / form-field grouping (`isLabelContainer`) is an ancestor. */
+  readonly hasLabelAncestor: boolean;
+  /** An enclosing titled `<Tooltip>` (`isNameInjectingWrapper`) is an ancestor. */
+  readonly hasNameAncestor: boolean;
+}
+
+/** The per-element callback driven by {@link walkAncestorSuppressors}. */
+export type AncestorVisitor = (args: {
+  readonly node: ts.JsxElement | ts.JsxSelfClosingElement;
+  readonly opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
+  /** 1-based opening-tag line — the same line a finding/abstention anchors to. */
+  readonly line: number;
+  /** Whether a label / name-injecting CONTAINER ENCLOSES this element (not itself). */
+  readonly flags: AncestorFlags;
+}) => void;
+
+/**
+ * The ONE ancestor-suppressor tree walk, shared by `enforceContent` and
+ * `buildSuppressorMap` so they cannot drift (the two used to keep divergent
+ * copies of this `labelDepth` / `nameAncestorDepth` descent). It pushes a depth
+ * counter as a label container (`isLabelContainer`) or a name-injecting wrapper
+ * (`isNameInjectingWrapper`) is entered and pops it on exit, so every descendant
+ * element learns it is UNDER one — the container element itself does NOT count as
+ * its own ancestor. For each JSX element it invokes `visitor` with the element,
+ * its opening, its 1-based line, and the enclosing-ancestor {@link AncestorFlags}.
+ */
+export function walkAncestorSuppressors(sf: ts.SourceFile, visitor: AncestorVisitor): void {
+  let labelDepth = 0;
+  let nameAncestorDepth = 0;
+
+  const visit = (node: ts.Node): void => {
+    let enteredLabel = false;
+    let enteredNameAncestor = false;
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const opening = ts.isJsxElement(node) ? node.openingElement : node;
+      if (isLabelContainer(opening, sf)) {
+        labelDepth++;
+        enteredLabel = true;
+      }
+      if (isNameInjectingWrapper(opening, sf)) {
+        nameAncestorDepth++;
+        enteredNameAncestor = true;
+      }
+      const line = sf.getLineAndCharacterOfPosition(opening.getStart(sf)).line + 1;
+      // The element opening a container is not its OWN ancestor — only its
+      // descendants are — so subtract the entry just made for this element.
+      visitor({
+        node,
+        opening,
+        line,
+        flags: {
+          hasLabelAncestor: labelDepth - (enteredLabel ? 1 : 0) > 0,
+          hasNameAncestor: nameAncestorDepth - (enteredNameAncestor ? 1 : 0) > 0,
+        },
+      });
+    }
+    ts.forEachChild(node, visit);
+    if (enteredLabel) labelDepth--;
+    if (enteredNameAncestor) nameAncestorDepth--;
+  };
+  visit(sf);
+}

@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { buildResolvedHosts, type ResolvedHost } from "../src/enforce";
+import type { ComponentResolution } from "../src/resolve-components";
 import { buildSuppressorMap, type SuppressorName } from "../src/suppressor-map";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -10,7 +12,10 @@ const fx = (name: string): string => join(here, "fixtures", "enforce", name);
 const mapFixture = fx("suppressor-map.tsx");
 
 /** Parse a fixture and build its suppressor map, alongside its source lines. */
-function mapOf(file: string): {
+function mapOf(
+  file: string,
+  resolvedHosts: ReadonlyMap<string, ResolvedHost> = new Map(),
+): {
   readonly map: ReturnType<typeof buildSuppressorMap>;
   readonly lineOf: (needle: string) => number;
 } {
@@ -18,7 +23,7 @@ function mapOf(file: string): {
   const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const lines = text.split("\n");
   const lineOf = (needle: string): number => lines.findIndex((l) => l.includes(needle)) + 1;
-  return { map: buildSuppressorMap(sf), lineOf };
+  return { map: buildSuppressorMap(sf, resolvedHosts), lineOf };
 }
 
 /** The suppressor names live on `line`, as a plain array (order-insensitive). */
@@ -77,5 +82,87 @@ describe("buildSuppressorMap: a clean control has no suppressors", () => {
     const { map, lineOf } = mapOf(mapFixture);
     const cleanLine = lineOf('<IconButton aria-label="Save">');
     expect(namesAt(map, cleanLine)).toEqual([]);
+  });
+});
+
+describe("buildSuppressorMap: resolved-host skips (findings #2/#3/#8)", () => {
+  const skipsFixture = fx("resolved-host-skips.tsx");
+
+  /** The resolved-host map enforce sees for the resolved-host-skips fixture. */
+  const resolved = (): ReadonlyMap<string, ResolvedHost> => {
+    const resolutions: ComponentResolution[] = [
+      // A homegrown checkbox wrapper → button host carrying role="checkbox" (a
+      // toggle reached via trace, not a TOGGLE_NAMES match).
+      {
+        name: "ConsentBox",
+        module: "@/components/ui/consent-box",
+        host: "button",
+        provenance: "trace",
+        role: "checkbox",
+        rendersOwnName: false,
+      },
+      // A shadcn carousel arrow → button host that renders its own sr-only name.
+      {
+        name: "CarouselPrevious",
+        module: "@/components/ui/carousel",
+        host: "button",
+        provenance: "trace",
+        role: null,
+        rendersOwnName: true,
+      },
+      // A search field wrapper → input host.
+      {
+        name: "SearchField",
+        module: "@/components/ui/search-field",
+        host: "input",
+        provenance: "trace",
+        role: null,
+        rendersOwnName: false,
+      },
+      // A plain card → NOT an input host (role/own-name irrelevant).
+      {
+        name: "Card",
+        module: "@/components/ui/card",
+        host: "div",
+        provenance: "trace",
+        role: null,
+        rendersOwnName: false,
+      },
+    ];
+    return buildResolvedHosts(resolutions);
+  };
+
+  it("a Radix-toggle-resolved control gives toggle-role on its line (G3 veto)", () => {
+    const { map, lineOf } = mapOf(skipsFixture, resolved());
+    const line = lineOf("export const RadixToggle"); // <Checkbox /> on the same line
+    expect(namesAt(map, line)).toContain("toggle-role");
+  });
+
+  it("a rendersOwnName-resolved control gives renders-own-name on its line (G3 veto)", () => {
+    const { map, lineOf } = mapOf(skipsFixture, resolved());
+    const line = lineOf("export const OwnNameWrapper"); // <CarouselPrevious />
+    expect(namesAt(map, line)).toContain("renders-own-name");
+  });
+
+  it("an input-host wrapper with an exempt type gives name-exempt-input-type", () => {
+    const { map, lineOf } = mapOf(skipsFixture, resolved());
+    const line = lineOf("export const ExemptInputWrapper"); // <SearchField type="submit" />
+    expect(namesAt(map, line)).toContain("name-exempt-input-type");
+  });
+
+  it("a NON-input component with a type prop is NOT marked (finding #3 fix)", () => {
+    const { map, lineOf } = mapOf(skipsFixture, resolved());
+    const line = lineOf("export const NonInputWithType"); // <Card type="submit" />
+    expect(namesAt(map, line)).not.toContain("name-exempt-input-type");
+  });
+
+  it("with NO resolved hosts, a capitalized component is never name-exempt-marked", () => {
+    // The old gate marked every capitalized component (`tag === null`); the
+    // correct gate needs a resolved input host, so a bare map marks nothing here.
+    const { map, lineOf } = mapOf(skipsFixture);
+    expect(namesAt(map, lineOf("export const ExemptInputWrapper"))).not.toContain(
+      "name-exempt-input-type",
+    );
+    expect(namesAt(map, lineOf("export const RadixToggle"))).not.toContain("toggle-role");
   });
 });

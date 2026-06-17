@@ -108,6 +108,22 @@ function tokenize(text: string): Set<string> {
   return out;
 }
 
+/**
+ * The per-pattern component-token index (`id -> tokenize(component)`), cached
+ * against the memoized `corpusPatterns()` array identity. The tokenize loop is
+ * pure over immutable corpus data, so it runs once for the process and every
+ * later review reuses the same index instead of re-tokenizing all ~100 patterns.
+ */
+let COMPONENT_TOKENS: { readonly source: readonly CorpusPattern[]; readonly byId: ReadonlyMap<string, Set<string>> } | undefined;
+
+function componentTokens(all: readonly CorpusPattern[]): ReadonlyMap<string, Set<string>> {
+  if (COMPONENT_TOKENS?.source === all) return COMPONENT_TOKENS.byId;
+  const byId = new Map<string, Set<string>>();
+  for (const p of all) byId.set(p.id, tokenize(p.component));
+  COMPONENT_TOKENS = { source: all, byId };
+  return byId;
+}
+
 /** Whether two token sets share at least one token. */
 function overlaps(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   for (const t of a) {
@@ -140,6 +156,10 @@ function activeJourneyTags(files: readonly string[]): Set<string> {
 export function retrieveSlice(input: RetrieveInput): RetrievedSlice {
   const all = corpusPatterns();
   const journeyTags = corpusJourneyTags();
+  // Precompute each pattern's component tokens ONCE — `corpusPatterns()` is a
+  // memoized frozen singleton, so this `id -> tokens` index is cached against its
+  // array identity and the tokenize loop runs only on the first review.
+  const componentTokensById = componentTokens(all);
   // Stable rank by the corpus's own (tier, sc, id) order — the tie-break inside
   // a tier when the cap bites.
   const rank = new Map(all.map((p, i) => [p.id, i]));
@@ -161,8 +181,8 @@ export function retrieveSlice(input: RetrieveInput): RetrievedSlice {
 
   const matched = new Map<string, CorpusPattern>();
   for (const p of all) {
-    const componentTokens = tokenize(p.component);
-    const r1 = resolutionTokens.some((rt) => overlaps(componentTokens, rt));
+    const compTokens = componentTokensById.get(p.id) ?? tokenize(p.component);
+    const r1 = resolutionTokens.some((rt) => overlaps(compTokens, rt));
     const r2 = findingScs.has(p.sc);
     const r3 =
       active.size > 0 && (journeyTags.get(p.id) ?? []).some((t) => active.has(t));

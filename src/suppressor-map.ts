@@ -1,16 +1,18 @@
 import ts from "typescript";
+import type { ResolvedHost } from "./enforce";
+import { isToggleRole } from "./registry";
+import { collectLocalImports, type ImportBinding } from "./source-trace";
 import {
   isHiddenOrUntabbable,
-  isLabelContainer,
   isNameExemptInputType,
-  isNameInjectingWrapper,
+  walkAncestorSuppressors,
 } from "./suppressors";
 
 /**
  * The deterministic G3 input (RFC Phase 1, §"The FP discipline").
  *
  * `buildSuppressorMap` runs the SAME ancestor walk `enforceContent` runs — the
- * `labelDepth` / `nameAncestorDepth` tree descent that decides `hasLabelAncestor`
+ * shared {@link walkAncestorSuppressors} descent that decides `hasLabelAncestor`
  * / `hasNameAncestor` — and records, per JSX line, WHICH of the static floor's
  * suppressor predicates ({@link src/suppressors}) apply there. The map is the
  * floor's hard-won precision, re-expressed as data the corpus-recall layer can
@@ -18,8 +20,12 @@ import {
  * grounded-but-misclassified finding on a suppressed line is vetoed.
  *
  * It REUSES the suppressor predicates verbatim — it never re-implements them —
- * so any drift in the floor's suppression logic ripples here automatically. It
- * emits no findings and has no side effects: a pure `source → line → names` read.
+ * so any drift in the floor's suppression logic ripples here automatically. The
+ * RESOLVED-HOST skips enforce performs (a traced/registry toggle role, a wrapper
+ * that renders its own name, a `type`-exempt INPUT host) need the resolved-host
+ * map enforce uses, so it is threaded in: the same `${name}@${module}` lookup
+ * {@link buildResolvedHosts} builds. It emits no findings and has no side
+ * effects: a pure `(source, resolved hosts) → line → names` read.
  */
 
 /** The suppressor predicates, named. The string IS the wire name fed to G3. */
@@ -28,7 +34,8 @@ export type SuppressorName =
   | "name-injecting-wrapper"
   | "hidden-untabbable"
   | "name-exempt-input-type"
-  | "toggle-role";
+  | "toggle-role"
+  | "renders-own-name";
 
 /**
  * A per-line view of which suppressors apply. Keyed by 1-based line number (the
@@ -39,9 +46,10 @@ export type SuppressorName =
  *     line carries them when an enclosing `<label>` / form-field grouping
  *     (`isLabelContainer`) or a titled `<Tooltip>` (`isNameInjectingWrapper`) is
  *     an ancestor of the element on that line. They mirror the `labelDepth` /
- *     `nameAncestorDepth` the enforce walk threads down the tree.
- *   - `hidden-untabbable` / `name-exempt-input-type` / `toggle-role` are
- *     ELEMENT-LOCAL — the predicate holds for the element opening ON that line.
+ *     `nameAncestorDepth` the shared {@link walkAncestorSuppressors} threads down.
+ *   - `hidden-untabbable` / `name-exempt-input-type` / `toggle-role` /
+ *     `renders-own-name` are ELEMENT-LOCAL — the predicate (or the element's
+ *     resolved host) holds for the element opening ON that line.
  *
  * One line can carry several (an exempt input under a label). Lines with no live
  * suppressor are absent, so `map.get(line) ?? EMPTY` is the safe read.
@@ -54,9 +62,10 @@ const TOGGLE_ROLES: ReadonlySet<string> = new Set(["checkbox", "switch", "radio"
 /**
  * Whether the element opening carries a STATIC toggle `role` (`checkbox` /
  * `switch` / `radio`). The enforce pass skips toggles reached via a traced/
- * registry host whose `role` is a toggle; here we read the role straight off the
- * call-site JSX so the map captures the call-site-visible toggle case too. A
- * dynamic `role={x}` is not asserted (uncertain → not a suppressor we can name).
+ * registry host whose `role` is a toggle (captured by the resolved-host lookup
+ * below); here we ALSO read the role straight off the call-site JSX so the map
+ * captures the call-site-visible toggle case. A dynamic `role={x}` is not
+ * asserted (uncertain → not a suppressor we can name).
  */
 function hasToggleRole(opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement, sf: ts.SourceFile): boolean {
   for (const attr of opening.attributes.properties) {
@@ -83,15 +92,55 @@ function intrinsicTag(opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement):
   return ts.isIdentifier(tag) && /^[a-z]/.test(tag.text) ? tag.text : null;
 }
 
+/** The flattened JSX tag (`Button`, `NS.Member`), or null if not a name we key on. */
+function tagNameOf(opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement): string | null {
+  const tag = opening.tagName;
+  if (ts.isIdentifier(tag)) return tag.text;
+  if (ts.isPropertyAccessExpression(tag) && ts.isIdentifier(tag.expression)) {
+    return `${tag.expression.text}.${tag.name.text}`;
+  }
+  return null;
+}
+
+/**
+ * The resolved host enforce would see for this call site, or null. Mirrors
+ * `enforce.classify`'s step 1: key the resolved-host map by `(jsx tag, import
+ * module)` so a same-named export from another module can never lend its host.
+ */
+function resolvedHostOf(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  imports: ReadonlyMap<string, ImportBinding>,
+  resolvedHosts: ReadonlyMap<string, ResolvedHost>,
+): ResolvedHost | null {
+  const tag = tagNameOf(opening);
+  if (tag === null) return null;
+  const local = tag.includes(".") ? tag.slice(0, tag.indexOf(".")) : tag;
+  const binding = imports.get(local);
+  if (binding === undefined) return null;
+  return resolvedHosts.get(`${tag}@${binding.module}`) ?? null;
+}
+
 /**
  * Build the per-line suppressor map for one source file. Mirrors the
- * `enforceContent` ancestor walk: a `labelDepth` / `nameAncestorDepth` counter is
- * pushed/popped as a label / name-injecting container is entered/left, so every
- * descendant line learns it is under one. Element-local predicates are read off
- * each opening directly.
+ * `enforceContent` ancestor walk via the shared {@link walkAncestorSuppressors}
+ * (label / name-injecting depth), and reads the element-local predicates — plus
+ * the RESOLVED-HOST skips enforce performs — off each opening:
+ *
+ *   - `name-exempt-input-type` is emitted ONLY for a form intrinsic
+ *     (`input`/`select`/`textarea`) OR a component that RESOLVES to an `input`
+ *     host — the exact gate enforce applies (`isNameExemptInputType` runs only on
+ *     an input host). A capitalized non-input component is never marked.
+ *   - `toggle-role` / `renders-own-name` cover the resolved-host toggle and
+ *     own-name skips (a Radix Checkbox traced to `button[role=checkbox]`, a
+ *     shadcn wrapper that renders its own `sr-only` name) that call-site syntax
+ *     alone cannot see.
  */
-export function buildSuppressorMap(sf: ts.SourceFile): SuppressorMap {
+export function buildSuppressorMap(
+  sf: ts.SourceFile,
+  resolvedHosts: ReadonlyMap<string, ResolvedHost> = new Map(),
+): SuppressorMap {
   const out = new Map<number, Set<SuppressorName>>();
+  const imports = collectLocalImports(sf);
 
   const add = (line: number, name: SuppressorName): void => {
     let set = out.get(line);
@@ -102,45 +151,35 @@ export function buildSuppressorMap(sf: ts.SourceFile): SuppressorMap {
     set.add(name);
   };
 
-  let labelDepth = 0;
-  let nameAncestorDepth = 0;
+  walkAncestorSuppressors(sf, ({ opening, line, flags }) => {
+    // Ancestor suppressors: live if an ENCLOSING container set the depth.
+    if (flags.hasLabelAncestor) add(line, "label-ancestor");
+    if (flags.hasNameAncestor) add(line, "name-injecting-wrapper");
+    // Element-local suppressors read straight off the opening.
+    if (isHiddenOrUntabbable(opening, sf)) add(line, "hidden-untabbable");
 
-  const visit = (node: ts.Node): void => {
-    let enteredLabel = false;
-    let enteredNameAncestor = false;
-    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
-      const opening = ts.isJsxElement(node) ? node.openingElement : node;
-      if (isLabelContainer(opening, sf)) {
-        labelDepth++;
-        enteredLabel = true;
-      }
-      if (isNameInjectingWrapper(opening, sf)) {
-        nameAncestorDepth++;
-        enteredNameAncestor = true;
-      }
-      const line = sf.getLineAndCharacterOfPosition(opening.getStart(sf)).line + 1;
-      // Ancestor suppressors: live if an ENCLOSING container set the depth. The
-      // element that opens the container itself does NOT count as its own
-      // ancestor — only its descendants — so subtract the entry just made.
-      if (labelDepth - (enteredLabel ? 1 : 0) > 0) add(line, "label-ancestor");
-      if (nameAncestorDepth - (enteredNameAncestor ? 1 : 0) > 0) add(line, "name-injecting-wrapper");
-      // Element-local suppressors read straight off the opening.
-      if (isHiddenOrUntabbable(opening, sf)) add(line, "hidden-untabbable");
-      // `type`-exemption is only meaningful for native form controls; an exempt
-      // `type` on a non-input is degenerate, so gate it to the three intrinsics
-      // (and capitalized components, which may forward `type` to an input host).
-      const tag = intrinsicTag(opening);
-      const isFormIntrinsic = tag === "input" || tag === "select" || tag === "textarea";
-      if ((isFormIntrinsic || tag === null) && isNameExemptInputType(opening, sf)) {
-        add(line, "name-exempt-input-type");
-      }
-      if (hasToggleRole(opening, sf)) add(line, "toggle-role");
+    const resolved = resolvedHostOf(opening, imports, resolvedHosts);
+    // `type`-exemption is only meaningful for a real form control — a form
+    // intrinsic, OR a component enforce RESOLVES to an `input` host. Enforce runs
+    // `isNameExemptInputType` only there; a capitalized non-input component is
+    // NEVER marked (the prior over-broad `tag === null` gate was finding #3).
+    const tag = intrinsicTag(opening);
+    const isFormIntrinsic = tag === "input" || tag === "select" || tag === "textarea";
+    const isInputHost = resolved !== null && resolved.host === "input";
+    if ((isFormIntrinsic || isInputHost) && isNameExemptInputType(opening, sf)) {
+      add(line, "name-exempt-input-type");
     }
-    ts.forEachChild(node, visit);
-    if (enteredLabel) labelDepth--;
-    if (enteredNameAncestor) nameAncestorDepth--;
-  };
-  visit(sf);
+
+    // Toggle: a call-site `role="checkbox|switch|radio"`, OR a resolved host
+    // whose role is a toggle (Radix Checkbox → button[role=checkbox]) — the same
+    // skip enforce performs via `isToggleRole(resolved.role)`.
+    if (hasToggleRole(opening, sf) || (resolved !== null && isToggleRole(resolved.role))) {
+      add(line, "toggle-role");
+    }
+    // A wrapper that renders its host an internal STATIC name is named even when
+    // the call site looks empty — enforce skips it (`resolved.rendersOwnName`).
+    if (resolved !== null && resolved.rendersOwnName) add(line, "renders-own-name");
+  });
 
   return out;
 }

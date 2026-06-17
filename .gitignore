@@ -8,3 +8,15 @@ coverage/
 # python bytecode (demo cast generators)
 __pycache__/
 *.pyc
+
+# Raw audit-corpus exports + the extracted clustering worklists carry customer
+# identifiers (org_id/project_id/elements/urls + raw prose). They are READ by the
+# distiller and must NEVER be committed — only the anonymized, k>=3-gated
+# data/clusters/clusters-*.json and data/corpus/* outputs are. (Privacy boundary;
+# previously convention-only and unenforced.)
+raw-export*.json
+*-raw-export.json
+data/clusters/_worklist-*.json
+
+# Raw scan-output captures against named customer sites (demo dumps).
+demo/**/raw-*.txt

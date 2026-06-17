@@ -27,3 +27,17 @@ export const SpreadButton = (props: Record<string, unknown>) => (
     <Trash />
   </Button>
 );
+
+// A plain anchor whose OPENING TAG spans multiple lines (the `href` attribute is
+// on a continuation line). The floor does NOT flag it (it has a name), so a
+// recall candidate anchored at the continuation line is NOT deduped away. The G2
+// multi-line-opening anchor: the opening tag spans lines 38-40; `href="/multi"`
+// on line 39 is inside the span but NOT its first line, so it only passes G2 if
+// the full opening span is indexed (not just the opening tag's first line).
+export const MultiLineLink = () => (
+  <a
+    href="/multi"
+  >
+    Multi
+  </a>
+);

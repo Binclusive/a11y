@@ -98,6 +98,26 @@ describe("dedupeRecall — self-dedup by file+line+patternId", () => {
   });
 });
 
+describe("dedupeRecall — cross + self dedup compose (post-refactor regression)", () => {
+  // After lifting the cross-dedup onto dedupeEnforce, both passes must still run
+  // and drop the SAME set: a candidate that is BOTH floor-covered and a self-dup
+  // dies, while an unrelated same-element different-pattern candidate survives.
+  it("drops the floor-covered + self-dup pair, keeps the distinct survivor", () => {
+    const statics = [floor("/a.tsx", 10, ["4.1.2"])];
+    const covered = recall({ file: "/a.tsx", line: 10, wcag: ["4.1.2"], patternId: "p1" });
+    const candidates = [
+      covered, // dropped by CROSS-dedup (floor caught 4.1.2 at /a.tsx:10)
+      { ...covered, message: "again" }, // also cross-dropped (same key)
+      recall({ file: "/a.tsx", line: 10, wcag: ["2.4.4"], patternId: "p1" }), // 1st survivor
+      recall({ file: "/a.tsx", line: 10, wcag: ["2.4.4"], patternId: "p1" }), // SELF-dup → dropped
+      recall({ file: "/a.tsx", line: 10, wcag: ["2.4.4"], patternId: "p2" }), // distinct survivor
+    ];
+    const out = dedupeRecall(candidates, statics);
+    expect(out.map((f) => f.patternId)).toEqual(["p1", "p2"]);
+    expect(out.every((f) => f.wcag.includes("2.4.4"))).toBe(true);
+  });
+});
+
 describe("quarantine — scan() never emits corpus-agent findings", () => {
   it("scan() leaves recall empty and never tags a finding corpus-agent / recall", async () => {
     const result = await scan([fixture("controls.tsx")]);

@@ -46,6 +46,13 @@ export interface ExpectedFinding {
  * One labelled fixture. `kind` discriminates the union: a `positive` carries the
  * `expect` it must surface; a `negative` carries `clean: true` and must surface
  * nothing. `id` is the stable key the pluggable nominations map is keyed by.
+ *
+ * A decoy whose precision fact lives in a wrapper's DEFINITION file (a Radix
+ * toggle → `button[role=checkbox]`, a `rendersOwnName` control) needs only the
+ * def file to exist on disk next to the call site: the source-tracer follows the
+ * `import` and reads it off disk, so the resolved-host suppressors (G3
+ * `toggle-role` / `renders-own-name`) fire from the trace — the def need not be
+ * an explicit member of the scan list.
  */
 export type LabelledCase =
   | {
@@ -63,12 +70,22 @@ export type LabelledCase =
 
 /** A POSITIVE fixture: floor-missed corpus failure the recall layer must catch. */
 function positive(name: string, expect: readonly ExpectedFinding[]): LabelledCase {
-  return { id: `positive/${name}`, file: fixture("positive", name), kind: "positive", expect };
+  return {
+    id: `positive/${name}`,
+    file: fixture("positive", name),
+    kind: "positive",
+    expect,
+  };
 }
 
-/** A NEGATIVE fixture: hard decoy that must surface zero recall findings. */
+/** A NEGATIVE fixture: a hard decoy that must surface zero recall findings. */
 function negative(name: string): LabelledCase {
-  return { id: `negative/${name}`, file: fixture("negative", name), kind: "negative", clean: true };
+  return {
+    id: `negative/${name}`,
+    file: fixture("negative", name),
+    kind: "negative",
+    clean: true,
+  };
 }
 
 /**
@@ -100,4 +117,11 @@ export const CASES: readonly LabelledCase[] = [
   negative("named-link"), // correctly named + descriptive — the agent must abstain.
   negative("aria-label-icon-button"), // explicit aria-label — named, the agent must abstain.
   negative("aria-label-social-link"), // explicit aria-label — named, the agent must abstain.
+  // NEGATIVE — the S1 RESOLVED-HOST precision cases (the FP class the first eval
+  // was blind to). Each call site looks nameless, but the source-tracer follows
+  // the import to the wrapper DEFINITION (a sibling .tsx on disk) and resolves it
+  // to a suppressed host: a Radix-style toggle (G3 `toggle-role`) and a shadcn
+  // control that renders its own name (G3 `renders-own-name`).
+  negative("radix-toggle-checkbox"), // G3: resolved toggle-role.
+  negative("sr-only-named-control"), // G3: resolved renders-own-name.
 ];

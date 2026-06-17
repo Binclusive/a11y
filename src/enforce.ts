@@ -16,10 +16,9 @@ import {
   anyNameAttr,
   attrState,
   isHiddenOrUntabbable,
-  isLabelContainer,
   isNameExemptInputType,
-  isNameInjectingWrapper,
   LABEL_ATTRS,
+  walkAncestorSuppressors,
 } from "./suppressors";
 
 /**
@@ -97,13 +96,13 @@ export interface EnforceContext {
  * trace). A host with `rendersOwnName` is named even when the call site looks
  * empty, so the no-name check skips it.
  */
-interface ResolvedHost {
+export interface ResolvedHost {
   readonly host: string;
   readonly role: string | null;
   readonly rendersOwnName: boolean;
 }
 
-function buildResolvedHosts(
+export function buildResolvedHosts(
   resolutions: readonly ComponentResolution[],
 ): ReadonlyMap<string, ResolvedHost> {
   const out = new Map<string, ResolvedHost>();
@@ -153,6 +152,38 @@ interface Recognized {
   readonly type: ControlType;
   readonly strength: Strength;
 }
+
+/**
+ * The outcome of {@link classify}, a three-way split that lets the deterministic
+ * shell (G3/G4) inherit enforce's RESOLVED-HOST skips, not just the call-site
+ * ones:
+ *
+ *   - `recognized` — a control enforce will `evaluate` (may still emit nothing).
+ *   - `skip`       — enforce CONSIDERED this element and declined for a reason
+ *     the suppressor map's call-site syntax cannot see: a traced/registry toggle
+ *     role, a wrapper that renders its own name, an icon-library import. These
+ *     used to return `null` with NO abstention, so a recall nomination on a Radix
+ *     Checkbox / rendersOwnName wrapper was NOT vetoed (findings #2/#8). The
+ *     `wcag` is the SC family enforce would have checked, so {@link
+ *     controlNameCheck} can record a G4 abstention there.
+ *   - `null`       — genuinely not a recognized control (nothing to consider).
+ *
+ * `skip` emits NO finding — identical floor output to the prior `null` — it only
+ * adds the abstention metadata the recall gate reads.
+ */
+type Classification =
+  | { readonly kind: "recognized"; readonly recognized: Recognized }
+  | { readonly kind: "skip"; readonly wcag: readonly string[] }
+  | null;
+
+/**
+ * The actionable-control SC families an icon-library import could be misread as
+ * (button / icon-button / link / image). An icon is content, never a control, so
+ * enforce short-circuits it — but a recall nomination might still wrongly flag a
+ * no-name button/link/image on the icon's line, so the abstention vetoes that
+ * whole family.
+ */
+const ICON_SKIP_WCAG: readonly string[] = ["4.1.2", "2.4.4", "1.1.1"];
 
 /**
  * Conservative NAME heuristics: a capitalized JSX name that, by convention,
@@ -289,7 +320,8 @@ function classify(
   tagName: string,
   resolvedHosts: ReadonlyMap<string, ResolvedHost>,
   imports: ReadonlyMap<string, ImportBinding>,
-): Recognized | null {
+): Classification {
+  const recognized = (r: Recognized): Classification => ({ kind: "recognized", recognized: r });
   // Toggle controls (checkbox/switch/radio/toggle) are externally labelled by
   // convention — we can't verify their name at the call site, so skip them
   // outright before any host/name recognition claims them as button/input.
@@ -303,7 +335,7 @@ function classify(
   // claimed — the structural guard against the layout-cell false positives the
   // stock rule produces. (`tagName` is the bare lowercase tag; a capitalized
   // `Input` component is handled by resolution/registry below.)
-  if (NATIVE_FORM_CONTROLS.has(tagName)) return { type: "input", strength: "host" };
+  if (NATIVE_FORM_CONTROLS.has(tagName)) return recognized({ type: "input", strength: "host" });
 
   // The local binding (namespace local for `NS.Member`).
   const local = tagName.includes(".") ? tagName.slice(0, tagName.indexOf(".")) : tagName;
@@ -322,20 +354,31 @@ function classify(
       // so skip it exactly as TOGGLE_NAMES does. This is the role-aware
       // generalization: a Radix `Checkbox` traced to host `button` (role
       // `checkbox`) is no longer mistaken for a bare button.
-      if (isToggleRole(resolved.role)) return null;
+      // Both the toggle-role and the rendersOwnName skip CONSIDER a real control
+      // and decline — so they abstain on that control's SC family (the resolved
+      // host's type), letting G4 veto a recall nomination on the same line+SC.
+      const skipHost = HOST_TO_TYPE[resolved.host];
+      if (isToggleRole(resolved.role)) {
+        return skipHost === undefined ? null : { kind: "skip", wcag: TYPE_TO_WCAG[skipHost] };
+      }
       // A wrapper that renders its host an internal STATIC name (an `sr-only`
       // span, a literal `aria-label`, or static text — the shadcn carousel
       // arrows) IS named even though the self-closing call site looks empty.
       // Skip it like a toggle: the name is real, it just lives inside the
       // wrapper. FN-safe — only ever suppresses, never adds a finding.
-      if (resolved.rendersOwnName) return null;
-      const fromHost = HOST_TO_TYPE[resolved.host];
-      if (fromHost !== undefined) return { type: fromHost, strength: "host" };
+      if (resolved.rendersOwnName) {
+        return skipHost === undefined ? null : { kind: "skip", wcag: TYPE_TO_WCAG[skipHost] };
+      }
+      if (skipHost !== undefined) return recognized({ type: skipHost, strength: "host" });
     }
   }
 
-  // An icon-library import is content, never a control — short-circuit.
-  if (binding !== undefined && isIconLibrary(binding.module)) return null;
+  // An icon-library import is content, never a control — short-circuit. Abstain
+  // on the actionable-control family so a recall nomination on an icon's line is
+  // vetoed (it cannot be a no-name button/link/image — it's an icon).
+  if (binding !== undefined && isIconLibrary(binding.module)) {
+    return { kind: "skip", wcag: ICON_SKIP_WCAG };
+  }
 
   // 1.5. Router link controls — react-router / Remix `Link` / `NavLink`. They
   // render `<a>` but carry the destination on `to`, not `href`, so they are kept
@@ -346,7 +389,7 @@ function classify(
   // library contract guarantees a single `<a>`, so the call-site content IS the
   // link's name (a self-closing nameless one is really nameless).
   if (binding !== undefined && isRouterLinkControl(binding.module, binding.imported)) {
-    return { type: "link", strength: "host" };
+    return recognized({ type: "link", strength: "host" });
   }
 
   // 2. Registry: a known export with one unambiguous host.
@@ -354,11 +397,14 @@ function classify(
     const member = tagName.includes(".") ? leafName(tagName) : binding.imported;
     const reg = lookupRegistry(binding.module, member);
     if (reg !== null) {
+      const regHost = HOST_TO_TYPE[reg.host];
       // Same role-aware toggle skip for a registry hit (antd `Switch` → button
-      // with role `switch`) reached without a TOGGLE_NAMES match.
-      if (isToggleRole(reg.role)) return null;
-      const fromHost = HOST_TO_TYPE[reg.host];
-      if (fromHost !== undefined) return { type: fromHost, strength: "host" };
+      // with role `switch`) reached without a TOGGLE_NAMES match. Abstain on the
+      // host's SC family so G4 vetoes a recall nomination there.
+      if (isToggleRole(reg.role)) {
+        return regHost === undefined ? null : { kind: "skip", wcag: TYPE_TO_WCAG[regHost] };
+      }
+      if (regHost !== undefined) return recognized({ type: regHost, strength: "host" });
     }
   }
 
@@ -372,7 +418,7 @@ function classify(
   // nothing about the rendered control, so we refuse to guess.
   if (lookupGuaranteed(binding.module) === null) return null;
   const fromName = typeFromName(tagName);
-  return fromName === null ? null : { type: fromName, strength: "name" };
+  return fromName === null ? null : recognized({ type: fromName, strength: "name" });
 }
 
 /** ---- attribute / child inspection (all STATIC-only, by design) ---- */
@@ -387,10 +433,6 @@ function isWhitespace(child: ts.JsxChild): boolean {
 interface OpeningInfo {
   readonly opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
   readonly element: ts.JsxElement | ts.JsxSelfClosingElement;
-}
-
-function openingOf(node: ts.JsxElement | ts.JsxSelfClosingElement): OpeningInfo {
-  return { opening: ts.isJsxElement(node) ? node.openingElement : node, element: node };
 }
 
 /** Whether the opening element spreads props (`{...props}`) — content unknowable. */
@@ -889,10 +931,10 @@ interface ElementCheckArgs {
   readonly sf: ts.SourceFile;
   readonly imports: ReadonlyMap<string, ImportBinding>;
   readonly resolvedHosts: ReadonlyMap<string, ResolvedHost>;
-  /** Enclosing `<label>`/form-field depth; > 0 ⇒ an input here is labelled by an ancestor. */
-  readonly labelDepth: number;
-  /** Enclosing titled-`<Tooltip>` depth; > 0 ⇒ a control here is named at runtime. */
-  readonly nameAncestorDepth: number;
+  /** An enclosing `<label>`/form-field is an ancestor ⇒ an input here is labelled by it. */
+  readonly hasLabelAncestor: boolean;
+  /** An enclosing titled `<Tooltip>` is an ancestor ⇒ a control here is named at runtime. */
+  readonly hasNameAncestor: boolean;
   /**
    * Sink for G4 abstentions — a check that CONSIDERED a control here and declined
    * (unknowable content) pushes a {@link AbstentionMarker}. Side-channel only:
@@ -916,14 +958,24 @@ type ElementCheck = (args: ElementCheckArgs) => EnforceFinding | null;
  * (button/input/link/image/dialog), sourcing its metadata from {@link RULES}.
  */
 const controlNameCheck: ElementCheck = (a) => {
-  const recognized = classify(a.tag, a.resolvedHosts, a.imports);
-  if (recognized === null) return null;
+  const classified = classify(a.tag, a.resolvedHosts, a.imports);
+  if (classified === null) return null;
+  const line = a.sf.getLineAndCharacterOfPosition(a.info.opening.getStart(a.sf)).line + 1;
+  // A resolved-host SKIP (traced/registry toggle, rendersOwnName, icon library):
+  // enforce CONSIDERED the control and declined for a reason call-site syntax
+  // can't see. Emit a G4 abstention on the SC family it would have checked —
+  // WITHOUT a finding (floor output unchanged) — so a recall nomination on this
+  // line+SC is vetoed (findings #2/#8).
+  if (classified.kind === "skip") {
+    for (const sc of classified.wcag) a.abstentions.push({ line, sc });
+    return null;
+  }
+  const recognized = classified.recognized;
   const outcome = evaluate(recognized.type, a.info, a.sf, a.imports, {
     strength: recognized.strength,
-    hasLabelAncestor: a.labelDepth > 0,
-    hasNameAncestor: a.nameAncestorDepth > 0,
+    hasLabelAncestor: a.hasLabelAncestor,
+    hasNameAncestor: a.hasNameAncestor,
   });
-  const line = a.sf.getLineAndCharacterOfPosition(a.info.opening.getStart(a.sf)).line + 1;
   if (outcome.kind === "abstain") {
     // G4 side-channel: the floor looked at this SC here and declined. Record the
     // abstention WITHOUT emitting a finding — floor output is unchanged.
@@ -972,10 +1024,18 @@ export function enforceContent(filePaths: readonly string[], ctx: EnforceContext
  * floor CONSIDERED a control at and deliberately declined (spread / dynamic child
  * / opaque wrapper). `enforceContent` is this with the abstentions dropped, so no
  * existing caller (scan, the CLI) sees any change.
+ *
+ * `sourceFiles` is an OPTIONAL pre-parsed cache (`file -> ts.SourceFile`): when a
+ * caller has already parsed a file (e.g. the recall layer's `buildStaticFacts`,
+ * which shares one parse across this walk and `fileFacts`), pass it here to skip
+ * the redundant read+parse. The SourceFile must be the SAME one this function
+ * would have built (`ScriptKind.TSX`, `setParentNodes`), so the output is
+ * byte-identical whether the cache hits or misses.
  */
 export function enforceContentWithAbstentions(
   filePaths: readonly string[],
   ctx: EnforceContext,
+  sourceFiles?: ReadonlyMap<string, ts.SourceFile>,
 ): { readonly findings: Finding[]; readonly abstentions: readonly LocatedAbstention[] } {
   const injectsChildren = ctx.declarations?.injectsChildren ?? [];
   // Module-scoped resolved-host lookup — the FP-safe replacement for jsx-a11y's
@@ -985,9 +1045,13 @@ export function enforceContentWithAbstentions(
   const abstentions: LocatedAbstention[] = [];
 
   for (const filePath of filePaths) {
-    const text = ts.sys.readFile(filePath);
-    if (text === undefined) continue;
-    const sf = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    // Reuse a pre-parsed SourceFile when the caller supplied one; else read+parse.
+    let sf = sourceFiles?.get(filePath);
+    if (sf === undefined) {
+      const text = ts.sys.readFile(filePath);
+      if (text === undefined) continue;
+      sf = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    }
     const imports = collectLocalImports(sf);
     // Same runtime-injection / aria-hidden ranges the structural pass uses, so a
     // control made contentful at runtime isn't flagged here either.
@@ -998,72 +1062,52 @@ export function enforceContentWithAbstentions(
     const isSuppressed = (line: number): boolean =>
       suppressed.some((r) => line >= r.start && line <= r.end);
 
-    // Depth of enclosing label/form-field containers — when > 0, an input here
-    // is conventionally labelled by an ancestor and must not be flagged.
-    let labelDepth = 0;
-    // Depth of enclosing name-injecting wrappers (titled `<Tooltip>`) — when > 0,
-    // an actionable control here is named by that ancestor at runtime.
-    let nameAncestorDepth = 0;
-
-    const visit = (node: ts.Node): void => {
-      let enteredLabel = false;
-      let enteredNameAncestor = false;
-      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
-        const info = openingOf(node);
-        const tagNode = info.opening.tagName;
-        if (isLabelContainer(info.opening, sf)) {
-          labelDepth++;
-          enteredLabel = true;
-        }
-        if (isNameInjectingWrapper(info.opening, sf)) {
-          nameAncestorDepth++;
-          enteredNameAncestor = true;
-        }
-        const tag = ts.isIdentifier(tagNode)
-          ? tagNode.text
-          : ts.isPropertyAccessExpression(tagNode) && ts.isIdentifier(tagNode.expression)
-            ? `${tagNode.expression.text}.${tagNode.name.text}`
-            : null;
-        if (tag !== null) {
-          // Per-element abstention buffer: collected by the checks, then kept
-          // only if the element's line is not range-suppressed (same gate as a
-          // finding) — so an abstention never appears where a finding couldn't.
-          const elemAbstentions: AbstentionMarker[] = [];
-          const args: ElementCheckArgs = {
-            info,
-            tag,
-            sf,
-            imports,
-            resolvedHosts,
-            labelDepth,
-            nameAncestorDepth,
-            abstentions: elemAbstentions,
-          };
-          for (const check of ELEMENT_CHECKS) {
-            const finding = check(args);
-            if (finding !== null && !isSuppressed(finding.line)) {
-              out.push({
-                file: filePath,
-                line: finding.line,
-                ruleId: finding.ruleId,
-                message: finding.message,
-                wcag: finding.wcag,
-                enforcement: enforcementFor(finding.wcag, ctx.contract),
-                provenance: "enforce",
-              });
-            }
-          }
-          // Flush the element's abstentions, same suppression gate as a finding.
-          for (const a of elemAbstentions) {
-            if (!isSuppressed(a.line)) abstentions.push({ file: filePath, ...a });
-          }
+    // The ancestor `labelDepth` / `nameAncestorDepth` descent is the SHARED
+    // {@link walkAncestorSuppressors} (also driving `buildSuppressorMap`) so the
+    // two cannot drift. It hands each element its enclosing-ancestor flags; this
+    // callback runs the per-element checks against them.
+    walkAncestorSuppressors(sf, ({ node, opening, flags }) => {
+      const info: OpeningInfo = { opening, element: node };
+      const tagNode = opening.tagName;
+      const tag = ts.isIdentifier(tagNode)
+        ? tagNode.text
+        : ts.isPropertyAccessExpression(tagNode) && ts.isIdentifier(tagNode.expression)
+          ? `${tagNode.expression.text}.${tagNode.name.text}`
+          : null;
+      if (tag === null) return;
+      // Per-element abstention buffer: collected by the checks, then kept only if
+      // the element's line is not range-suppressed (same gate as a finding) — so
+      // an abstention never appears where a finding couldn't.
+      const elemAbstentions: AbstentionMarker[] = [];
+      const args: ElementCheckArgs = {
+        info,
+        tag,
+        sf,
+        imports,
+        resolvedHosts,
+        hasLabelAncestor: flags.hasLabelAncestor,
+        hasNameAncestor: flags.hasNameAncestor,
+        abstentions: elemAbstentions,
+      };
+      for (const check of ELEMENT_CHECKS) {
+        const finding = check(args);
+        if (finding !== null && !isSuppressed(finding.line)) {
+          out.push({
+            file: filePath,
+            line: finding.line,
+            ruleId: finding.ruleId,
+            message: finding.message,
+            wcag: finding.wcag,
+            enforcement: enforcementFor(finding.wcag, ctx.contract),
+            provenance: "enforce",
+          });
         }
       }
-      ts.forEachChild(node, visit);
-      if (enteredLabel) labelDepth--;
-      if (enteredNameAncestor) nameAncestorDepth--;
-    };
-    visit(sf);
+      // Flush the element's abstentions, same suppression gate as a finding.
+      for (const a of elemAbstentions) {
+        if (!isSuppressed(a.line)) abstentions.push({ file: filePath, ...a });
+      }
+    });
   }
 
   return { findings: out, abstentions };

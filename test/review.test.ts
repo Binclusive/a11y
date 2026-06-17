@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Finding } from "../src/core";
@@ -6,7 +6,7 @@ import { type ReviewCandidate, reviewA11y } from "../src/review";
 
 // The deterministic gate stack is driven with SYNTHETIC nominations (no model):
 // each candidate is engineered to die at — or clear — exactly one gate, so the
-// drop counters and survivor shape pin G0-G8 down mechanically. The fixture's
+// drop counters and survivor shape pin G0-G6 down mechanically. The fixture's
 // static floor produces NO findings (PlainLink is named, TooltipSuppressed is
 // suppressed, SpreadButton abstains), so a survivor is never deduped away.
 
@@ -33,7 +33,7 @@ async function verifyOne(c: ReviewCandidate): Promise<readonly Finding[]> {
   return r.recall;
 }
 
-describe("reviewA11y verify — the deterministic G0-G8 gate stack", () => {
+describe("reviewA11y verify — the deterministic G0-G6 gate stack", () => {
   it("G1: drops a candidate whose patternId is NOT in the retrieved slice", async () => {
     // `color-contrast-…` is real WCAG but never a distilled slice pattern here.
     expect(await verifyOne(candidate({ patternId: "color-contrast-not-in-corpus" }))).toEqual([]);
@@ -80,6 +80,31 @@ describe("reviewA11y verify — the deterministic G0-G8 gate stack", () => {
     // but eligibleToFlag=false, so the tier floor vetoes it.
     const c = candidate({ patternId: "1.1.1-decorative-icon-announced", wcag: ["1.1.1"] });
     expect(await verifyOne(c)).toEqual([]);
+  });
+
+  it("G2: surfaces a candidate anchored to a CONTINUATION line of a multi-line JSX opening tag", async () => {
+    // The <a> opening tag spans lines 38-40; `href="/multi"` is on line 39, NOT
+    // the opening tag's first line. The full opening span must be indexed for G2
+    // to accept this anchor (regression: only the first line used to be indexed).
+    const recall = await verifyOne(
+      candidate({ line: 39, patternId: "2.4.4-link-no-name", codeQuote: 'href="/multi"' }),
+    );
+    expect(recall).toHaveLength(1);
+    expect(recall[0]!.line).toBe(39);
+  });
+
+  it("G1: surfaces a candidate whose `file` is a RELATIVE path (facts keyed by resolved path)", async () => {
+    // The static-fact maps are keyed by resolved absolute paths. A candidate may
+    // carry a relative/non-normalized path; the gate must resolve it the same way
+    // or the candidate silently misses every veto map and recall drops to zero.
+    const rel = relative(process.cwd(), FIXTURE);
+    expect(rel).not.toBe(FIXTURE); // genuinely relative — not already absolute
+    const recall = await verifyOne(candidate({ file: rel }));
+    expect(recall).toHaveLength(1);
+    // The surfaced finding carries the RESOLVED path — not the relative one — so
+    // it dedups against the absolute-keyed floor findings instead of escaping the
+    // quarantine and duplicating a floor-caught issue.
+    expect(recall[0]!.file).toBe(FIXTURE);
   });
 
   it("SURVIVES: a valid high-confidence common-tier candidate on a real un-suppressed line", async () => {

@@ -391,16 +391,13 @@ export function dedupeRecall(
   candidates: readonly Finding[],
   staticFindings: readonly Finding[],
 ): readonly Finding[] {
-  const covered = new Set<string>();
-  for (const f of staticFindings) {
-    for (const sc of f.wcag) covered.add(`${f.file}:${f.line}:${sc}`);
-  }
+  // 1 — CROSS-dedup against the static floor: identical `file:line:sc` covered-set
+  // discipline as the enforce pass, so reuse it verbatim rather than re-derive it.
+  const crossDeduped = dedupeEnforce(candidates, staticFindings);
+  // 2 — SELF-dedup by `(file, line, patternId)`, keeping the first survivor.
   const seen = new Set<string>();
   const out: Finding[] = [];
-  for (const f of candidates) {
-    // 1 — cross-dedup against the static floor.
-    if (f.wcag.some((sc) => covered.has(`${f.file}:${f.line}:${sc}`))) continue;
-    // 2 — self-dedup by file:line:patternId.
+  for (const f of crossDeduped) {
     const key = `${f.file}:${f.line}:${f.patternId ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);

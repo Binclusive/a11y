@@ -26,6 +26,7 @@
  * leak the gate guards.
  */
 
+import { resolve } from "node:path";
 import type { ReviewCandidate } from "../../src/review";
 import { reviewA11y } from "../../src/review";
 import { CASES, type LabelledCase } from "./case-set";
@@ -123,20 +124,33 @@ function isExpected(c: LabelledCase, line: number, patternId: string): boolean {
  * score the survivors against the case label. Pure over (case, candidates):
  * `reviewA11y({ verify })` is the deterministic shell, so same input → same
  * result.
+ *
+ * The files array is the case file PLUS every unique file the candidates point at
+ * — the scan-a-directory shape (#6), not one-file-per-candidate. (Wrapper
+ * definition files do not need to be listed: the source-tracer follows the import
+ * and reads the def off disk, so the resolved-host suppressors fire from the
+ * trace regardless.) Survivors are scored only on the CASE file.
  */
 async function runCase(
   c: LabelledCase,
   candidates: readonly ReviewCandidate[],
 ): Promise<CaseResult> {
-  const r = await reviewA11y({ verify: true, files: [c.file], candidates: [...candidates] });
+  // Unique union, case file first, in a stable order so the scan is reproducible.
+  const files = [...new Set([c.file, ...candidates.map((cand) => cand.file)])];
+  const r = await reviewA11y({ verify: true, files, candidates: [...candidates] });
   if (r.mode !== "verify") throw new Error("expected verify mode");
 
-  const surfaced: SurfacedFinding[] = r.recall.map((f) => ({
-    caseId: c.id,
-    line: f.line,
-    patternId: f.patternId ?? "",
-    correct: isExpected(c, f.line, f.patternId ?? ""),
-  }));
+  // Score survivors by file: only findings anchored to THIS case's file count
+  // toward its label (a `recall` finding shaped from a candidate keeps the
+  // candidate's `file`, which the synthetic/real nominations set to the case file).
+  const surfaced: SurfacedFinding[] = r.recall
+    .filter((f) => resolve(f.file) === resolve(c.file))
+    .map((f) => ({
+      caseId: c.id,
+      line: f.line,
+      patternId: f.patternId ?? "",
+      correct: isExpected(c, f.line, f.patternId ?? ""),
+    }));
 
   const expected = c.kind === "positive" ? c.expect.length : 0;
   // A positive is "caught" per expected finding that some surfaced finding matched.

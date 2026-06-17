@@ -1,10 +1,21 @@
 /**
  * `review_a11y` — the corpus-grounded RECALL layer (RFC Phase 1, §1e), and the
- * server-side G0-G8 gate stack that disposes of the model's nominations.
+ * gate stack that disposes of the model's nominations.
  *
- * THE DETERMINISTIC SHELL (ADR 0003): the model PROPOSES, deterministic code
- * DISPOSES. This module is the "disposes" half. It never trusts a model verdict
- * for precision — every survivor has cleared a stack of mechanical gates that run
+ * THE GATE STACK, by who runs it (ADR 0003 — the model PROPOSES, deterministic
+ * code DISPOSES):
+ *
+ *   - G0-G6 are SERVER-DETERMINISTIC counted vetoes ({@link GateId}). They run
+ *     here in {@link gate}, never trust a model verdict, and are the only gates
+ *     with a drop counter.
+ *   - G7 (adversarial self-verify) is the AGENT'S step, not a server gate: it is
+ *     a required {@link ReviewCandidate.justification} field the contract forces,
+ *     which the deterministic gates never read. It has no server counter.
+ *   - G8 (advisory framing) is not a veto at all — it is the SHAPING of a survivor
+ *     into a quarantined `corpus-agent`/`recall`/`warn` finding ({@link toRecallFinding}).
+ *
+ * This module is the "disposes" half. It never trusts a model verdict for
+ * precision — every survivor has cleared the G0-G6 mechanical gates that run
  * SERVER-SIDE here, reusing the static floor's own hard-won facts (Pass A):
  *
  *   - G3 SUPPRESSOR VETO reuses {@link buildSuppressorMap} — the floor's
@@ -22,8 +33,8 @@
  *      patternIds, only with a verbatim code quote + a line + an adversarial
  *      self-justification — G7, the agent's own step).
  *   2. VERIFY — `reviewA11y({ verify: true, candidates })` runs the candidates
- *      back through the G0-G8 gate stack DETERMINISTICALLY and returns only the
- *      survivors, shaped as advisory recall {@link Finding}s (provenance
+ *      back through the G0-G6 server gates DETERMINISTICALLY and returns only the
+ *      survivors, shaped (G8) as advisory recall {@link Finding}s (provenance
  *      `corpus-agent`, layer `recall`, enforcement `warn`).
  *
  * QUARANTINE (RFC 1d): survivors are advisory only. They are deduped against the
@@ -36,7 +47,12 @@ import { resolve } from "node:path";
 import ts from "typescript";
 import { collectTsx } from "./collect";
 import { type Finding, dedupeRecall, scan } from "./core";
-import { type LocatedAbstention, enforceContentWithAbstentions } from "./enforce";
+import {
+  type LocatedAbstention,
+  type ResolvedHost,
+  buildResolvedHosts,
+  enforceContentWithAbstentions,
+} from "./enforce";
 import type { ComponentResolution } from "./resolve-components";
 import { type RetrievedPattern, retrieveSlice } from "./retrieve";
 import { type SuppressorMap, buildSuppressorMap } from "./suppressor-map";
@@ -61,55 +77,87 @@ interface StaticFacts {
   readonly sourceLines: ReadonlyMap<string, readonly string[]>;
 }
 
+/** Parse a `.tsx` file into a SourceFile, or null if it can't be read. */
+function parseTsx(file: string): ts.SourceFile | null {
+  const text = ts.sys.readFile(file);
+  if (text === undefined) return null;
+  return ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+}
+
 /**
  * A per-file, per-line suppressor map plus the JSX-element line index for that
- * file. Built off the SAME `ts.SourceFile` so the line numbering is consistent.
+ * file. Built off the GIVEN `ts.SourceFile` so the line numbering is consistent
+ * with every other walk over the same parse (one parse per file per round trip).
  */
-function fileFacts(file: string): {
+function fileFacts(
+  sf: ts.SourceFile,
+  resolvedHosts: ReadonlyMap<string, ResolvedHost>,
+): {
   readonly suppressors: SuppressorMap;
   readonly jsxLines: ReadonlySet<number>;
   readonly sourceLines: readonly string[];
-} | null {
-  const text = ts.sys.readFile(file);
-  if (text === undefined) return null;
-  const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const suppressors = buildSuppressorMap(sf);
+} {
+  const suppressors = buildSuppressorMap(sf, resolvedHosts);
 
-  // Every line that opens a real JSX element (intrinsic or component). G2 reads
-  // this so a candidate quote on a non-JSX line (a comment, an import) is dropped.
+  // Every line spanned by a real JSX element's opening tag (intrinsic or
+  // component). G2 reads this so a candidate quote on a non-JSX line (a comment,
+  // an import) is dropped. The FULL opening span is indexed — not just its first
+  // line — so a multi-line opening tag (an attribute on a continuation line) is a
+  // valid anchor on every one of its lines.
   const jsxLines = new Set<number>();
   const visit = (node: ts.Node): void => {
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
       const opening = ts.isJsxElement(node) ? node.openingElement : node;
-      jsxLines.add(sf.getLineAndCharacterOfPosition(opening.getStart(sf)).line + 1);
+      const first = sf.getLineAndCharacterOfPosition(opening.getStart(sf)).line;
+      const last = sf.getLineAndCharacterOfPosition(opening.getEnd()).line;
+      for (let line = first; line <= last; line++) jsxLines.add(line + 1);
     }
     ts.forEachChild(node, visit);
   };
   visit(sf);
 
-  return { suppressors, jsxLines, sourceLines: text.split("\n") };
+  return { suppressors, jsxLines, sourceLines: sf.text.split("\n") };
 }
 
 /** Build the static fact bundle for the gate stack from a set of files. */
 async function buildStaticFacts(files: readonly string[]): Promise<StaticFacts> {
   const result = await scan(files);
 
+  // Parse each `.tsx` ONCE per round trip, then share the SourceFile across the
+  // enforce-abstentions walk (G4) and the suppressor / jsxLines walk (G3/G2). A
+  // file that can't be read is absent from the cache; both walks skip it the same
+  // way (enforce on a cache miss falls back to its own read+parse and gets
+  // `undefined` text → continue; `fileFacts` here is only called on cache hits).
+  const tsx = [...files].filter((p) => p.endsWith(".tsx"));
+  const sourceFiles = new Map<string, ts.SourceFile>();
+  for (const file of tsx) {
+    const sf = parseTsx(file);
+    if (sf !== null) sourceFiles.set(file, sf);
+  }
+
   // G4 — abstentions, re-derived from the floor's own enforce pass (same input
-  // scan used). Keyed `file -> { "line:sc" }`.
-  const { abstentions } = enforceContentWithAbstentions([...files].filter((p) => p.endsWith(".tsx")), {
-    resolutions: result.resolved.resolutions,
-    declarations: result.contract?.declarations ?? null,
-    contract: result.contract,
-  });
+  // scan used), over the SHARED parses. Keyed `file -> { "line:sc" }`.
+  const { abstentions } = enforceContentWithAbstentions(
+    tsx,
+    {
+      resolutions: result.resolved.resolutions,
+      declarations: result.contract?.declarations ?? null,
+      contract: result.contract,
+    },
+    sourceFiles,
+  );
   const abstentionsByFile = indexAbstentions(abstentions);
+
+  // Module-scoped resolved-host map — threaded into the suppressor map so it can
+  // inherit enforce's RESOLVED-HOST skips (traced/registry toggle, rendersOwnName,
+  // input-host `type` exemption), not just call-site syntax.
+  const resolvedHosts = buildResolvedHosts(result.resolved.resolutions);
 
   const suppressors = new Map<string, SuppressorMap>();
   const jsxLines = new Map<string, ReadonlySet<number>>();
   const sourceLines = new Map<string, readonly string[]>();
-  for (const file of files) {
-    if (!file.endsWith(".tsx")) continue;
-    const facts = fileFacts(file);
-    if (facts === null) continue;
+  for (const [file, sf] of sourceFiles) {
+    const facts = fileFacts(sf, resolvedHosts);
     suppressors.set(file, facts.suppressors);
     jsxLines.set(file, facts.jsxLines);
     sourceLines.set(file, facts.sourceLines);
@@ -192,7 +240,7 @@ export interface ReviewRetrieveResult {
 /** The verify step's result: the surviving advisory recall findings. */
 export interface ReviewVerifyResult {
   readonly mode: "verify";
-  /** Survivors of the G0-G8 gate stack — advisory `corpus-agent` / `recall` findings. */
+  /** Survivors of the G0-G6 server gate stack (G8-shaped) — advisory `corpus-agent` / `recall` findings. */
   readonly recall: readonly Finding[];
   /** Per-gate drop counts, for observability (no candidate identities leak). */
   readonly dropped: Readonly<Record<GateId, number>>;
@@ -207,7 +255,13 @@ export type ReviewInput =
       readonly candidates: readonly ReviewCandidate[];
     };
 
-/** The gates a candidate can die at, in stack order. G7 is the agent's step. */
+/**
+ * The SERVER-DETERMINISTIC gates a candidate can die at, in stack order — the
+ * only gates with a drop counter. G7 (agent adversarial self-verify) and G8
+ * (advisory framing of the survivor) are deliberately NOT here: G7 is the calling
+ * agent's step (the {@link ReviewCandidate.justification} field), and G8 is the
+ * survivor-shaping in {@link toRecallFinding}, not a veto. Neither is counted.
+ */
 export type GateId = "G0" | "G1" | "G2" | "G3" | "G4" | "G5" | "G6";
 
 /** Only `high`-confidence nominations clear G5. */
@@ -241,10 +295,12 @@ async function retrieve(files: readonly string[]): Promise<ReviewRetrieveResult>
   });
 
   // Per-file suppressor facts, serialized for the wire (Map/Set -> plain object).
+  const resolvedHosts = buildResolvedHosts(result.resolved.resolutions);
   const suppressorMap: Record<string, Record<number, readonly string[]>> = {};
   for (const file of tsx) {
-    const facts = fileFacts(file);
-    if (facts === null) continue;
+    const sf = parseTsx(file);
+    if (sf === null) continue;
+    const facts = fileFacts(sf, resolvedHosts);
     const perLine: Record<number, readonly string[]> = {};
     for (const [line, names] of facts.suppressors) perLine[line] = [...names];
     if (Object.keys(perLine).length > 0) suppressorMap[file] = perLine;
@@ -260,9 +316,11 @@ async function retrieve(files: readonly string[]): Promise<ReviewRetrieveResult>
 }
 
 /**
- * The G0-G8 gate stack, run DETERMINISTICALLY over the model nominations. Each
- * gate is a hard veto; a candidate must clear ALL of them to survive. The order
- * is the cheapest-first / most-fundamental-first stack from the RFC.
+ * The G0-G6 server gate stack, run DETERMINISTICALLY over the model nominations.
+ * Each gate is a hard veto; a candidate must clear ALL of them to survive. The
+ * order is the cheapest-first / most-fundamental-first stack from the RFC. (G7,
+ * the agent's self-verify, ran before these candidates arrived; G8 below is the
+ * survivor-shaping, not a veto.)
  *
  *   - G0 ANCHOR — an empty slice means no grounding; nothing may flag.
  *   - G1 CLOSED-VOCABULARY — drop unless the patternId is in the slice.
@@ -294,6 +352,11 @@ function gate(
 
   const survivors: Finding[] = [];
   for (const c of candidates) {
+    // The static-fact maps are keyed by RESOLVED absolute path (only `input.files`
+    // is resolved before scan). Normalize the candidate's path the same way ONCE,
+    // so a relative/non-normalized `c.file` still hits every veto map below.
+    const fileKey = resolve(c.file);
+
     // G1 — closed vocabulary: the patternId must be a slice pattern.
     const pattern = byId.get(c.patternId);
     if (pattern === undefined) {
@@ -303,8 +366,8 @@ function gate(
 
     // G2 — mechanical: the cited line must be a real JSX element AND the quote
     // must be a verbatim substring of that exact line.
-    const lines = facts.sourceLines.get(c.file);
-    const jsx = facts.jsxLines.get(c.file);
+    const lines = facts.sourceLines.get(fileKey);
+    const jsx = facts.jsxLines.get(fileKey);
     const srcLine = lines?.[c.line - 1];
     if (
       srcLine === undefined ||
@@ -318,14 +381,14 @@ function gate(
     }
 
     // G3 — suppressor veto: a floor suppressor on this line vetoes the finding.
-    const suppressors = facts.suppressors.get(c.file)?.get(c.line);
+    const suppressors = facts.suppressors.get(fileKey)?.get(c.line);
     if (suppressors !== undefined && suppressors.size > 0) {
       dropped.G3++;
       continue;
     }
 
     // G4 — abstention veto: the floor CONSIDERED this line+sc and declined.
-    const abstained = facts.abstentions.get(c.file);
+    const abstained = facts.abstentions.get(fileKey);
     if (abstained !== undefined && c.wcag.some((sc) => abstained.has(`${c.line}:${sc}`))) {
       dropped.G4++;
       continue;
@@ -359,7 +422,11 @@ function gate(
  */
 function toRecallFinding(c: ReviewCandidate): Finding {
   return {
-    file: c.file,
+    // Emit the RESOLVED path (the same normalization the facts lookups use), so a
+    // relative-path nomination dedups against the absolute-keyed floor findings
+    // rather than escaping the quarantine and surfacing a duplicate of a
+    // floor-caught issue.
+    file: resolve(c.file),
     line: c.line,
     ruleId: `corpus/${c.patternId}`,
     message: c.message,

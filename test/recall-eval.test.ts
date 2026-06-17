@@ -10,7 +10,7 @@ import type { ReviewCandidate } from "../src/review";
 
 // The harness is scored with SYNTHETIC nominations (no model): the runner is the
 // deterministic shell, so feeding it engineered candidates pins down precision,
-// recall, and the G0-G8 veto behavior mechanically — the same path the real
+// recall, and the G0-G6 veto behavior mechanically — the same path the real
 // grounded run will drive, minus the model.
 
 const byId = new Map(CASES.map((c) => [c.id, c]));
@@ -155,6 +155,38 @@ describe("recall:eval — scoring synthetic nominations through the real gate st
     const r = await runEval({ "negative/form-label-wrapped-select": [decoy] });
     const c = r.cases.find((x) => x.id === "negative/form-label-wrapped-select");
     expect(c?.surfaced).toEqual([]);
+  });
+
+  it("G3 (resolved-host): a decoy on a resolved Radix toggle is VETOED (toggle-role)", async () => {
+    // The call site `<CheckboxRoot />` looks nameless, but the source-tracer
+    // follows its import to the def file on disk and resolves it to
+    // `button[role=checkbox]` — a toggle. S1's resolved-host suppressor G3
+    // (`toggle-role`) drops the nomination. This is the FP class the first eval
+    // was blind to (no resolved-host decoy existed).
+    const decoy = decoyNomination("negative/radix-toggle-checkbox", {
+      line: 11,
+      codeQuote: "<CheckboxRoot",
+    });
+    const r = await runEval({ "negative/radix-toggle-checkbox": [decoy] });
+    const scored = r.cases.find((x) => x.id === "negative/radix-toggle-checkbox");
+    expect(scored?.surfaced).toEqual([]);
+    expect(r.surfacedTotal).toBe(0);
+    expect(r.precision).toBe(1);
+  });
+
+  it("G3 (resolved-host): a decoy on a rendersOwnName control is VETOED (renders-own-name)", async () => {
+    // `<PrevSlideButton />` renders its own `sr-only` name inside the wrapper. The
+    // tracer reads the def off disk, captures `rendersOwnName`, and G3
+    // (`renders-own-name`) vetoes the decoy.
+    const decoy = decoyNomination("negative/sr-only-named-control", {
+      line: 11,
+      codeQuote: "<PrevSlideButton",
+    });
+    const r = await runEval({ "negative/sr-only-named-control": [decoy] });
+    const scored = r.cases.find((x) => x.id === "negative/sr-only-named-control");
+    expect(scored?.surfaced).toEqual([]);
+    expect(r.surfacedTotal).toBe(0);
+    expect(r.precision).toBe(1);
   });
 
   it("G1: a non-vocabulary patternId is DROPPED before it can surface", async () => {
