@@ -668,6 +668,24 @@ export function corpusPatterns(): readonly CorpusPattern[] {
 }
 
 /**
+ * The journey tags for each distilled pattern, keyed by pattern id. RETRIEVAL-
+ * INTERNAL: journey hints (`checkout`, `sign-in`, `search`, …) drive the
+ * corpus-slice retriever's path→tag boost (RFC Phase 1, R3) but are NOT part of
+ * the public {@link CorpusPattern} display shape — a pattern surfaces the same
+ * regardless of which journey pulled it in. Deduped by id, same as
+ * {@link corpusPatterns}; a pattern with no tags maps to an empty array.
+ */
+export function corpusJourneyTags(): ReadonlyMap<string, readonly string[]> {
+  const map = new Map<string, readonly string[]>();
+  for (const refs of DISTILLED.values()) {
+    for (const ref of refs) {
+      if (!map.has(ref.id)) map.set(ref.id, ref.journeyTags);
+    }
+  }
+  return map;
+}
+
+/**
  * A baseline-catalog rule surfaced for `get_a11y_rules`: axe's published
  * per-rule data (ruleId, SC, severity, standard fix, helpUrl) for ANY axe/WCAG
  * rule — the coverage answer when the distilled patterns don't cover what was

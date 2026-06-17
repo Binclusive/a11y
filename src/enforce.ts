@@ -682,9 +682,50 @@ interface EvalContext {
 }
 
 /**
- * Decide the enforce finding (if any) for one classified element. Returns the
- * rule that fired, or `null` when the content is present, dynamic, or otherwise
- * not clearly missing. EVERY branch defaults to "no finding" on uncertainty.
+ * The WCAG SC family each control type carries when enforce CONSIDERS it. Used
+ * to label a G4 abstention (see {@link EvalOutcome}) with the SC the floor
+ * deliberately stayed silent on — the recall layer needs the SC, not the
+ * rule-id, since an abstention is "I looked at this SC here and declined".
+ */
+const TYPE_TO_WCAG: Readonly<Record<ControlType, readonly string[]>> = {
+  button: RULES.buttonNoName.wcag,
+  "icon-button": RULES.buttonNoName.wcag,
+  link: RULES.linkNoName.wcag,
+  image: RULES.imageNoAlt.wcag,
+  dialog: RULES.dialogNoName.wcag,
+  input: RULES.inputNoName.wcag,
+};
+
+/**
+ * The verdict `evaluate` reaches for one classified element — a three-way split
+ * that distinguishes the floor's two kinds of "no finding":
+ *
+ *   - `finding` — the control is CLEARLY nameless; emit the rule (floor finding).
+ *   - `abstain` — enforce CONSIDERED this SC here and DELIBERATELY declined
+ *     because the content is unknowable (a `{...props}` spread, a computed/
+ *     dynamic child, an opaque name-strength wrapper). This is the G4 abstention
+ *     signal: "the floor looked and stayed silent — not because it's named, but
+ *     because it can't tell." A grounded recall finding on such a line is vetoed.
+ *   - `clean` — the control IS named (a real name attr, static text, an alt, an
+ *     ancestor label/Tooltip). The floor is silent because there's nothing to
+ *     find; NOT an abstention (the recall layer may still flag elsewhere, but
+ *     this line is genuinely fine).
+ *
+ * Only the `finding` arm produces a floor finding, so the emitted findings are
+ * byte-identical to the prior `EnforceRule | null` contract — `abstain` and
+ * `clean` both map to "no finding" exactly as `null` did.
+ */
+type EvalOutcome =
+  | { readonly kind: "finding"; readonly rule: EnforceRule }
+  | { readonly kind: "abstain"; readonly wcag: readonly string[] }
+  | { readonly kind: "clean" };
+
+/**
+ * Decide the enforce outcome for one classified element. Returns `finding` when
+ * the control is clearly nameless, `abstain` when the content is unknowable
+ * (spread / dynamic child / opaque wrapper — the G4 signal), or `clean` when the
+ * control is named. EVERY uncertain branch resolves to `abstain` or `clean`,
+ * never `finding`.
  *
  * The `strength` lever is the FP killer for the name heuristic: a `name`-strength
  * control (recognized only by suffix, never seen inside) is flagged ONLY when we
@@ -698,50 +739,57 @@ function evaluate(
   sf: ts.SourceFile,
   imports: ReadonlyMap<string, ImportBinding>,
   ctx: EvalContext,
-): EnforceRule | null {
+): EvalOutcome {
   const { opening, element } = info;
+  const abstain: EvalOutcome = { kind: "abstain", wcag: TYPE_TO_WCAG[type] };
+  const clean: EvalOutcome = { kind: "clean" };
 
   // CONSERVATISM GUARD #1: a spread (`{...props}`) could carry ANY of the name
-  // attributes (aria-label, alt, id, label). Content is unknowable -> never flag.
-  if (spreadsProps(opening)) return null;
+  // attributes (aria-label, alt, id, label). Content is unknowable -> abstain.
+  if (spreadsProps(opening)) return abstain;
 
   switch (type) {
     case "button":
     case "icon-button": {
       // A titled design-system Tooltip ancestor injects the child's name at
-      // runtime (see EvalContext.hasNameAncestor) — can't prove it nameless.
-      if (ctx.hasNameAncestor) return null;
-      if (anyNameAttr(opening, sf, CONTROL_NAME_ATTRS)) return null;
+      // runtime (see EvalContext.hasNameAncestor) — named, not nameless.
+      if (ctx.hasNameAncestor) return clean;
+      if (anyNameAttr(opening, sf, CONTROL_NAME_ATTRS)) return clean;
       const v = childVerdict(element, imports);
+      // A computed/non-icon child could render the name — content unknowable.
+      if (v === "dynamic") return abstain;
+      if (v === "text") return clean;
       // CONSERVATISM GUARD #2: a `name`-strength control that is SELF-CLOSING /
       // empty is opaque — it likely renders its own label internally (a custom
       // `<QuickCreateButton/>`). Only flag a name-only control when we can SEE
       // an icon-only child (a visible container). A `host`-strength control is a
       // proven thin wrapper, so empty-or-icon both flag.
-      if (ctx.strength === "name" && v === "empty") return null;
-      return v === "empty" || v === "iconOnly" ? RULES.buttonNoName : null;
+      if (ctx.strength === "name" && v === "empty") return abstain;
+      return { kind: "finding", rule: RULES.buttonNoName };
     }
     case "image": {
       // CONSERVATISM GUARD: only a HOST-strength image (resolved/registry `img`,
       // a proven thin wrapper) is checked. A name-only `*Image`/`AvatarImage`
       // wrapper is opaque — it commonly derives its own alt from a `name`/`title`
-      // prop internally (avatar components), so we can't prove it nameless. Skip.
-      if (ctx.strength !== "host") return null;
+      // prop internally (avatar components), so we can't prove it nameless.
+      if (ctx.strength !== "host") return abstain;
       // alt present (even empty alt="" = decorative) OR a label attr => named.
       // alt="" is intentional decorative marking, NOT a violation -> not flagged
       // (attrState treats empty alt as "missing", so check alt presence directly).
-      if (hasAltAttr(opening, sf)) return null;
-      if (anyNameAttr(opening, sf, LABEL_ATTRS)) return null;
-      return RULES.imageNoAlt;
+      if (hasAltAttr(opening, sf)) return clean;
+      if (anyNameAttr(opening, sf, LABEL_ATTRS)) return clean;
+      return { kind: "finding", rule: RULES.imageNoAlt };
     }
     case "link": {
-      if (ctx.hasNameAncestor) return null; // titled Tooltip ancestor names it
-      if (anyNameAttr(opening, sf, CONTROL_NAME_ATTRS)) return null;
+      if (ctx.hasNameAncestor) return clean; // titled Tooltip ancestor names it
+      if (anyNameAttr(opening, sf, CONTROL_NAME_ATTRS)) return clean;
       const v = childVerdict(element, imports);
-      if (ctx.strength === "name" && v === "empty") return null; // same guard #2
+      if (v === "dynamic") return abstain;
+      if (v === "text") return clean;
+      if (ctx.strength === "name" && v === "empty") return abstain; // same guard #2
       // A link with only an icon child and no name is the 2.4.4-link-no-name
-      // shape; empty likewise (host-strength). text/dynamic => skip.
-      return v === "empty" || v === "iconOnly" ? RULES.linkNoName : null;
+      // shape; empty likewise (host-strength).
+      return { kind: "finding", rule: RULES.linkNoName };
     }
     case "dialog": {
       // Fuzziest control: flag only when CLEARLY nameless. A name-strength dialog
@@ -750,10 +798,10 @@ function evaluate(
       // <DialogTitle> internally (the dominant case), so we can't prove it
       // nameless. Only inspect a dialog whose BODY we can see (a host-strength
       // primitive, or a name-strength container with static children).
-      if (ctx.strength === "name" && !hasStaticBody(element)) return null;
-      if (dialogHasName(info, sf)) return null;
-      if (dialogHasDynamicBody(element)) return null;
-      return RULES.dialogNoName;
+      if (ctx.strength === "name" && !hasStaticBody(element)) return abstain;
+      if (dialogHasName(info, sf)) return clean;
+      if (dialogHasDynamicBody(element)) return abstain;
+      return { kind: "finding", rule: RULES.dialogNoName };
     }
     case "input": {
       // Inputs reach here via a real input HOST — a resolved wrapper, or a native
@@ -761,18 +809,18 @@ function evaluate(
       // A submit/button/reset is named by its `value`, hidden/image/checkbox/radio
       // are not text-name-bearing or are externally-labelled toggles — exempt by
       // `type` before any name check (a `<input type="submit"/>` is not nameless).
-      if (isNameExemptInputType(opening, sf)) return null;
+      if (isNameExemptInputType(opening, sf)) return clean;
       // Hidden / untabbable controls (display:none, `hidden`, `tabIndex={-1}`
       // sentinels) aren't operable/announced controls — an absent label is moot.
-      if (isHiddenOrUntabbable(opening, sf)) return null;
+      if (isHiddenOrUntabbable(opening, sf)) return clean;
       // A name can come from aria-label/labelledby, a label/title prop, an id
       // paired with a <label for>, OR a label ANCESTOR (FormLabel/Box as="label").
       // Any of those = "could be labelled" -> conservative skip; placeholder is
       // NOT a label, so its presence does NOT clear the finding.
-      if (ctx.hasLabelAncestor) return null;
-      if (anyNameAttr(opening, sf, NAME_ATTRS)) return null;
-      if (attrState(opening, sf, "label") !== "missing") return null;
-      if (attrState(opening, sf, "id") !== "missing") return null;
+      if (ctx.hasLabelAncestor) return clean;
+      if (anyNameAttr(opening, sf, NAME_ATTRS)) return clean;
+      if (attrState(opening, sf, "label") !== "missing") return clean;
+      if (attrState(opening, sf, "id") !== "missing") return clean;
       // CHILDREN on a WRAPPER input host mean a composite that labels itself with
       // its content — skip (conservative; a real text input is self-closing). But
       // a NATIVE `<select>`/`<textarea>` ALWAYS has children — its `<option>`s or
@@ -785,9 +833,11 @@ function evaluate(
         ts.isJsxElement(element) &&
         element.children.some((c) => !isWhitespace(c))
       ) {
-        return null;
+        // A composite wrapper that labels itself with its own content — not a
+        // bare nameless input, but not provably named either: abstain.
+        return abstain;
       }
-      return RULES.inputNoName;
+      return { kind: "finding", rule: RULES.inputNoName };
     }
   }
 }
@@ -814,6 +864,23 @@ interface EnforceFinding {
   readonly wcag: readonly string[];
 }
 
+/**
+ * A G4 abstention marker: the floor CONSIDERED a control at this `line` for this
+ * WCAG `sc` and DELIBERATELY emitted no finding because the content is unknowable
+ * (spread / dynamic child / opaque wrapper). Carries no message — it is not a
+ * finding, it is the record that the floor looked and declined, which vetoes a
+ * grounded recall finding on the same `line` + `sc` (RFC Phase 1, G4).
+ */
+export interface AbstentionMarker {
+  readonly line: number;
+  readonly sc: string;
+}
+
+/** An {@link AbstentionMarker} anchored to its file — the exposed G4 record. */
+export interface LocatedAbstention extends AbstentionMarker {
+  readonly file: string;
+}
+
 /** Everything an element check needs about one JSX element and its surroundings. */
 interface ElementCheckArgs {
   readonly info: OpeningInfo;
@@ -826,6 +893,12 @@ interface ElementCheckArgs {
   readonly labelDepth: number;
   /** Enclosing titled-`<Tooltip>` depth; > 0 ⇒ a control here is named at runtime. */
   readonly nameAncestorDepth: number;
+  /**
+   * Sink for G4 abstentions — a check that CONSIDERED a control here and declined
+   * (unknowable content) pushes a {@link AbstentionMarker}. Side-channel only:
+   * it never affects the returned finding, so floor findings stay byte-identical.
+   */
+  readonly abstentions: AbstentionMarker[];
 }
 
 /**
@@ -845,13 +918,20 @@ type ElementCheck = (args: ElementCheckArgs) => EnforceFinding | null;
 const controlNameCheck: ElementCheck = (a) => {
   const recognized = classify(a.tag, a.resolvedHosts, a.imports);
   if (recognized === null) return null;
-  const rule = evaluate(recognized.type, a.info, a.sf, a.imports, {
+  const outcome = evaluate(recognized.type, a.info, a.sf, a.imports, {
     strength: recognized.strength,
     hasLabelAncestor: a.labelDepth > 0,
     hasNameAncestor: a.nameAncestorDepth > 0,
   });
-  if (rule === null) return null;
   const line = a.sf.getLineAndCharacterOfPosition(a.info.opening.getStart(a.sf)).line + 1;
+  if (outcome.kind === "abstain") {
+    // G4 side-channel: the floor looked at this SC here and declined. Record the
+    // abstention WITHOUT emitting a finding — floor output is unchanged.
+    for (const sc of outcome.wcag) a.abstentions.push({ line, sc });
+    return null;
+  }
+  if (outcome.kind === "clean") return null;
+  const rule = outcome.rule;
   return { line, ruleId: rule.ruleId, message: rule.message, wcag: rule.wcag };
 };
 
@@ -882,11 +962,27 @@ const ELEMENT_CHECKS: readonly ElementCheck[] = [controlNameCheck, preferTagChec
  * flagged (its name comes from that label).
  */
 export function enforceContent(filePaths: readonly string[], ctx: EnforceContext): Finding[] {
+  return enforceContentWithAbstentions(filePaths, ctx).findings;
+}
+
+/**
+ * The enforce pass plus its G4 abstention markers (RFC Phase 1, §1b). Identical
+ * to {@link enforceContent} for `findings` — same walk, byte-identical floor
+ * output — but additionally returns every {@link AbstentionMarker}: a line+SC the
+ * floor CONSIDERED a control at and deliberately declined (spread / dynamic child
+ * / opaque wrapper). `enforceContent` is this with the abstentions dropped, so no
+ * existing caller (scan, the CLI) sees any change.
+ */
+export function enforceContentWithAbstentions(
+  filePaths: readonly string[],
+  ctx: EnforceContext,
+): { readonly findings: Finding[]; readonly abstentions: readonly LocatedAbstention[] } {
   const injectsChildren = ctx.declarations?.injectsChildren ?? [];
   // Module-scoped resolved-host lookup — the FP-safe replacement for jsx-a11y's
   // leaf-keyed flat map (see {@link EnforceContext.resolutions}).
   const resolvedHosts = buildResolvedHosts(ctx.resolutions);
   const out: Finding[] = [];
+  const abstentions: LocatedAbstention[] = [];
 
   for (const filePath of filePaths) {
     const text = ts.sys.readFile(filePath);
@@ -929,6 +1025,10 @@ export function enforceContent(filePaths: readonly string[], ctx: EnforceContext
             ? `${tagNode.expression.text}.${tagNode.name.text}`
             : null;
         if (tag !== null) {
+          // Per-element abstention buffer: collected by the checks, then kept
+          // only if the element's line is not range-suppressed (same gate as a
+          // finding) — so an abstention never appears where a finding couldn't.
+          const elemAbstentions: AbstentionMarker[] = [];
           const args: ElementCheckArgs = {
             info,
             tag,
@@ -937,6 +1037,7 @@ export function enforceContent(filePaths: readonly string[], ctx: EnforceContext
             resolvedHosts,
             labelDepth,
             nameAncestorDepth,
+            abstentions: elemAbstentions,
           };
           for (const check of ELEMENT_CHECKS) {
             const finding = check(args);
@@ -952,6 +1053,10 @@ export function enforceContent(filePaths: readonly string[], ctx: EnforceContext
               });
             }
           }
+          // Flush the element's abstentions, same suppression gate as a finding.
+          for (const a of elemAbstentions) {
+            if (!isSuppressed(a.line)) abstentions.push({ file: filePath, ...a });
+          }
         }
       }
       ts.forEachChild(node, visit);
@@ -961,5 +1066,5 @@ export function enforceContent(filePaths: readonly string[], ctx: EnforceContext
     visit(sf);
   }
 
-  return out;
+  return { findings: out, abstentions };
 }
