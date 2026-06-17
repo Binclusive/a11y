@@ -9,6 +9,25 @@ This harness is **separate from `matrix:check` by construction**: `matrix:check`
 is a count-snapshot gate for the static *floor*; `recall:eval` is a precision-
 floor gate for the recall *ceiling*. They never share a baseline.
 
+## First grounded run (2026-06-17)
+
+3 independent **blind** grounding passes (model nominations produced without
+sight of the labels), scored through the real gate stack:
+
+| Metric | Value |
+|---|---|
+| Precision (point) | **1.000** — 18/18 surfaced findings correct |
+| Recall | **1.000** — 18/18 positives caught |
+| False positives on the 6 hard decoys | **0** (Tooltip / FormLabel / aria-label / floor-caught all stayed silent) |
+| Precision **Wilson 95% lower bound** | **0.824** → below the 0.95 gate |
+
+Read: the layer is **perfect on this set** — zero decoy leakage, full recall.
+The Wilson gate is **FAIL only on sample size**: 18 all-correct samples can
+statistically certify ≥0.82, not ≥0.95. The bound is conservative on purpose.
+**Clearing the gate is a corpus-growth task** (≈60 all-correct surfaced findings,
+i.e. ~20 positive fixtures × 3 passes), not a code change. The gate is nightly +
+non-blocking, so it trends toward green as the fixture set grows.
+
 ## What it is and is not
 
 - It **is** the deterministic scoring + the Wilson gate, driven through the exact
