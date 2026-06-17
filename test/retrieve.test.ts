@@ -63,7 +63,23 @@ describe("retrieveSlice: R1 by resolved component", () => {
       resolutions: [opaque("IconButton")],
       findings: [],
     });
-    // `IconButton` tokenizes to `icon` + `button`, overlapping `icon-only button`.
+    // `IconButton` tokenizes to `button` (`icon` is stopworded), overlapping
+    // `icon-only button`.
+    expect(ids(slice)).toContain("4.1.2-button-no-name");
+  });
+
+  it("does NOT leak the LINK pattern into an icon-only BUTTON slice (icon stopworded)", () => {
+    // `IconButton` → tokens `{button}` (`icon` is a cross-kind stopword). The LINK
+    // pattern `2.4.4-link-no-name` is labelled "icon / image / empty link"; before
+    // stopwording `icon`, it overlapped via that token and entered a button slice
+    // as eligibleToFlag. It must NOT — a button can never be that link pattern.
+    const slice = retrieveSlice({
+      files: ["/app/profile/page.tsx"], // no journey hint
+      resolutions: [opaque("IconButton")],
+      findings: [], // no SC, so R2 cannot re-admit the link pattern
+    });
+    expect(ids(slice)).not.toContain("2.4.4-link-no-name");
+    // …while the button pattern it legitimately overlaps stays in the slice.
     expect(ids(slice)).toContain("4.1.2-button-no-name");
   });
 });

@@ -7,22 +7,29 @@ import { type ReviewCandidate, reviewA11y } from "../src/review";
 // The deterministic gate stack is driven with SYNTHETIC nominations (no model):
 // each candidate is engineered to die at — or clear — exactly one gate, so the
 // drop counters and survivor shape pin G0-G6 down mechanically. The fixture's
-// static floor produces NO findings (PlainLink is named, TooltipSuppressed is
-// suppressed, SpreadButton abstains), so a survivor is never deduped away.
+// static floor produces NO findings (GenericLink is named-but-vague, PlainLink is
+// named, TooltipSuppressed is suppressed, SpreadButton abstains), so a survivor is
+// never deduped away.
 
 const FIXTURE = resolve(fileURLToPath(new URL("./fixtures/enforce/review.tsx", import.meta.url)));
 
-/** A nomination anchored at the named PlainLink survivor anchor by default. */
+/**
+ * A nomination anchored at the GenericLink survivor by default — a genuine
+ * floor-missed failure shape: a link whose text is present ("click here") but
+ * non-descriptive, so the AST floor stays silent and recall is the win. (Not a
+ * NAMED link: nominating 2.4.4-link-no-name on a visibly-named anchor would read
+ * as a contradiction in this executable spec.)
+ */
 function candidate(over: Partial<ReviewCandidate> = {}): ReviewCandidate {
   return {
     file: FIXTURE,
-    line: 11, // `export const PlainLink = () => <a href="/home">Home</a>;`
-    patternId: "2.4.4-link-no-name", // common-tier, in this fixture's slice
-    codeQuote: "<a href",
+    line: 50, // `export const GenericLink = () => <Link href="/x">click here</Link>;`
+    patternId: "2.4.4-generic-link-text", // common-tier, in this fixture's slice
+    codeQuote: "click here",
     wcag: ["2.4.4"],
     confidence: "high",
-    message: "Link has no discernible name.",
-    justification: "The floor missed this opaque link; the quote is a real <a> with no name.",
+    message: "Link text is generic and non-descriptive.",
+    justification: "The floor can't judge text quality; \"click here\" conveys no destination.",
     ...over,
   };
 }
@@ -76,9 +83,10 @@ describe("reviewA11y verify — the deterministic G0-G6 gate stack", () => {
   });
 
   it("G6: drops an occasional-tier patternId (context-only, never flags)", async () => {
-    // `1.1.1-decorative-icon-announced` is occasional → in the slice as context,
-    // but eligibleToFlag=false, so the tier floor vetoes it.
-    const c = candidate({ patternId: "1.1.1-decorative-icon-announced", wcag: ["1.1.1"] });
+    // `2.4.4-target-not-signaled` is occasional → in the slice as context (it
+    // overlaps the fixture's links), but eligibleToFlag=false, so the tier floor
+    // vetoes it.
+    const c = candidate({ patternId: "2.4.4-target-not-signaled" });
     expect(await verifyOne(c)).toEqual([]);
   });
 
@@ -115,8 +123,8 @@ describe("reviewA11y verify — the deterministic G0-G6 gate stack", () => {
     expect(f.provenance).toBe("corpus-agent");
     expect(f.layer).toBe("recall");
     expect(f.enforcement).toBe("warn");
-    expect(f.patternId).toBe("2.4.4-link-no-name");
-    expect(f.line).toBe(11);
+    expect(f.patternId).toBe("2.4.4-generic-link-text");
+    expect(f.line).toBe(50);
     expect(f.file).toBe(FIXTURE);
     expect(f.wcag).toEqual(["2.4.4"]);
   });
@@ -129,7 +137,7 @@ describe("reviewA11y verify — the deterministic G0-G6 gate stack", () => {
       candidate({ line: 17, patternId: "4.1.2-button-no-name", codeQuote: "<IconButton>", wcag: ["4.1.2"] }), // G3
       candidate({ line: 26, patternId: "4.1.2-button-no-name", codeQuote: "<Button", wcag: ["4.1.2"] }), // G4
       candidate({ confidence: "low" }), // G5
-      candidate({ patternId: "1.1.1-decorative-icon-announced", wcag: ["1.1.1"] }), // G6
+      candidate({ patternId: "2.4.4-target-not-signaled" }), // G6
     ];
     const r = await reviewA11y({ verify: true, files: [FIXTURE], candidates: cands });
     if (r.mode !== "verify") throw new Error("expected verify mode");
