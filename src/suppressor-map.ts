@@ -165,7 +165,11 @@ export function buildSuppressorMap(
     // NEVER marked (the prior over-broad `tag === null` gate was finding #3).
     const tag = intrinsicTag(opening);
     const isFormIntrinsic = tag === "input" || tag === "select" || tag === "textarea";
-    const isInputHost = resolved !== null && resolved.host === "input";
+    // enforce treats input/select/textarea hosts all as ControlType "input" (its
+    // HOST_TO_TYPE), so mirror the full set, not just "input", to provably match.
+    const isInputHost =
+      resolved !== null &&
+      (resolved.host === "input" || resolved.host === "select" || resolved.host === "textarea");
     if ((isFormIntrinsic || isInputHost) && isNameExemptInputType(opening, sf)) {
       add(line, "name-exempt-input-type");
     }

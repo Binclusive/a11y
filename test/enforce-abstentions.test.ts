@@ -60,6 +60,16 @@ describe("enforce abstention markers (G4 signal)", () => {
     const flaggedLine = lineOf("export const IconOnlyTrusted") + 1; // <Button>
     expect(abstentions.some((a) => a.line === flaggedLine)).toBe(false);
   });
+
+  it("abstains on a name-only toggle (TOGGLE_NAMES, no resolved host) — never a finding", () => {
+    const { findings, abstentions } = enforceContentWithAbstentions([controls], CTX);
+    const toggleLine = lineOf("export const BareToggle"); // <Checkbox /> on the same line
+    // The G4 veto now covers a bare `<Checkbox/>`: abstains on the toggle SC family…
+    expect(abstentions.some((a) => a.line === toggleLine && a.sc === "4.1.2")).toBe(true);
+    expect(abstentions.some((a) => a.line === toggleLine && a.sc === "1.3.1")).toBe(true);
+    // …and still emits NO finding (a toggle is externally labelled — floor silent).
+    expect(findings.some((f) => f.line === toggleLine)).toBe(false);
+  });
 });
 
 describe("abstention metadata does NOT change emitted findings", () => {

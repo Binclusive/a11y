@@ -186,6 +186,15 @@ type Classification =
 const ICON_SKIP_WCAG: readonly string[] = ["4.1.2", "2.4.4", "1.1.1"];
 
 /**
+ * The SC family a name-only toggle (`<Checkbox/>`, `<Switch/>` — a {@link
+ * TOGGLE_NAMES} match with no resolved host) abstains on. A toggle is shaped like
+ * a button (4.1.2) or an input (1.3.1 / 3.3.2) but is externally labelled, so a
+ * recall nomination asserting any of those name SCs on its line is a false
+ * positive — abstain on the union so G4 vetoes it.
+ */
+const TOGGLE_SKIP_WCAG: readonly string[] = ["4.1.2", "1.3.1", "3.3.2"];
+
+/**
  * Conservative NAME heuristics: a capitalized JSX name that, by convention,
  * names a control of a given type even when the component is opaque. Matched on
  * the LEAF name (`Foo.Button` -> `Button`) and only when the name IS or ENDS
@@ -324,8 +333,10 @@ function classify(
   const recognized = (r: Recognized): Classification => ({ kind: "recognized", recognized: r });
   // Toggle controls (checkbox/switch/radio/toggle) are externally labelled by
   // convention — we can't verify their name at the call site, so skip them
-  // outright before any host/name recognition claims them as button/input.
-  if (TOGGLE_NAMES.has(leafName(tagName))) return null;
+  // outright before any host/name recognition claims them as button/input. This
+  // CONSIDERS a real control and declines, so it abstains on the toggle SC family
+  // (G4) — vetoing a recall nomination on a name-only toggle.
+  if (TOGGLE_NAMES.has(leafName(tagName))) return { kind: "skip", wcag: TOGGLE_SKIP_WCAG };
 
   // Native form-control intrinsics (`<input>`/`<select>`/`<textarea>`) are real
   // host controls jsx-a11y would own — but we don't run its
