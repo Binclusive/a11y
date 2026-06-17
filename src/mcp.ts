@@ -51,6 +51,14 @@ import {
   type Severity,
 } from "./corpus";
 import type { Coverage } from "./resolve-components";
+import {
+  type ReviewCandidate,
+  type ReviewInput,
+  type ReviewRetrieveResult,
+  type ReviewVerifyResult,
+  reviewA11y,
+  reviewA11yDir,
+} from "./review";
 
 /** A single finding flattened to the shape the MCP tool returns. */
 export interface CheckFinding {
@@ -259,6 +267,30 @@ function jsonContent(value: unknown): { content: [{ type: "text"; text: string }
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] };
 }
 
+// The one model nomination, validated at the wire. Mirrors {@link ReviewCandidate}.
+// Module-scoped so both `registerTools` (wire shape) and `reviewTool` (the
+// handler tests drive) share the exact same field contract.
+const reviewCandidateSchema = z.object({
+  file: z.string().describe("Absolute path to the file the finding is in."),
+  line: z.number().int().positive().describe("1-based line of the offending JSX element."),
+  patternId: z
+    .string()
+    .describe("A patternId FROM corpusContext (closed vocabulary — others are dropped)."),
+  codeQuote: z
+    .string()
+    .describe("Verbatim substring of the cited line (re-checked server-side)."),
+  wcag: z.array(z.string()).describe("WCAG success criteria this candidate asserts."),
+  confidence: z
+    .enum(["high", "medium", "low"])
+    .describe("Only `high` survives; medium/low are dropped."),
+  message: z.string().describe("Advisory message for the surfaced finding."),
+  justification: z
+    .string()
+    .describe(
+      "Adversarial self-justification (G7): why is this real, not an FP, and why did the floor miss it?",
+    ),
+});
+
 /** Register the three a11y tools on an existing server. Split out for testing. */
 export function registerTools(server: McpServer): void {
   server.tool(
@@ -308,6 +340,104 @@ export function registerTools(server: McpServer): void {
     async ({ rule, wcag, fix, source, dir }) =>
       jsonContent(await learnA11yRule({ rule, wcag, fix, source, dir })),
   );
+
+  server.tool(
+    "review_a11y",
+    "The corpus-grounded RECALL pass — a two-step tool that finds accessibility failures the static check missed, WITHOUT introducing false positives. Step 1 (retrieve): call with `{ dir }` to get the static findings, the corpus patterns you MAY flag (closed vocabulary), the per-line do-not-flag suppressor facts, and an instruction. Read those and nominate candidates. Step 2 (verify): call with `{ verify: true, files, candidates }`; the server re-runs a deterministic gate stack over your nominations and returns only the survivors, as ADVISORY findings (never gating the build). Use this AFTER check_a11y to catch what the static floor can't see.",
+    reviewToolShape(reviewCandidateSchema),
+    async (args) => jsonContent(await reviewTool(args)),
+  );
+}
+
+/**
+ * `review_a11y` handler, factored out so tests can drive both modes — and the
+ * verify-mode cross-field contract — without a live transport. Parses the raw
+ * args through {@link reviewArgsSchema} (which REJECTS `{ verify: true }` with
+ * no `files`/`candidates`), then dispatches. Throws a Zod error with a clear
+ * message on a contract violation.
+ */
+export async function reviewTool(
+  args: unknown,
+): Promise<ReviewRetrieveResult | ReviewVerifyResult> {
+  return runReviewTool(parseReviewArgs(reviewCandidateSchema, args));
+}
+
+/**
+ * The `review_a11y` tool's raw Zod shape. Factored out so the same field set
+ * feeds both the wire registration ({@link registerTools}) and the
+ * cross-field-validated {@link reviewArgsSchema} the handler parses with.
+ */
+function reviewToolShape(candidateSchema: z.ZodTypeAny) {
+  return {
+    dir: z
+      .string()
+      .optional()
+      .describe("Retrieve mode: directory to scan for .tsx and ground the review."),
+    verify: z.boolean().optional().describe("Set true with `files` + `candidates` to verify."),
+    files: z
+      .array(z.string())
+      .optional()
+      .describe("Verify mode: the files the candidates point at."),
+    candidates: z
+      .array(candidateSchema)
+      .optional()
+      .describe("Verify mode: your nominations from the retrieve step."),
+  };
+}
+
+/**
+ * Parse the raw `review_a11y` args through the cross-field contract. The SDK
+ * validates the per-field shape at the wire, but it cannot express the verify
+ * mode's CROSS-field requirement — `{ verify: true }` with no `files` would scan
+ * `[]`, produce no floor findings and no abstentions, and vacuously pass the
+ * G0/G4 vetoes, so an FP candidate survives. The refine below makes that a clear
+ * contract error instead of a silent vacuous success (ADR 0003 — the
+ * deterministic shell, not the model, decides precision).
+ */
+function parseReviewArgs(
+  candidateSchema: z.ZodTypeAny,
+  args: unknown,
+): z.infer<ReturnType<typeof reviewArgsSchema>> {
+  return reviewArgsSchema(candidateSchema).parse(args);
+}
+
+/** The cross-field-validated `review_a11y` schema (see {@link parseReviewArgs}). */
+function reviewArgsSchema(candidateSchema: z.ZodTypeAny) {
+  return z.object(reviewToolShape(candidateSchema)).superRefine((val, ctx) => {
+    if (val.verify !== true) return;
+    if (val.files === undefined || val.files.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["files"],
+        message:
+          "verify mode requires a non-empty `files` array: with no files the static floor scans nothing, so its suppressor/abstention vetoes are vacuous and false-positive candidates would survive.",
+      });
+    }
+    if (val.candidates === undefined || val.candidates.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["candidates"],
+        message: "verify mode requires a non-empty `candidates` array (nothing to verify otherwise).",
+      });
+    }
+  });
+}
+
+/** Dispatch a validated `review_a11y` payload to the retrieve or verify path. */
+async function runReviewTool(
+  args: z.infer<ReturnType<typeof reviewArgsSchema>>,
+): Promise<ReviewRetrieveResult | ReviewVerifyResult> {
+  if (args.verify === true) {
+    const input: ReviewInput = {
+      verify: true,
+      // Validated non-empty by `reviewArgsSchema`, so the `?? []` fallbacks are
+      // dead — the shell rejected the vacuous-scan case before reaching here.
+      files: args.files ?? [],
+      candidates: (args.candidates ?? []) as ReviewCandidate[],
+    };
+    return reviewA11y(input);
+  }
+  return reviewA11yDir(args.dir ?? process.cwd());
 }
 
 /** Build the configured server (no transport attached). */
@@ -323,6 +453,7 @@ export function buildServer(): McpServer {
         "check_url renders a live URL in a real browser and runs axe-core, reporting the same corpus-tiered findings for source-less or server-rendered pages.",
         "get_a11y_rules returns the rules for a component or WCAG SC so you can apply them before writing code.",
         "learn_a11y_rule records a team rule into binclusive.json and the AGENTS.md/CLAUDE.md block.",
+        "review_a11y is a two-step corpus-grounded recall pass: retrieve grounding then verify your nominations through a deterministic gate stack, surfacing advisory findings the static floor missed.",
       ].join(" "),
     },
   );

@@ -634,7 +634,15 @@ export interface CorpusPattern {
  * highest-impact framing" rule `enrich` uses — and carry that SC's aggregate
  * org count from the snapshot. Pure data; the AGENTS.md generator reads this.
  */
+let CORPUS_PATTERNS: readonly CorpusPattern[] | undefined;
+
 export function corpusPatterns(): readonly CorpusPattern[] {
+  // Memoized: `DISTILLED` is immutable JSON, so the dedup+sort runs once and the
+  // frozen result is shared (hot path — `retrieveSlice` calls this every review).
+  return (CORPUS_PATTERNS ??= Object.freeze(computeCorpusPatterns()));
+}
+
+function computeCorpusPatterns(): CorpusPattern[] {
   // Pick the most-widespread SC per pattern id (most orgs; tie → lowest SC).
   const bySc = new Map<string, { ref: DistilledPatternRef; sc: string; orgs: number | null }>();
   for (const [sc, refs] of DISTILLED.entries()) {
@@ -665,6 +673,32 @@ export function corpusPatterns(): readonly CorpusPattern[] {
       if (a.sc !== b.sc) return a.sc < b.sc ? -1 : 1;
       return a.id < b.id ? -1 : 1;
     });
+}
+
+/**
+ * The journey tags for each distilled pattern, keyed by pattern id. RETRIEVAL-
+ * INTERNAL: journey hints (`checkout`, `sign-in`, `search`, …) drive the
+ * corpus-slice retriever's path→tag boost (RFC Phase 1, R3) but are NOT part of
+ * the public {@link CorpusPattern} display shape — a pattern surfaces the same
+ * regardless of which journey pulled it in. Deduped by id, same as
+ * {@link corpusPatterns}; a pattern with no tags maps to an empty array.
+ */
+let CORPUS_JOURNEY_TAGS: ReadonlyMap<string, readonly string[]> | undefined;
+
+export function corpusJourneyTags(): ReadonlyMap<string, readonly string[]> {
+  // Memoized over the immutable `DISTILLED` map (hot path — `retrieveSlice` reads
+  // it every review). The shared Map is read-only by its `ReadonlyMap` type.
+  return (CORPUS_JOURNEY_TAGS ??= computeCorpusJourneyTags());
+}
+
+function computeCorpusJourneyTags(): ReadonlyMap<string, readonly string[]> {
+  const map = new Map<string, readonly string[]>();
+  for (const refs of DISTILLED.values()) {
+    for (const ref of refs) {
+      if (!map.has(ref.id)) map.set(ref.id, ref.journeyTags);
+    }
+  }
+  return map;
 }
 
 /**

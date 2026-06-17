@@ -7,7 +7,7 @@
 // CONTENT the app passes in. The enforce check recognizes the control TYPE here
 // (registry + name) and checks that app-owned content — that's the recall win.
 
-import { Button, IconButton, TextField, Tooltip } from "@mui/material";
+import { Button, Checkbox, IconButton, TextField, Tooltip } from "@mui/material";
 import { Image } from "@chakra-ui/react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Trash } from "lucide-react";
@@ -99,3 +99,8 @@ export const DynamicLabelButton = ({ name }: { name: string }) => (
 
 // Spread on an image → NEVER flag (alt could be in the spread).
 export const SpreadImage = (props: Record<string, unknown>) => <Image {...props} />;
+
+// A name-only toggle (TOGGLE_NAMES match, no resolved host, no call-site role) →
+// never a finding (externally labelled), and now abstains on the toggle SC
+// family so a recall nomination on it is vetoed (G4).
+export const BareToggle = () => <Checkbox />;

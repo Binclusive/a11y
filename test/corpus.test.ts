@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { corpusPatterns } from "../src/corpus";
+import { corpusJourneyTags, corpusPatterns } from "../src/corpus";
 
 const TIER_RANK: Record<string, number> = {
   "very-common": 0,
@@ -40,5 +40,22 @@ describe("corpusPatterns: the real distilled moat", () => {
 
   it("is pure — same call yields a structurally identical list", () => {
     expect(corpusPatterns()).toEqual(patterns);
+  });
+
+  it("is memoized — repeat calls return the SAME frozen array (compute once)", () => {
+    // The data is immutable JSON, so the singleton is shared by reference and the
+    // dedup+sort never re-runs. Frozen so a consumer can't mutate the singleton.
+    expect(corpusPatterns()).toBe(corpusPatterns());
+    expect(Object.isFrozen(corpusPatterns())).toBe(true);
+  });
+});
+
+describe("corpusJourneyTags: memoized retrieval-internal index", () => {
+  it("is memoized — repeat calls return the SAME map, with identical content", () => {
+    const a = corpusJourneyTags();
+    const b = corpusJourneyTags();
+    expect(a).toBe(b);
+    // Every distilled pattern id has an entry (possibly an empty tag list).
+    for (const p of corpusPatterns()) expect(a.has(p.id)).toBe(true);
   });
 });

@@ -1,13 +1,13 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { extractBlock } from "../src/agents-block";
 import { CONTRACT_FILE, init } from "../src/commands";
 import { parseContract } from "../src/contract";
 import type { DomScanResult } from "../src/collect-dom";
-import { checkA11y, checkUrl, getA11yRules, learnA11yRule } from "../src/mcp";
+import { checkA11y, checkUrl, getA11yRules, learnA11yRule, reviewTool } from "../src/mcp";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -197,5 +197,56 @@ describe("learn_a11y_rule handler", () => {
 
     const dup = await learnA11yRule({ rule: "  CUSTOM   rule  ", dir });
     expect(dup.added).toBe(false);
+  });
+});
+
+describe("review_a11y handler: verify-mode cross-field contract (#5)", () => {
+  const REVIEW_FIXTURE = resolve(
+    fileURLToPath(new URL("./fixtures/enforce/review.tsx", import.meta.url)),
+  );
+  const validCandidate = {
+    file: REVIEW_FIXTURE,
+    line: 11,
+    patternId: "2.4.4-link-no-name",
+    codeQuote: "<a href",
+    wcag: ["2.4.4"],
+    confidence: "high" as const,
+    message: "Link has no discernible name.",
+    justification: "Opaque link the floor missed; the quote is a real <a> with no name.",
+  };
+
+  it("REJECTS verify mode with no `files`, surfacing a clear contract error", async () => {
+    // The vacuous-scan exploit: { verify: true, candidates } with NO files scans
+    // [], so the floor's suppressor/abstention vetoes are empty and an FP would
+    // survive. The shell must reject it BEFORE reviewA11y runs.
+    await expect(
+      reviewTool({ verify: true, candidates: [validCandidate] }),
+    ).rejects.toThrow(/non-empty `files`/);
+  });
+
+  it("REJECTS verify mode with an EMPTY `files` array (same vacuous scan)", async () => {
+    await expect(
+      reviewTool({ verify: true, files: [], candidates: [validCandidate] }),
+    ).rejects.toThrow(/non-empty `files`/);
+  });
+
+  it("REJECTS verify mode with `files` but no `candidates`", async () => {
+    await expect(
+      reviewTool({ verify: true, files: [REVIEW_FIXTURE] }),
+    ).rejects.toThrow(/non-empty `candidates`/);
+  });
+
+  it("ACCEPTS verify mode with both files and candidates (runs the gate stack)", async () => {
+    const r = await reviewTool({
+      verify: true,
+      files: [REVIEW_FIXTURE],
+      candidates: [validCandidate],
+    });
+    expect(r.mode).toBe("verify");
+  });
+
+  it("retrieve mode (no verify) does NOT require files/candidates", async () => {
+    const r = await reviewTool({ dir: FIXTURES });
+    expect(r.mode).toBe("retrieve");
   });
 });

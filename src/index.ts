@@ -13,7 +13,15 @@
 
 // ── 1 · Scan & enrich — the read path ────────────────────────────────────────
 export { collectTsx } from "./collect";
-export { checkFiles, type Finding, type FindingProvenance, type ScanResult, scan } from "./core";
+export {
+  checkFiles,
+  dedupeRecall,
+  type Finding,
+  type FindingLayer,
+  type FindingProvenance,
+  type ScanResult,
+  scan,
+} from "./core";
 export { type DomScanOptions, type DomScanResult, scanUrl } from "./collect-dom";
 export { type SwiftScanResult, scanSwift } from "./collect-swift";
 export {
@@ -115,4 +123,11 @@ export {
   type DistilledPatternRef,
 } from "./corpus";
 export { BLOCK_BEGIN, BLOCK_END, extractBlock, renderBlock, spliceBlock } from "./agents-block";
+export {
+  type RetrievedPattern,
+  type RetrievedSlice,
+  type RetrieveInput,
+  retrieveSlice,
+  SLICE_CAP,
+} from "./retrieve";
 export { RULE_ID_TO_WCAG, wcagForRuleId } from "./wcag-map";

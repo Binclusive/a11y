@@ -39,7 +39,8 @@
     "matrix:run": "tsx experiments/stack-matrix/run.ts",
     "matrix:report": "tsx experiments/stack-matrix/report.ts",
     "matrix:baseline": "tsx experiments/stack-matrix/baseline.ts",
-    "matrix:check": "tsx experiments/stack-matrix/check.ts"
+    "matrix:check": "tsx experiments/stack-matrix/check.ts",
+    "recall:eval": "tsx experiments/corpus-recall/eval.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.10.2",

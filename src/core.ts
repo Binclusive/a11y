@@ -43,8 +43,25 @@ import { wcagForRuleId } from "./wcag-map";
  *     SwiftUI accessibility rules (missing image label, unlabeled control) with
  *     the ancestor-climb heuristic. Anchored by `file:line` like the source
  *     passes; the native counterpart of the jsx-a11y structural pass.
+ *   - `corpus-agent` — the corpus-grounded RECALL layer (RFC Phase 1): an agent
+ *     matches the scanned code against the distilled corpus slice and the
+ *     server-side gate stack disposes. **Never produced by `scan()`** — only by
+ *     the future `review_a11y` MCP tool, and always quarantined into a SEPARATE
+ *     `recall` field (see {@link ScanResult}). Advisory only: `enforcement` is
+ *     always `"warn"`, `layer` is always `"recall"`, and it can never reach the
+ *     CLI exit code. This keeps `scan()`'s output byte-identical and the floor's
+ *     precision intact.
  */
-export type FindingProvenance = "jsx-a11y" | "enforce" | "axe" | "swiftui";
+export type FindingProvenance = "jsx-a11y" | "enforce" | "axe" | "swiftui" | "corpus-agent";
+
+/**
+ * Which layer a finding belongs to. `floor` is the deterministic static floor
+ * (jsx-a11y / enforce / axe / swiftui) — it gates the CLI exit code. `recall` is
+ * the corpus-agent layer — advisory, quarantined, never exit-code-affecting.
+ * Floor findings carry no `layer` (it defaults to `floor`); only the recall
+ * layer tags it explicitly.
+ */
+export type FindingLayer = "floor" | "recall";
 
 /**
  * A single accessibility finding. A jsx-a11y finding is normalized off an
@@ -70,6 +87,20 @@ export interface Finding {
   readonly wcag: readonly string[];
   readonly enforcement: EnforcementLevel;
   readonly provenance: FindingProvenance;
+  /**
+   * Which layer produced this finding (see {@link FindingLayer}). Absent on the
+   * static floor passes (treated as `floor`); set to `recall` only on
+   * `corpus-agent` findings, the quarantine signal the dedup + result shape rely
+   * on.
+   */
+  readonly layer?: FindingLayer;
+  /**
+   * The distilled corpus pattern id this finding matched. Set only on
+   * `corpus-agent` (recall) findings — it is the key for self-dedup
+   * (`file:line:patternId`) and the provenance back to the corpus slice that
+   * grounded it. Absent on every static-floor pass.
+   */
+  readonly patternId?: string;
   /**
    * Where the finding lives in a rendered DOM: the CSS selector axe-core
    * reports for the offending node. Set only on `axe` findings (`file` holds the
@@ -168,6 +199,17 @@ export interface ScanResult {
    * policy was applied without re-loading the file.
    */
   readonly contract: Contract | null;
+  /**
+   * QUARANTINE (RFC Phase 1d). The corpus-agent RECALL findings ride here, in a
+   * field SEPARATE from `findings` — never mixed in, never gating the CLI exit
+   * code, never `enforcement:"block"`. `scan()` itself ALWAYS leaves this empty
+   * (`[]`): only the future `review_a11y` recall layer populates it, after the
+   * agent returns and the server-side gate stack disposes. Because the recall
+   * findings live outside `findings`, `matrix:check` (which snapshots `findings`)
+   * is structurally unable to see them — a stochastic count can never flip the
+   * regression gate.
+   */
+  readonly recall: readonly Finding[];
 }
 
 const EMPTY_COVERAGE: Coverage = {
@@ -213,7 +255,7 @@ export async function scan(filePaths: readonly string[]): Promise<ScanResult> {
 
   if (tsxPaths.length === 0) {
     const empty: ResolvedComponents = { map: {}, coverage: EMPTY_COVERAGE, resolutions: [], unresolvedPackages: [] };
-    return { findings: [], coverage: empty.coverage, resolved: empty, contract };
+    return { findings: [], coverage: empty.coverage, resolved: empty, contract, recall: [] };
   }
 
   const resolved = resolveComponents(tsxPaths, declarations?.components ?? {});
@@ -298,7 +340,10 @@ export async function scan(filePaths: readonly string[]): Promise<ScanResult> {
   // Dedupe: an element the structural pass already flagged (resolved-to-host)
   // must not be double-reported by the enforce pass.
   const merged = [...findings, ...dedupeEnforce(enforceFindings, findings)];
-  return { findings: merged, coverage: resolved.coverage, resolved, contract };
+  // `scan()` produces NO corpus-agent findings — the recall layer is the only
+  // producer, and it rides the quarantined `recall` field, never `findings`.
+  // Keeping it empty here is what makes `scan()` output byte-identical.
+  return { findings: merged, coverage: resolved.coverage, resolved, contract, recall: [] };
 }
 
 /**
@@ -322,6 +367,43 @@ function dedupeEnforce(
     for (const sc of f.wcag) covered.add(`${f.file}:${f.line}:${sc}`);
   }
   return enforce.filter((f) => !f.wcag.some((sc) => covered.has(`${f.file}:${f.line}:${sc}`)));
+}
+
+/**
+ * Dedup the corpus-agent RECALL candidates against the static floor and against
+ * each other (RFC Phase 1d). Two mechanical passes, reusing `dedupeEnforce`'s
+ * key discipline (`file:line:sc`):
+ *
+ *   1. CROSS-dedup — drop any candidate that shares `file:line` AND any WCAG SC
+ *      with a STATIC finding. The floor already caught it; the recall layer
+ *      exists for what the floor MISSES, so a co-located same-SC hit is
+ *      redundant. (A missing floor finding is NOT permission to flag — that is
+ *      G4's abstention veto, not this dedup; this only removes "floor already
+ *      caught it.")
+ *   2. SELF-dedup — collapse candidates by `(file, line, patternId)`, keeping the
+ *      first. The same pattern matched twice on one element is one finding.
+ *
+ * Pure and model-free: a deterministic filter the recall layer applies AFTER the
+ * agent returns and BEFORE quarantining the survivors into `recall`. Order is
+ * stable — survivors keep their input order.
+ */
+export function dedupeRecall(
+  candidates: readonly Finding[],
+  staticFindings: readonly Finding[],
+): readonly Finding[] {
+  // 1 — CROSS-dedup against the static floor: identical `file:line:sc` covered-set
+  // discipline as the enforce pass, so reuse it verbatim rather than re-derive it.
+  const crossDeduped = dedupeEnforce(candidates, staticFindings);
+  // 2 — SELF-dedup by `(file, line, patternId)`, keeping the first survivor.
+  const seen = new Set<string>();
+  const out: Finding[] = [];
+  for (const f of crossDeduped) {
+    const key = `${f.file}:${f.line}:${f.patternId ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(f);
+  }
+  return out;
 }
 
 /**
