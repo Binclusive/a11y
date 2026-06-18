@@ -75,6 +75,17 @@ const FLAGGABLE_TIERS: ReadonlySet<CorpusPattern["tier"]> = new Set(["very-commo
  * `component` label (`icon-only button`, `link to file / new context`) that carry
  * no element signal, so they must not produce a spurious overlap with a resolved
  * component name. Kept tiny: only words that recur as pure connective tissue.
+ *
+ * `icon`, `image`, `empty` are stopworded for a SHARPER reason: they are generic
+ * descriptors shared across control KINDS (icon-only button, icon/image/empty
+ * link, generic alt image), not element signal. Matching on them cross-pollinates
+ * a slice with patternIds the resolved element can NEVER be — e.g. an `IconButton`
+ * (tokens include `icon`) would otherwise overlap the LINK pattern
+ * `2.4.4-link-no-name` ("icon / image / empty link") and admit a link pattern into
+ * a button-only slice as eligibleToFlag. The KIND tokens (`button`, `link`,
+ * `social`, `media`, `image`-bearing patterns still keyed by `link`/`alt`) keep
+ * every pattern reachable from its genuine resolution; only the cross-kind leak
+ * is closed.
  */
 const STOPWORDS: ReadonlySet<string> = new Set([
   "a",
@@ -88,6 +99,9 @@ const STOPWORDS: ReadonlySet<string> = new Set([
   "only",
   "new",
   "custom",
+  "icon",
+  "image",
+  "empty",
 ]);
 
 /**

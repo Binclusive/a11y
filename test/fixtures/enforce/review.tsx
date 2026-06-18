@@ -2,7 +2,7 @@
 // element is a deliberate anchor for one gate test. Lines are looked up by a
 // verbatim needle in the test, so the exact text on each JSX line is the contract.
 
-import { Button, IconButton, Tooltip } from "@mui/material";
+import { Button, IconButton, Link, Tooltip } from "@mui/material";
 import { Trash } from "lucide-react";
 
 // A plain anchor with visible text — the static floor does NOT flag it (it has a
@@ -41,3 +41,10 @@ export const MultiLineLink = () => (
     Multi
   </a>
 );
+
+// A link whose text is PRESENT but generic/non-descriptive ("click here"). The
+// static floor stays silent — the link has a name, it just isn't descriptive, a
+// shape the AST floor can't judge. The SURVIVOR anchor for a valid
+// high-confidence common-tier nomination (2.4.4-generic-link-text): a genuine
+// floor-missed failure where recall is the win.
+export const GenericLink = () => <Link href="/x">click here</Link>;
