@@ -1,0 +1,381 @@
+{
+  "item-01": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "see more",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"see more\" is generic; name the destination.",
+      "justification": "Link text \"see more\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-02": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "learn more",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"learn more\" is generic; name the destination.",
+      "justification": "Link text \"learn more\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-03": [],
+  "item-04": [],
+  "item-05": [
+    {
+      "line": 11,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "https://example.com/docs/getting-started",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a raw URL; use descriptive text.",
+      "justification": "Link accessible name \"https://example.com/docs/getting-started\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-06": [
+    {
+      "line": 10,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "/files/report.pdf?v=2&token=abc123",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a path with query string; describe the file.",
+      "justification": "Link accessible name \"/files/report.pdf?v=2&token=abc123\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-07": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "read more",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"read more\" is generic.",
+      "justification": "Link text \"read more\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-08": [],
+  "item-09": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "here",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"here\" is generic.",
+      "justification": "Link text \"here\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-10": [
+    {
+      "line": 9,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "view more",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"view more\" is generic.",
+      "justification": "Link text \"view more\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-11": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "click",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"click\" is generic and non-descriptive.",
+      "justification": "Link text \"click\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-12": [
+    {
+      "line": 10,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "Home / Catalog / Shoes / Item",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a breadcrumb trail, not a destination description.",
+      "justification": "Link accessible name \"Home / Catalog / Shoes / Item\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-13": [
+    {
+      "line": 10,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "Home / Products / Item",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a breadcrumb trail, not a destination description.",
+      "justification": "Link accessible name \"Home / Products / Item\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-14": [],
+  "item-15": [],
+  "item-16": [
+    {
+      "line": 9,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "undefined",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is the literal string \"undefined\".",
+      "justification": "Link accessible name \"undefined\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-17": [
+    {
+      "line": 10,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "report_final_v2.pdf",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a raw filename; describe the document.",
+      "justification": "Link accessible name \"report_final_v2.pdf\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-18": [
+    {
+      "line": 10,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "q3-report-final-v2-FINAL.pdf",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a raw filename; describe the document.",
+      "justification": "Link accessible name \"q3-report-final-v2-FINAL.pdf\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-19": [
+    {
+      "line": 9,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "Learn more",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"Learn more\" is generic.",
+      "justification": "Link text \"Learn more\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-20": [
+    {
+      "line": 10,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "/assets/files/export.csv?token=abc123&format=raw",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a path with query string.",
+      "justification": "Link accessible name \"/assets/files/export.csv?token=abc123&format=raw\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-21": [],
+  "item-22": [],
+  "item-23": [
+    {
+      "line": 10,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "https://www.example.com/articles/2024/07/index.html",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a raw URL.",
+      "justification": "Link accessible name \"https://www.example.com/articles/2024/07/index.html\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-24": [
+    {
+      "line": 10,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "https://cdn.example.com/a/b/c?id=42&ref=home",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a raw URL.",
+      "justification": "Link accessible name \"https://cdn.example.com/a/b/c?id=42&ref=home\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-25": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "this link",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"this link\" is generic and non-descriptive.",
+      "justification": "Link text \"this link\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-26": [
+    {
+      "line": 10,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "/very/long/path/segment",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a raw path.",
+      "justification": "Link accessible name \"/very/long/path/segment\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-27": [
+    {
+      "line": 9,
+      "patternId": "2.4.4-noisy-or-wrong-name",
+      "codeQuote": "SKU-9F3A-XL-BLK-2024",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link name is a SKU code, not a description.",
+      "justification": "Link accessible name \"SKU-9F3A-XL-BLK-2024\" is a raw URL/path/filename/SKU/breadcrumb, not a human-readable description of the destination."
+    }
+  ],
+  "item-28": [],
+  "item-29": [],
+  "item-30": [],
+  "item-31": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "more info",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"more info\" is generic.",
+      "justification": "Link text \"more info\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-32": [],
+  "item-33": [],
+  "item-34": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "click here",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"click here\" is generic.",
+      "justification": "Link text \"click here\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-35": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "read more",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"read more\" is generic.",
+      "justification": "Link text \"read more\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-36": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "find out more",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"find out more\" is generic.",
+      "justification": "Link text \"find out more\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-37": [],
+  "item-38": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "details",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"details\" is generic.",
+      "justification": "Link text \"details\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-39": [],
+  "item-40": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "continue",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"continue\" is generic.",
+      "justification": "Link text \"continue\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-41": [
+    {
+      "line": 8,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "go",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"go\" is generic and non-descriptive.",
+      "justification": "Link text \"go\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-42": [
+    {
+      "line": 9,
+      "patternId": "2.4.4-generic-link-text",
+      "codeQuote": "click here",
+      "wcag": [
+        "2.4.4"
+      ],
+      "confidence": "high",
+      "message": "Link text \"click here\" is generic.",
+      "justification": "Link text \"click here\" is generic and does not convey the destination out of context."
+    }
+  ],
+  "item-43": []
+}
