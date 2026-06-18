@@ -131,8 +131,13 @@ containment = |old ∩ new| / |old|     # fraction of the BLESSED findings the c
 > mass false-quarantine, and the keystone would be void.
 >
 > **F1 MUST canonicalize each `avt_*` to a stable per-defect key BEFORE the
-> matcher**, by either: **(a)** a content hash `sha256(org + project + url +
-> element + wcag)` — prior art: the *older* non-agentic `violation` table already
+> matcher**, by either: **(a)** a content hash over a **delimiter-safe
+> serialization** of `(org, project, url, element, wcag)` — length-prefixed or
+> JSON-encoded, **NOT bare string concatenation** (which collides: `a|bc` ==
+> `ab|c`). It's computed server-side over already-private audit rows; if the key
+> ever crosses the verifier's egress boundary (it shouldn't — see *Privacy*), use a
+> **keyed hash** (HMAC with a server secret) so `url`/`element` can't be confirmed
+> by offline guessing. Prior art: the *older* non-agentic `violation` table already
 > keys on a `.unique()` `violationHash` (`schema_pg.ts:274`); the agentic table
 > dropped that pattern for the random ULID — or **(b)** follow the `duplicateOfID`
 > chain to its root to collapse a defect's occurrences into one canonical id. The
@@ -205,7 +210,8 @@ still monotonic-with-human):
   report ships a fix for it. Nothing in the current design can even *notice* this.
   Add an absence signal: a blessed pattern whose **canonical content-keys** (NOT
   raw `avt_*`, which never recurs) fail to reappear across **M consecutive
-  regenerations over a growing corpus** is evidence the world moved → route it to a
+  regenerations over a growing corpus** (M a configurable parameter; default ~3)
+  is evidence the world moved → route it to a
   **human retirement queue** (symmetric to quarantine, opposite polarity).
   Retirement still needs a human — the invariant holds — but now there is a
   mechanism that surfaces the candidate. (This signal is *only meaningful* once
@@ -322,10 +328,12 @@ and `demo/**/raw-*.txt`. Still required before any **unattended** phase:
    re-run wired into the gate**. *No model.*
 2. **F1.0 — the defect canonicalizer (NEW prerequisite, v4).** `avt_*` is
    per-occurrence (resolved), so before the matcher can run, map each `avt_*` row
-   to a stable per-defect key: a content hash `sha256(org+project+url+element+wcag)`
-   (mirroring the old `violation` table's `violationHash`) or the `duplicateOfID`
-   chain root. Unit-test that two audits of the same defect collapse to ONE key and
-   two distinct defects don't collide. *Or* land the upstream fix (stable
+   to a stable per-defect key: a **delimiter-safe** content hash of
+   `(org, project, url, element, wcag)` (see the canonicalizer note in *Cluster
+   identity* for the serialization + keyed-hash caveat; mirrors the old `violation`
+   table's `violationHash`) or the `duplicateOfID` chain root. Unit-test that two
+   audits of the same defect collapse to ONE key and two distinct defects don't
+   collide. *Or* land the upstream fix (stable
    `avt_*`) and make F1.0 a pass-through. *No model.*
 3. **F1 — the matcher.** The **containment** identity matcher over the F1.0 canonical
    keys (split/merge detection, quarantine-on-ambiguity) + per-cluster provenance
@@ -415,9 +423,10 @@ and `demo/**/raw-*.txt`. Still required before any **unattended** phase:
   raw-`avt_*` overlap reads stable defects as all-new.
 - **Folded:** the containment matcher, the absence-retirement signal, and the
   coverage count now all key on a **canonical content-key**, not raw `avt_*`; a
-  new **F1.0 canonicalizer** (content hash `sha256(org+project+url+element+wcag)`,
-  prior art `violationHash` `schema_pg.ts:274`, or the `duplicateOfID` root) is a
-  hard prerequisite to F1's matcher.
+  new **F1.0 canonicalizer** (a delimiter-safe content hash of
+  `(org, project, url, element, wcag)`, prior art `violationHash`
+  `schema_pg.ts:274`, or the `duplicateOfID` root) is a hard prerequisite to F1's
+  matcher.
 - **Upstream bug found:** the "duplicate" verdict's intended `lastSeenAt` bump is
   dead code (`updateAgenticTicketLastSeen` never called). Fixing `avt_*` stability
   at the source would moot F1.0 *and* fix this — recommended as a `monorepo` issue.
