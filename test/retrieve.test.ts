@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { corpusJourneyTags, corpusPatterns } from "../src/corpus";
 import type { Finding } from "../src/core";
 import type { ComponentResolution } from "../src/resolve-components";
+import type { IntrinsicElement, IntrinsicSignals } from "../src/intrinsic-elements";
 import { retrieveSlice, SLICE_CAP } from "../src/retrieve";
 
 /** A resolved (traced) wrapper → host, the R1 input shape. */
@@ -265,5 +266,55 @@ describe("retrieveSlice: occasional patterns are context-only", () => {
     const listPattern = slice.patterns.find((p) => p.id === "1.3.1-list-not-marked-up");
     expect(listPattern).toBeDefined();
     expect(listPattern?.eligibleToFlag).toBe(false);
+  });
+});
+
+/** An intrinsic element, the R4 input shape (`collectIntrinsicElements` output). */
+function intrinsic(tag: string, signals: Partial<IntrinsicSignals> = {}): IntrinsicElement {
+  return {
+    tag,
+    signals: { altState: "missing", hasVisibleText: false, ...signals },
+  };
+}
+
+describe("retrieveSlice: R4 intrinsic-tag grounding", () => {
+  it("an `<img alt>` (present) grounds `1.1.1-filename-or-generic-alt` as eligibleToFlag", () => {
+    const slice = retrieveSlice({
+      files: ["/app/profile/page.tsx"], // no journey hint, no R1/R2/R3
+      resolutions: [],
+      findings: [],
+      intrinsics: [intrinsic("img", { altState: "present" })],
+    });
+    const alt = slice.patterns.find((p) => p.id === "1.1.1-filename-or-generic-alt");
+    expect(alt).toBeDefined();
+    expect(alt?.eligibleToFlag).toBe(true);
+  });
+
+  it("a missing-alt `<img>` is a FLOOR case — R4 does NOT ground the filename pattern", () => {
+    const slice = retrieveSlice({
+      files: ["/app/profile/page.tsx"],
+      resolutions: [],
+      findings: [],
+      intrinsics: [intrinsic("img", { altState: "missing" })],
+    });
+    expect(ids(slice)).not.toContain("1.1.1-filename-or-generic-alt");
+  });
+
+  it("does NOT bleed an img/a pattern into a button/icon context (F6 re-proof at R4)", () => {
+    // A mixed input: a button resolution alongside img + link intrinsics. R4 maps
+    // by EXPLICIT tag, so the img/a patterns ground ONLY the img/a tags; the button
+    // (which maps to []) must never inherit `1.1.1`/`2.4.4` image/link patterns.
+    const slice = retrieveSlice({
+      files: ["/app/profile/page.tsx"], // no journey hint
+      resolutions: [opaque("IconButton")], // button context, tokenizes to `button`
+      findings: [],
+      intrinsics: [intrinsic("button", { hasVisibleText: true })],
+    });
+    // The button-only context grounds its button pattern…
+    expect(ids(slice)).toContain("4.1.2-button-no-name");
+    // …but NEVER the image/link content patterns (button maps to []).
+    expect(ids(slice)).not.toContain("1.1.1-filename-or-generic-alt");
+    expect(ids(slice)).not.toContain("2.4.4-generic-link-text");
+    expect(ids(slice)).not.toContain("2.4.4-noisy-or-wrong-name");
   });
 });

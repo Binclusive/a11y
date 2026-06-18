@@ -121,7 +121,7 @@ interface R4Entry {
   readonly when?: (s: IntrinsicSignals) => boolean;
 }
 
-const R4_ELEMENT_PATTERNS: Record<string, readonly R4Entry[]> = {
+export const R4_ELEMENT_PATTERNS: Record<string, readonly R4Entry[]> = {
   img: [
     // common — alt present but a filename / id / placeholder. THE headline win.
     { id: "1.1.1-filename-or-generic-alt", when: (s) => s.altState === "present" },

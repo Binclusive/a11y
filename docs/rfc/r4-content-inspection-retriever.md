@@ -1,8 +1,8 @@
-# R4 — Content-Inspection Retriever (design, not yet implemented)
+# R4 — Content-Inspection Retriever
 
-Status: DESIGN / for review. No code in this PR.
+Status: IMPLEMENTED — design + code in this PR.
 Author: design pass, 2026-06-18.
-Scope target: `src/retrieve.ts`, with a new pure helper for element extraction; consumed unchanged by `src/review.ts` and `src/hook.ts`.
+Scope: `src/retrieve.ts` (the R4 table + clause) plus the pure element-extraction helper `src/intrinsic-elements.ts`; consumed by `src/review.ts` and `src/hook.ts`.
 
 ---
 

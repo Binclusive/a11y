@@ -1,6 +1,6 @@
 import ts from "typescript";
 import { rendersStaticNameInChildren } from "./source-trace";
-import { type AttrState, LABEL_ATTRS, anyNameAttr, attrState } from "./suppressors";
+import { type AttrState, attrState } from "./suppressors";
 
 /**
  * R4 element extraction (RFC `r4-content-inspection-retriever`, §3).
@@ -24,33 +24,37 @@ import { type AttrState, LABEL_ATTRS, anyNameAttr, attrState } from "./suppresso
  * Reuse, don't reinvent: the `visit` shape is a copy of
  * `resolve-components.ts`'s walker (minus the `CAP_NAME` filter), and every
  * content read delegates to the already-shared helpers
- * ({@link attrState} / {@link anyNameAttr} from the suppressors, and
- * {@link rendersStaticNameInChildren} from the source-tracer) — R4 duplicates no
- * text/attr logic.
+ * ({@link attrState} from the suppressors, and {@link rendersStaticNameInChildren}
+ * from the source-tracer) — R4 duplicates no text/attr logic.
+ *
+ * FIRST-CUT OMISSION (deliberate): R4 reads only `alt` presence and a static
+ * visible-text child. It does NOT ground aria-label-named links (the dropped
+ * `nameAttrState` signal) or dynamic-child link grounding — that grounding is
+ * left out of this first cut and is to be revisited only if the recall gap proves
+ * to matter.
  */
 
 const CAP_NAME = /^[A-Z]/; // capitalized JSX name = component (vs intrinsic host)
 
-/** The coarse content signal R4 reads off one intrinsic element. */
+/**
+ * The coarse content signal R4 reads off one intrinsic element — the two LIVE
+ * signals the `retrieveSlice` r4 predicates read:
+ *   - `altState` — `img` alt presence (`present` is the premise for
+ *     `1.1.1-filename-or-generic-alt`);
+ *   - `hasVisibleText` — `a`/`button` renders a STATIC visible name (text child /
+ *     sr-only span), the premise for the `2.4.4` link-text patterns.
+ */
 export interface IntrinsicSignals {
-  /** `img` alt presence — `present` is the R4 premise for `1.1.1-filename-or-generic-alt`. */
   readonly altState: AttrState;
-  /** `a` href presence (context only — R4 does not gate on it). */
-  readonly hrefState: AttrState;
-  /** `a`/`button` renders a STATIC visible name (text child / sr-only span). */
   readonly hasVisibleText: boolean;
-  /** `aria-label`/`aria-labelledby` present (or dynamic) on this element. */
-  readonly nameAttrState: AttrState;
 }
 
 /**
  * One intrinsic (lowercase) JSX element plus its coarse content signal. `tag` is
- * lowercased (`"img" | "a" | "button" | …`); `line` is the 1-based opening-tag
- * line (carried for future anchoring — R4 retrieval itself is file-level today).
+ * lowercased (`"img" | "a" | "button" | …`).
  */
 export interface IntrinsicElement {
   readonly tag: string;
-  readonly line: number;
   readonly signals: IntrinsicSignals;
 }
 
@@ -70,19 +74,15 @@ export function collectIntrinsicElements(sf: ts.SourceFile): IntrinsicElement[] 
       const tagName = opening.tagName;
       // Only a bare identifier whose first char is lowercase is an intrinsic host.
       if (ts.isIdentifier(tagName) && !CAP_NAME.test(tagName.text)) {
-        const line = sf.getLineAndCharacterOfPosition(opening.getStart(sf)).line + 1;
         out.push({
           tag: tagName.text.toLowerCase(),
-          line,
           signals: {
             altState: attrState(opening, sf, "alt"),
-            hrefState: attrState(opening, sf, "href"),
             // Visible static name lives in CHILDREN, so only a non-self-closing
             // element can carry it; a self-closing intrinsic has none.
             hasVisibleText: ts.isJsxElement(node)
               ? rendersStaticNameInChildren(node)
               : false,
-            nameAttrState: anyNameAttr(opening, sf, LABEL_ATTRS) ? "present" : "missing",
           },
         });
       }

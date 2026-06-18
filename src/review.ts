@@ -129,15 +129,16 @@ function fileFacts(
 async function buildStaticFacts(files: readonly string[]): Promise<StaticFacts> {
   const result = await scan(files);
 
-  // Parse each `.tsx` ONCE per round trip, then share the SourceFile across the
-  // enforce-abstentions walk (G4) and the suppressor / jsxLines walk (G3/G2). A
-  // file that can't be read is absent from the cache; both walks skip it the same
-  // way (enforce on a cache miss falls back to its own read+parse and gets
-  // `undefined` text → continue; `fileFacts` here is only called on cache hits).
+  // Reuse the parse `scan()` already did (`resolved.sourceFiles`) — one parse per
+  // file per round trip, shared across the enforce-abstentions walk (G4), the
+  // suppressor / jsxLines walk (G3/G2), AND the R4 intrinsics walk. A file absent
+  // from the cache (resolver-skipped / ignored) falls back to a local parse so
+  // coverage is identical to the pre-consolidation parse-per-file loop; both
+  // walks below skip a file only when even that fallback can't read it.
   const tsx = [...files].filter((p) => p.endsWith(".tsx"));
   const sourceFiles = new Map<string, ts.SourceFile>();
   for (const file of tsx) {
-    const sf = parseTsx(file);
+    const sf = result.resolved.sourceFiles.get(file) ?? parseTsx(file);
     if (sf !== null) sourceFiles.set(file, sf);
   }
 
@@ -298,11 +299,14 @@ const INSTRUCTION = [
 async function retrieve(files: readonly string[]): Promise<ReviewRetrieveResult> {
   const result = await scan(files);
   const tsx = [...files].filter((p) => p.endsWith(".tsx"));
-  // R4 — reuse the parse `scan()` already did (`resolved.sourceFiles`); no second
-  // read/parse. Each file's intrinsic (lowercase-tag) elements + their coarse
-  // content signal feed the explicit tag→pattern table.
+  // Reuse the parse `scan()` already did (`resolved.sourceFiles`) for EVERY walk
+  // below — no second read/parse anywhere in this round trip.
+  const sourceFiles = result.resolved.sourceFiles;
+
+  // R4 — each file's intrinsic (lowercase-tag) elements + their coarse content
+  // signal feed the explicit tag→pattern table.
   const intrinsics: IntrinsicElement[] = [];
-  for (const sf of result.resolved.sourceFiles.values()) {
+  for (const sf of sourceFiles.values()) {
     intrinsics.push(...collectIntrinsicElements(sf));
   }
   const slice = retrieveSlice({
@@ -313,10 +317,13 @@ async function retrieve(files: readonly string[]): Promise<ReviewRetrieveResult>
   });
 
   // Per-file suppressor facts, serialized for the wire (Map/Set -> plain object).
+  // Reuse the shared parse when `scan()` kept one for this file; fall back to a
+  // local parse only for a file absent from the cache (a resolver-skipped file),
+  // so coverage is identical to the pre-consolidation read+parse-per-file loop.
   const resolvedHosts = buildResolvedHosts(result.resolved.resolutions);
   const suppressorMap: Record<string, Record<number, readonly string[]>> = {};
   for (const file of tsx) {
-    const sf = parseTsx(file);
+    const sf = sourceFiles.get(file) ?? parseTsx(file);
     if (sf === null) continue;
     const facts = fileFacts(sf, resolvedHosts);
     const perLine: Record<number, readonly string[]> = {};
