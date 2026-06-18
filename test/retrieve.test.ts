@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { corpusJourneyTags, corpusPatterns } from "../src/corpus";
+import { corpusCriteria, corpusJourneyTags, corpusPatterns } from "../src/corpus";
+import type { CorpusTier } from "../src/corpus";
 import type { Finding } from "../src/core";
 import type { ComponentResolution } from "../src/resolve-components";
 import type { IntrinsicElement, IntrinsicSignals } from "../src/intrinsic-elements";
-import { retrieveSlice, SLICE_CAP } from "../src/retrieve";
+import { FLAGGABLE_TIERS, retrieveSlice, SLICE_CAP } from "../src/retrieve";
 
 /** A resolved (traced) wrapper → host, the R1 input shape. */
 function resolved(name: string, host: string): ComponentResolution {
@@ -316,5 +317,45 @@ describe("retrieveSlice: R4 intrinsic-tag grounding", () => {
     expect(ids(slice)).not.toContain("1.1.1-filename-or-generic-alt");
     expect(ids(slice)).not.toContain("2.4.4-generic-link-text");
     expect(ids(slice)).not.toContain("2.4.4-noisy-or-wrong-name");
+  });
+});
+
+describe("eligibleToFlag — frozen per-pattern tier vs. live SC tier (drift guard)", () => {
+  // FIX B (ii): `eligibleToFlag` rides the FROZEN per-pattern `frequencyTier`
+  // (`corpusPatterns()[].tier`), but `corpus.ts` also derives a LIVE per-SC tier
+  // via `tierForOrgs(orgs)` (the BUG-2 fix), surfaced through `corpusCriteria()`.
+  // Per-pattern is the granularity detection needs; the live SC tier is coarser.
+  // We do NOT switch eligibility to the SC tier (that would change which patterns
+  // flag — a precision risk). Instead we GUARD against silent staleness: once the
+  // flywheel regenerates and demotes an SC, the frozen tier could keep flagging a
+  // pattern the live corpus now says is rare. This catches that drift.
+  const FLAGGABLE: ReadonlySet<CorpusTier> = FLAGGABLE_TIERS;
+  const liveBySc = new Map(corpusCriteria().map((c) => [c.sc, c.tier]));
+
+  it("every flaggable-tier pattern's SC also has a flaggable LIVE tier", () => {
+    const drift: string[] = [];
+    for (const p of corpusPatterns()) {
+      if (!FLAGGABLE.has(p.tier)) continue; // context-only patterns never flag — irrelevant
+      const live = liveBySc.get(p.sc);
+      if (live === undefined) {
+        drift.push(`${p.id}: sc=${p.sc} has no live SC tier`);
+      } else if (!FLAGGABLE.has(live)) {
+        drift.push(`${p.id}: frozen=${p.tier} but sc=${p.sc} live=${live} (no longer flaggable)`);
+      }
+    }
+    // A non-empty list means the frozen per-pattern tier has drifted above the
+    // regenerated SC's live tier — re-distill or demote the frozen tier before the
+    // checker keeps flagging a pattern the live corpus says is rare.
+    expect(drift).toEqual([]);
+  });
+
+  it("the certified SCs (2.4.4, 1.1.1) are flaggable under the LIVE tier", () => {
+    // The two certified SCs must stay flaggable under the live tier too, so path
+    // (i) would have been cert-safe — but path (ii) is the conservative choice.
+    for (const sc of ["2.4.4", "1.1.1"]) {
+      const live = liveBySc.get(sc);
+      expect(live, `sc ${sc} has no live tier`).toBeDefined();
+      expect(FLAGGABLE.has(live ?? "unknown"), `sc ${sc} live tier ${live}`).toBe(true);
+    }
   });
 });

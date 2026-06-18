@@ -167,6 +167,54 @@ describe("reviewA11y verify — quarantine: recall never gates the build", () =>
   });
 });
 
+describe("reviewA11y verify — G1 vocabulary is PER-FILE (no cross-file authorization)", () => {
+  // review-img.tsx grounds `1.1.1-filename-or-generic-alt` (a present-alt <img>,
+  // R4). review.tsx has no <img>, so that pattern is in IMG's slice but NOT in
+  // review.tsx's. A candidate cites it on a real JSX line in review.tsx — under a
+  // GLOBAL slice the sibling file would cross-authorize it (the leak); under
+  // per-file G1 it is dropped, while the legitimate same-file 2.4.4 survives.
+  const IMG = resolve(fileURLToPath(new URL("./fixtures/enforce/review-img.tsx", import.meta.url)));
+
+  it("drops a candidate citing review.tsx for a pattern grounded ONLY by the sibling img file", async () => {
+    const crossFile = candidate({
+      patternId: "1.1.1-filename-or-generic-alt", // grounded by IMG, never by review.tsx
+      wcag: ["1.1.1"],
+    });
+    const sameFile = candidate(); // legitimate: 2.4.4-generic-link-text on review.tsx line 50
+
+    const r = await reviewA11y({
+      verify: true,
+      files: [FIXTURE, IMG],
+      candidates: [crossFile, sameFile],
+    });
+    if (r.mode !== "verify") throw new Error("expected verify mode");
+
+    // The cross-file candidate dies at G1 (its file's slice lacks the pattern);
+    // the legitimate same-file candidate survives.
+    expect(r.dropped.G1).toBe(1);
+    expect(r.recall).toHaveLength(1);
+    expect(r.recall[0]!.patternId).toBe("2.4.4-generic-link-text");
+    expect(r.recall[0]!.file).toBe(FIXTURE);
+  });
+
+  it("ADMITS the same image candidate when it is cited on the img file that grounds it", async () => {
+    // Same patternId, now anchored to the <img> on review-img.tsx line 7 where it
+    // IS grounded — per-file scoping must let the legitimate in-file flag through.
+    const onImgFile = candidate({
+      file: IMG,
+      line: 7,
+      patternId: "1.1.1-filename-or-generic-alt",
+      codeQuote: "alt=",
+      wcag: ["1.1.1"],
+    });
+    const r = await reviewA11y({ verify: true, files: [FIXTURE, IMG], candidates: [onImgFile] });
+    if (r.mode !== "verify") throw new Error("expected verify mode");
+    expect(r.recall).toHaveLength(1);
+    expect(r.recall[0]!.file).toBe(IMG);
+    expect(r.recall[0]!.patternId).toBe("1.1.1-filename-or-generic-alt");
+  });
+});
+
 describe("reviewA11y retrieve — the grounding contract", () => {
   it("returns the slice, the static findings, the suppressor facts, and an instruction", async () => {
     const r = await reviewA11y({ files: [FIXTURE] });

@@ -75,8 +75,21 @@ export interface RetrieveInput {
   readonly intrinsics?: readonly IntrinsicElement[];
 }
 
-/** Only these tiers may flag; `occasional` (and `unknown`) are context-only. */
-const FLAGGABLE_TIERS: ReadonlySet<CorpusPattern["tier"]> = new Set(["very-common", "common"]);
+/**
+ * Only these tiers may flag; `occasional` (and `unknown`) are context-only.
+ *
+ * Eligibility rides the FROZEN per-pattern `frequencyTier` (per-pattern is the
+ * granularity detection needs — the live SC tier is coarser, per-SC). Exported so
+ * the drift guard (`test/retrieve.test.ts`) can assert every pattern this set
+ * admits via its frozen tier is ALSO flaggable under its SC's LIVE tier
+ * (`corpusCriteria()`), catching the latent staleness the RFC flagged: a
+ * regenerated corpus that demotes an SC while the frozen per-pattern tier keeps
+ * `eligibleToFlag` true.
+ */
+export const FLAGGABLE_TIERS: ReadonlySet<CorpusPattern["tier"]> = new Set([
+  "very-common",
+  "common",
+]);
 
 /**
  * The recall patterns whose PRECISION is certified — a STRICT SUBSET of
