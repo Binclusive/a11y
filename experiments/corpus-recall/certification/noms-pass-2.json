@@ -1,0 +1,77 @@
+{
+  "item-01": [
+    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "see more", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"see more\" is generic and does not convey its destination out of context.", "justification": "Visible link name is the enumerated generic phrase \"see more\"; no wrapper or aria-label supplies a descriptive name." }
+  ],
+  "item-02": [
+    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "learn more", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"learn more\" is generic and uninformative out of context.", "justification": "Visible link name is the enumerated generic phrase \"learn more\"; not suppressed, not already caught." }
+  ],
+  "item-05": [
+    { "line": 11, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "https://example.com/docs/getting-started", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw URL rather than human-readable text.", "justification": "The link's visible text content is a raw URL read out character-by-character by screen readers; noisy name failure." }
+  ],
+  "item-06": [
+    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "/files/report.pdf?v=2&token=abc123", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a file path with query string rather than descriptive text.", "justification": "Visible link text is a raw file path plus query/token string; noisy name failure." }
+  ],
+  "item-07": [
+    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "read more", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"read more\" is generic and does not convey its destination.", "justification": "Enumerated generic phrase \"read more\"; no name-supplying wrapper." }
+  ],
+  "item-09": [
+    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "here", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"here\" is generic and uninformative out of context.", "justification": "Enumerated generic phrase \"here\"; not suppressed or already caught." }
+  ],
+  "item-10": [
+    { "line": 9, "patternId": "2.4.4-generic-link-text", "codeQuote": "view more", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"view more\" is generic and does not describe its destination.", "justification": "Enumerated generic phrase \"view more\"." }
+  ],
+  "item-12": [
+    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "Home / Catalog / Shoes / Item", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a breadcrumb trail rather than a single descriptive destination.", "justification": "Visible link text is a breadcrumb path; noisy-name failure shape." }
+  ],
+  "item-13": [
+    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "Home / Products / Item", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a breadcrumb trail rather than a descriptive destination.", "justification": "Visible link text is a breadcrumb path; noisy-name failure shape." }
+  ],
+  "item-16": [
+    { "line": 9, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "undefined", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is the literal string \"undefined\".", "justification": "Visible link text is the placeholder/debug string \"undefined\", an explicitly enumerated noisy-name case." }
+  ],
+  "item-17": [
+    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "report_final_v2.pdf", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw filename rather than descriptive text.", "justification": "Visible link text is a bare filename; noisy-name failure." }
+  ],
+  "item-18": [
+    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "q3-report-final-v2-FINAL.pdf", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw filename rather than descriptive text.", "justification": "Visible link text is a bare filename; noisy-name failure." }
+  ],
+  "item-19": [
+    { "line": 9, "patternId": "2.4.4-generic-link-text", "codeQuote": "Learn more", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"Learn more\" is generic and uninformative out of context.", "justification": "Enumerated generic phrase \"learn more\" (capitalized); not suppressed." }
+  ],
+  "item-20": [
+    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "/assets/files/export.csv?token=abc123&format=raw", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a file path with query string rather than descriptive text.", "justification": "Visible link text is a raw path plus query/token string; noisy-name failure." }
+  ],
+  "item-23": [
+    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "https://www.example.com/articles/2024/07/index.html", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw URL rather than human-readable text.", "justification": "Visible link text is a raw URL; noisy-name failure." }
+  ],
+  "item-24": [
+    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "https://cdn.example.com/a/b/c?id=42&ref=home", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw URL with query string rather than descriptive text.", "justification": "Visible link text is a raw URL plus query string; noisy-name failure." }
+  ],
+  "item-26": [
+    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "/very/long/path/segment", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw path rather than descriptive text.", "justification": "Visible link text is a raw path; noisy-name failure." }
+  ],
+  "item-27": [
+    { "line": 9, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "SKU-9F3A-XL-BLK-2024", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a product SKU rather than descriptive text.", "justification": "Visible link text is a raw SKU code, an enumerated noisy-name case." }
+  ],
+  "item-31": [
+    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "more info", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"more info\" is generic and does not convey its destination.", "justification": "Enumerated generic phrase \"more info\"." }
+  ],
+  "item-34": [
+    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "click here", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"click here\" is generic and uninformative out of context.", "justification": "Enumerated generic phrase \"click here\"." }
+  ],
+  "item-35": [
+    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "read more", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"read more\" is generic and does not describe its destination.", "justification": "Enumerated generic phrase \"read more\"." }
+  ],
+  "item-36": [
+    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "find out more", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"find out more\" is generic and uninformative out of context.", "justification": "Enumerated generic phrase \"find out more\"." }
+  ],
+  "item-38": [
+    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "details", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"details\" is generic and does not convey its destination.", "justification": "Enumerated generic phrase \"details\"." }
+  ],
+  "item-40": [
+    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "continue", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"continue\" is generic and uninformative out of context.", "justification": "Enumerated generic phrase \"continue\"." }
+  ],
+  "item-42": [
+    { "line": 9, "patternId": "2.4.4-generic-link-text", "codeQuote": "click here", "wcag": ["2.4.4"], "confidence": "high", "message": "Link text \"click here\" is generic and does not describe its destination.", "justification": "Enumerated generic phrase \"click here\"." }
+  ]
+}
