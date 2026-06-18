@@ -75,6 +75,18 @@ describe("runHook — recall self-check (Phase 1.5)", () => {
     expect(ctx.toLowerCase()).not.toContain("space");
   });
 
+  it("caps the 'already-named — don't flag' line list (runs on every edit)", async () => {
+    // 10 labelled inputs => 10 suppressed lines; the list must cap at 8 + overflow,
+    // never dump every line number into the model's context on each edit.
+    const out = await runHook(payload(join(FIXTURES, "many-suppressed.tsx")));
+    const ctx = out?.hookSpecificOutput.additionalContext ?? "";
+    expect(ctx).toContain("already-named");
+    expect(ctx).toMatch(/\+\d+ more\)/); // overflow indicator present
+    // The listed line numbers (before " +N more") number at most 8.
+    const listed = ctx.match(/don't flag: ([0-9, ]+)/)?.[1] ?? "";
+    expect(listed.split(",").length).toBeLessThanOrEqual(8);
+  });
+
   it("combines the precise floor whisper AND the advisory self-check when both apply", async () => {
     const out = await runHook(payload(VIOLATION));
     const ctx = out?.hookSpecificOutput.additionalContext ?? "";

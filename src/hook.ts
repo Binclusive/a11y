@@ -111,6 +111,13 @@ export function formatWhisper(
 const MAX_RECALL = 3;
 
 /**
+ * Cap the "already-named, don't flag" line list. This hook runs on every edit, so
+ * a file with many suppressed controls (a form of labelled inputs) must not dump
+ * hundreds of line numbers into the model's context — bound it like the rest.
+ */
+const MAX_SUPPRESSED = 8;
+
+/**
  * The ADVISORY recall whisper (Phase 1.5). Where {@link formatWhisper} reports the
  * PRECISE static floor ("fix these"), this surfaces the corpus RECALL grounding —
  * the floor-MISSED failure shapes (a `<Link>` whose text is present but generic /
@@ -147,9 +154,12 @@ function formatRecall(
     "can't verify these). Components here show these floor-missed failures in real " +
     "audits; confirm they don't apply, fix if they do:";
   const lines = shown.map((p) => `  · ${p.component}: ${p.failureShape}`);
+  const suppShown = suppressedLines.slice(0, MAX_SUPPRESSED);
+  const suppMore =
+    suppressedLines.length > MAX_SUPPRESSED ? ` +${suppressedLines.length - MAX_SUPPRESSED} more` : "";
   const supp =
-    suppressedLines.length > 0
-      ? [`  (already-named lines — don't flag: ${suppressedLines.join(", ")})`]
+    suppShown.length > 0
+      ? [`  (already-named lines — don't flag: ${suppShown.join(", ")}${suppMore})`]
       : [];
   return [header, ...lines, ...supp].join("\n");
 }
