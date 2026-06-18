@@ -171,7 +171,7 @@ export interface ResolvedComponents {
 }
 
 /** A capitalized JSX name used in a file, with its local-import context. */
-interface UsedComponent {
+export interface UsedComponent {
   readonly local: string;
   readonly module: string;
   readonly imported: string;
@@ -182,8 +182,12 @@ interface UsedComponent {
  * Find every capitalized JSX element used in a file that maps to an import,
  * deduped by local name. Locally-defined components (not imported) are skipped
  * here — they are resolved separately because their "import" is the file itself.
+ *
+ * Exported so a per-file consumer (the recall gate's per-file slice scoping) can
+ * learn which resolutions a single file actually USES — the globally-deduped
+ * {@link ComponentResolution} array carries no file home of its own.
  */
-function collectUsedComponents(sf: ts.SourceFile): UsedComponent[] {
+export function collectUsedComponents(sf: ts.SourceFile): UsedComponent[] {
   const imports = collectLocalImports(sf);
   const seen = new Set<string>();
   const out: UsedComponent[] = [];
@@ -232,7 +236,7 @@ function readSourceFile(filePath: string): ts.SourceFile | null {
  * (`NS.Member`) that's the trailing member name; for a plain wrapper it's the
  * name itself. Split-derived so it never needs a non-null assertion.
  */
-function jsxKeyFor(localName: string): string {
+export function jsxKeyFor(localName: string): string {
   const parts = localName.split(".");
   return parts[parts.length - 1] ?? localName;
 }

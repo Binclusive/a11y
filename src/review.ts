@@ -54,9 +54,22 @@ import {
   buildResolvedHosts,
   enforceContentWithAbstentions,
 } from "./enforce";
-import type { ComponentResolution } from "./resolve-components";
+import { type ComponentResolution, collectUsedComponents } from "./resolve-components";
 import { type RetrievedPattern, retrieveSlice } from "./retrieve";
 import { type SuppressorMap, buildSuppressorMap } from "./suppressor-map";
+
+/**
+ * The grounding-slice inputs for ONE file: that file's own resolutions (the
+ * wrappers it imports + uses), its own static findings, and its own intrinsic
+ * elements. {@link gate} builds a PER-FILE slice from this so the closed
+ * vocabulary (G1) is scoped to the file a candidate is cited on — a pattern
+ * grounded only by a SIBLING file can never authorize a candidate here.
+ */
+interface FileSliceInputs {
+  readonly resolutions: readonly ComponentResolution[];
+  readonly findings: readonly Finding[];
+  readonly intrinsics: readonly IntrinsicElement[];
+}
 
 /**
  * A per-line, per-file static fact bundle the gate stack reads. Recomputed
@@ -81,6 +94,16 @@ interface StaticFacts {
    * for the grounding slice. Collected off the SHARED parses (no second parse).
    */
   readonly intrinsics: readonly IntrinsicElement[];
+  /**
+   * The PER-FILE grounding-slice inputs (`file -> {resolutions, findings,
+   * intrinsics}`), keyed by RESOLVED path. {@link gate} builds each candidate's
+   * vocabulary from the slice of ITS OWN file, so a multi-file `review_a11y`
+   * call can never cross-authorize (a pattern grounded by file B's element does
+   * not license a candidate cited in file A). A single-file call has one entry
+   * whose inputs equal the global inputs, so the slice — and behavior — is
+   * byte-identical to the global path.
+   */
+  readonly perFile: ReadonlyMap<string, FileSliceInputs>;
 }
 
 /**
@@ -149,17 +172,62 @@ async function buildStaticFacts(files: readonly string[]): Promise<StaticFacts> 
   // input-host `type` exemption), not just call-site syntax.
   const resolvedHosts = buildResolvedHosts(result.resolved.resolutions);
 
+  // PER-FILE slice scoping (G1 vocabulary leak fix): resolutions are GLOBALLY
+  // deduped by `name@module`, so a resolution carries no file home. Attribute each
+  // to the files that actually USE it by re-walking each file's already-cached
+  // parse (`collectUsedComponents`, pure) and matching on the FULL `name@module`
+  // identity — NOT a collapsed jsx-a11y key, which merges `Foo.Member`/`Bar.Member`
+  // and drops the module, so a same-named wrapper imported from a different module
+  // in another file would be cross-attributed. `ComponentResolution.name ===
+  // UsedComponent.local` (both the raw JSX name) and both carry `.module`, so the
+  // key matches a file's own usage exactly and never a sibling's.
+  const resolutionsByKey = new Map<string, ComponentResolution[]>();
+  for (const r of result.resolved.resolutions) {
+    const key = `${r.name}@${r.module}`;
+    const bucket = resolutionsByKey.get(key);
+    if (bucket === undefined) resolutionsByKey.set(key, [r]);
+    else bucket.push(r);
+  }
+  // Findings carry their own `file`; group by resolved path to match the
+  // sourceFiles keys (input.files is resolved before scan; floor findings are
+  // absolute-keyed too).
+  const findingsByFile = new Map<string, Finding[]>();
+  for (const f of result.findings) {
+    const fileKey = resolve(f.file);
+    const bucket = findingsByFile.get(fileKey);
+    if (bucket === undefined) findingsByFile.set(fileKey, [f]);
+    else bucket.push(f);
+  }
+
   const suppressors = new Map<string, SuppressorMap>();
   const jsxLines = new Map<string, ReadonlySet<number>>();
   const sourceLines = new Map<string, readonly string[]>();
   // R4 — collect intrinsic elements off the SAME shared parse the gate facts use.
   const intrinsics: IntrinsicElement[] = [];
+  const perFile = new Map<string, FileSliceInputs>();
   for (const [file, sf] of sourceFiles) {
     const facts = fileFacts(sf, resolvedHosts);
     suppressors.set(file, facts.suppressors);
     jsxLines.set(file, facts.jsxLines);
     sourceLines.set(file, facts.sourceLines);
-    intrinsics.push(...collectIntrinsicElements(sf));
+    const fileIntrinsics = collectIntrinsicElements(sf);
+    intrinsics.push(...fileIntrinsics);
+
+    // This file's own grounding-slice inputs. Resolutions: the deduped resolution
+    // for each wrapper this file uses (a file may use the same wrapper as another;
+    // the resolution is shared — correct, the host is the same). Findings: this
+    // file's own. Intrinsics: this file's own.
+    const usedKeys = new Set(collectUsedComponents(sf).map((u) => `${u.local}@${u.module}`));
+    const fileResolutions: ComponentResolution[] = [];
+    for (const key of usedKeys) {
+      const matched = resolutionsByKey.get(key);
+      if (matched !== undefined) fileResolutions.push(...matched);
+    }
+    perFile.set(resolve(file), {
+      resolutions: fileResolutions,
+      findings: findingsByFile.get(resolve(file)) ?? [],
+      intrinsics: fileIntrinsics,
+    });
   }
 
   return {
@@ -170,6 +238,7 @@ async function buildStaticFacts(files: readonly string[]): Promise<StaticFacts> 
     jsxLines,
     sourceLines,
     intrinsics,
+    perFile,
   };
 }
 
@@ -335,8 +404,11 @@ async function retrieve(files: readonly string[]): Promise<ReviewRetrieveResult>
  * the agent's self-verify, ran before these candidates arrived; G8 below is the
  * survivor-shaping, not a veto.)
  *
- *   - G0 ANCHOR — an empty slice means no grounding; nothing may flag.
- *   - G1 CLOSED-VOCABULARY — drop unless the patternId is in the slice.
+ *   - G0 ANCHOR — an empty slice for the candidate's OWN FILE means no grounding
+ *     for that file; nothing on it may flag.
+ *   - G1 CLOSED-VOCABULARY — drop unless the patternId is in the candidate's
+ *     OWN FILE's slice (per-file vocabulary — a sibling file's grounding can
+ *     never cross-authorize).
  *   - G2 MECHANICAL — drop unless `codeQuote` is a verbatim substring AT the
  *     cited line AND the line is a real JSX element.
  *   - G3 SUPPRESSOR VETO — drop if the floor's suppressor map marks that line
@@ -351,17 +423,32 @@ async function retrieve(files: readonly string[]): Promise<ReviewRetrieveResult>
  */
 function gate(
   candidates: readonly ReviewCandidate[],
-  slice: readonly RetrievedPattern[],
   facts: StaticFacts,
 ): { readonly survivors: Finding[]; readonly dropped: Record<GateId, number> } {
   const dropped: Record<GateId, number> = { G0: 0, G1: 0, G2: 0, G3: 0, G4: 0, G5: 0, G6: 0 };
-  const byId = new Map(slice.map((p) => [p.id, p]));
 
-  // G0 ANCHOR — empty slice ⇒ no grounding ⇒ every candidate dies here.
-  if (slice.length === 0) {
-    dropped.G0 = candidates.length;
-    return { survivors: [], dropped };
-  }
+  // PER-FILE slice (G1 vocabulary leak fix): a candidate's closed vocabulary is
+  // the slice of ITS OWN file, never a global union. Built lazily and memoized
+  // per resolved path — `retrieveSlice` is pure, so the same file yields the same
+  // slice; the cache just avoids recomputing it for every candidate on that file.
+  const sliceByFile = new Map<string, Map<string, RetrievedPattern>>();
+  const sliceFor = (fileKey: string): Map<string, RetrievedPattern> => {
+    const cached = sliceByFile.get(fileKey);
+    if (cached !== undefined) return cached;
+    const inputs = facts.perFile.get(fileKey);
+    const patterns =
+      inputs === undefined
+        ? []
+        : retrieveSlice({
+            files: [fileKey],
+            resolutions: inputs.resolutions,
+            findings: inputs.findings,
+            intrinsics: inputs.intrinsics,
+          }).patterns;
+    const byId = new Map(patterns.map((p) => [p.id, p]));
+    sliceByFile.set(fileKey, byId);
+    return byId;
+  };
 
   const survivors: Finding[] = [];
   for (const c of candidates) {
@@ -369,8 +456,16 @@ function gate(
     // is resolved before scan). Normalize the candidate's path the same way ONCE,
     // so a relative/non-normalized `c.file` still hits every veto map below.
     const fileKey = resolve(c.file);
+    const byId = sliceFor(fileKey);
 
-    // G1 — closed vocabulary: the patternId must be a slice pattern.
+    // G0 ANCHOR — this file's slice is empty ⇒ no grounding for this file ⇒ the
+    // candidate dies here (per-file: a sibling file's grounding does not rescue it).
+    if (byId.size === 0) {
+      dropped.G0++;
+      continue;
+    }
+
+    // G1 — closed vocabulary: the patternId must be in THIS FILE's slice.
     const pattern = byId.get(c.patternId);
     if (pattern === undefined) {
       dropped.G1++;
@@ -462,15 +557,7 @@ async function verify(
   candidates: readonly ReviewCandidate[],
 ): Promise<ReviewVerifyResult> {
   const facts = await buildStaticFacts(files);
-  const tsx = [...files].filter((p) => p.endsWith(".tsx"));
-  const slice = retrieveSlice({
-    files: tsx,
-    resolutions: facts.resolutions,
-    findings: facts.findings,
-    intrinsics: facts.intrinsics,
-  });
-
-  const { survivors, dropped } = gate(candidates, slice.patterns, facts);
+  const { survivors, dropped } = gate(candidates, facts);
   // Dedup against the static floor (and self) — the floor already caught some,
   // and the recall layer exists for what it MISSED.
   const recall = dedupeRecall(survivors, facts.findings);
