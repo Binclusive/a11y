@@ -71,6 +71,21 @@ export interface RetrieveInput {
 const FLAGGABLE_TIERS: ReadonlySet<CorpusPattern["tier"]> = new Set(["very-common", "common"]);
 
 /**
+ * The recall patterns whose PRECISION is certified — a STRICT SUBSET of
+ * `eligibleToFlag`. Tier-eligibility says "this pattern MAY flag"; certification
+ * (`test/recall-certification.test.ts`, pooled Wilson >= 0.95, zero decoy leaks)
+ * says "we have MEASURED its precision". The edit-time hook's advisory self-check
+ * surfaces only these, so it never nudges the model toward an unmeasured pattern
+ * (e.g. a keyboard pattern R1 pulls in via a shared `link` token). Kept in lockstep
+ * with the positive certification fixtures by an assertion in that test — adding a
+ * pattern here without certifying it (or vice-versa) fails the build.
+ */
+export const CERTIFIED_RECALL_PATTERN_IDS: ReadonlySet<string> = new Set([
+  "2.4.4-generic-link-text",
+  "2.4.4-noisy-or-wrong-name",
+]);
+
+/**
  * Token-overlap stopwords — connective/structural words in a pattern's prose
  * `component` label (`icon-only button`, `link to file / new context`) that carry
  * no element signal, so they must not produce a spurious overlap with a resolved

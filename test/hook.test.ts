@@ -6,6 +6,7 @@ import { runHook } from "../src/hook";
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "hook");
 const VIOLATION = join(FIXTURES, "violation.tsx");
 const CLEAN = join(FIXTURES, "clean.tsx");
+const LINK_GENERIC = join(FIXTURES, "link-generic.tsx");
 
 /** Build a PostToolUse payload pointing at `filePath` (absolute). */
 function payload(filePath: string, toolName = "Edit"): unknown {
@@ -45,6 +46,42 @@ describe("runHook — inject case", () => {
       expect(out, `${tool} should inject`).not.toBeNull();
       expect(out?.hookSpecificOutput.additionalContext).toContain("anchor-has-content");
     }
+  });
+});
+
+describe("runHook — recall self-check (Phase 1.5)", () => {
+  it("speaks up on a floor-CLEAN file with a generic-text Link (recall only)", async () => {
+    // <Link>click here</Link> has text, so the floor stays silent — but the corpus
+    // recall layer grounds the generic-link-text shape. The advisory fires alone.
+    const out = await runHook(payload(LINK_GENERIC));
+    expect(out).not.toBeNull();
+    const ctx = out?.hookSpecificOutput.additionalContext ?? "";
+    expect(ctx).toContain("Self-check");
+    expect(ctx).toContain("advisory");
+    expect(ctx.toLowerCase()).toContain("non-descriptive link");
+    // No floor whisper — the file is floor-clean.
+    expect(ctx).not.toContain("fix them now");
+    // Path relativized, no absolute leak.
+    expect(ctx).toContain("link-generic.tsx");
+    expect(ctx).not.toContain(FIXTURES);
+  });
+
+  it("surfaces ONLY certified patterns — no R1 cross-token noise (e.g. keyboard)", async () => {
+    // The keyboard pattern (2.1.1) shares a `link` token with the Link resolution,
+    // so R1 pulls it — but it isn't certified, so the advisory must NOT show it.
+    const out = await runHook(payload(LINK_GENERIC));
+    const ctx = out?.hookSpecificOutput.additionalContext ?? "";
+    expect(ctx.toLowerCase()).not.toContain("keyboard");
+    expect(ctx.toLowerCase()).not.toContain("space");
+  });
+
+  it("combines the precise floor whisper AND the advisory self-check when both apply", async () => {
+    const out = await runHook(payload(VIOLATION));
+    const ctx = out?.hookSpecificOutput.additionalContext ?? "";
+    expect(ctx).toContain("fix them now"); // floor voice
+    expect(ctx).toContain("Self-check"); // recall voice
+    // The two blocks are separated, floor first.
+    expect(ctx.indexOf("fix them now")).toBeLessThan(ctx.indexOf("Self-check"));
   });
 });
 

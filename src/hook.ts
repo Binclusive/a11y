@@ -24,10 +24,15 @@
  *     edit. Any problem → emit nothing, exit 0. The edit is advisory-only.
  */
 
+import { readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
+import ts from "typescript";
 import { z } from "zod";
-import { scan } from "./core";
+import { scan, type ScanResult } from "./core";
 import { corpusFix, corpusTier, type CorpusTier, type EnrichedFinding, enrichAll } from "./corpus";
+import { buildResolvedHosts } from "./enforce";
+import { CERTIFIED_RECALL_PATTERN_IDS, type RetrievedPattern, retrieveSlice } from "./retrieve";
+import { buildSuppressorMap } from "./suppressor-map";
 
 /**
  * The slice of the PostToolUse payload we use. The full event carries more
@@ -102,6 +107,88 @@ export function formatWhisper(
   return [header, ...lines, ...more].join("\n");
 }
 
+/** Cap the recall self-check: a few of the highest-tier floor-missed shapes. */
+const MAX_RECALL = 3;
+
+/**
+ * The ADVISORY recall whisper (Phase 1.5). Where {@link formatWhisper} reports the
+ * PRECISE static floor ("fix these"), this surfaces the corpus RECALL grounding —
+ * the floor-MISSED failure shapes (a `<Link>` whose text is present but generic /
+ * noisy) that only a reading of the code can catch. It is deliberately framed as a
+ * SELF-CHECK, not a finding: the deterministic hook cannot run the model's
+ * propose→verify loop, so it hands the in-loop model the same grounding the
+ * certified `review_a11y` retrieve step produces and asks it to self-review.
+ *
+ * Precision discipline rides along: only `eligibleToFlag` patterns are shown (the
+ * G6 tier floor), and the floor's per-line suppressors are listed as "already
+ * named — don't flag" (the G3 facts), so the model self-suppresses the dominant FP
+ * class. Shipped only because that precision is certified + enforced by
+ * `test/recall-certification.test.ts` (pooled Wilson >= 0.95, zero decoy leaks).
+ */
+function formatRecall(
+  filePath: string,
+  patterns: readonly RetrievedPattern[],
+  suppressedLines: readonly number[],
+  root: string,
+): string | null {
+  // Dedup by failure shape (several link patterns share a shape) and cap.
+  const seen = new Set<string>();
+  const shown: RetrievedPattern[] = [];
+  for (const p of patterns) {
+    if (seen.has(p.failureShape)) continue;
+    seen.add(p.failureShape);
+    shown.push(p);
+    if (shown.length >= MAX_RECALL) break;
+  }
+  if (shown.length === 0) return null;
+
+  const header =
+    `Self-check ${relative(root, filePath)} (corpus, advisory — the static check ` +
+    "can't verify these). Components here show these floor-missed failures in real " +
+    "audits; confirm they don't apply, fix if they do:";
+  const lines = shown.map((p) => `  · ${p.component}: ${p.failureShape}`);
+  const supp =
+    suppressedLines.length > 0
+      ? [`  (already-named lines — don't flag: ${suppressedLines.join(", ")})`]
+      : [];
+  return [header, ...lines, ...supp].join("\n");
+}
+
+/**
+ * Build the recall self-check for a file from an EXISTING scan result — no second
+ * scan: it reuses `scan().resolved.resolutions` + `scan().findings` for the
+ * retrieve slice (R1/R2/R3), and parses the file once for the suppressor facts.
+ * Fail-safe: any error → null (the floor whisper still stands). Returns null when
+ * the file grounds no eligible pattern (the common case — nothing to self-check).
+ */
+function recallContext(filePath: string, result: ScanResult, root: string): string | null {
+  try {
+    const slice = retrieveSlice({
+      files: [filePath],
+      resolutions: result.resolved.resolutions,
+      findings: result.findings,
+    });
+    // Eligible AND certified: tier-eligibility alone admits patterns R1 pulls via a
+    // shared token (a keyboard pattern on a plain `<Link>`); the advisory must only
+    // surface what we've measured, so it never points the model at an unmeasured shape.
+    const eligible = slice.patterns.filter(
+      (p) => p.eligibleToFlag && CERTIFIED_RECALL_PATTERN_IDS.has(p.id),
+    );
+    if (eligible.length === 0) return null;
+
+    // The floor's per-line suppressors for this file — shown so the model
+    // self-suppresses the known-safe lines (the G3 fact, carried into the hook).
+    const text = readFileSync(filePath, "utf8");
+    const sf = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const resolvedHosts = buildResolvedHosts(result.resolved.resolutions);
+    const suppressedLines = [...buildSuppressorMap(sf, resolvedHosts).keys()].sort((a, b) => a - b);
+
+    return formatRecall(filePath, eligible, suppressedLines, root);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Run the checker on ONE edited file and return the `additionalContext`
  * envelope, or null to no-op. Pulls `file_path` from `tool_input`, resolves it
@@ -130,8 +217,13 @@ export async function runHook(raw: unknown): Promise<HookOutput | null> {
   // Relativize against the file's directory so the whisper shows a short path,
   // not the absolute one ESLint reports.
   const root = base;
-  const additionalContext = formatWhisper(filePath, findings, root);
-  if (additionalContext === null) return null;
+  // Two distinct voices: the PRECISE static floor ("fix these") and the ADVISORY
+  // corpus self-check ("the static check can't verify these — confirm/fix"). Either
+  // may be empty; emit nothing only when BOTH are.
+  const floor = formatWhisper(filePath, findings, root);
+  const recall = recallContext(filePath, result, root);
+  if (floor === null && recall === null) return null;
+  const additionalContext = [floor, recall].filter((b): b is string => b !== null).join("\n\n");
 
   return {
     hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext },
