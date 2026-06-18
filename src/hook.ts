@@ -24,15 +24,11 @@
  *     edit. Any problem → emit nothing, exit 0. The edit is advisory-only.
  */
 
-import { readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import ts from "typescript";
 import { z } from "zod";
 import { scan, type ScanResult } from "./core";
 import { corpusFix, corpusTier, type CorpusTier, type EnrichedFinding, enrichAll } from "./corpus";
-import { buildResolvedHosts } from "./enforce";
 import { CERTIFIED_RECALL_PATTERN_IDS, type RetrievedPattern, retrieveSlice } from "./retrieve";
-import { buildSuppressorMap } from "./suppressor-map";
 
 /**
  * The slice of the PostToolUse payload we use. The full event carries more
@@ -111,13 +107,6 @@ export function formatWhisper(
 const MAX_RECALL = 3;
 
 /**
- * Cap the "already-named, don't flag" line list. This hook runs on every edit, so
- * a file with many suppressed controls (a form of labelled inputs) must not dump
- * hundreds of line numbers into the model's context — bound it like the rest.
- */
-const MAX_SUPPRESSED = 8;
-
-/**
  * The ADVISORY recall whisper (Phase 1.5). Where {@link formatWhisper} reports the
  * PRECISE static floor ("fix these"), this surfaces the corpus RECALL grounding —
  * the floor-MISSED failure shapes (a `<Link>` whose text is present but generic /
@@ -126,16 +115,15 @@ const MAX_SUPPRESSED = 8;
  * propose→verify loop, so it hands the in-loop model the same grounding the
  * certified `review_a11y` retrieve step produces and asks it to self-review.
  *
- * Precision discipline rides along: only `eligibleToFlag` patterns are shown (the
- * G6 tier floor), and the floor's per-line suppressors are listed as "already
- * named — don't flag" (the G3 facts), so the model self-suppresses the dominant FP
- * class. Shipped only because that precision is certified + enforced by
- * `test/recall-certification.test.ts` (pooled Wilson >= 0.95, zero decoy leaks).
+ * OWNS its own empty-check: returns null when no shape survives dedup/cap, so the
+ * caller hands it the eligible patterns directly and returns the result — one
+ * empty-check, not two. Shipped only because the surfaced precision is certified +
+ * enforced by `test/recall-certification.test.ts` (pooled Wilson >= 0.95, zero
+ * decoy leaks).
  */
 function formatRecall(
   filePath: string,
   patterns: readonly RetrievedPattern[],
-  suppressedLines: readonly number[],
   root: string,
 ): string | null {
   // Dedup by failure shape (several link patterns share a shape) and cap.
@@ -154,46 +142,43 @@ function formatRecall(
     "can't verify these). Components here show these floor-missed failures in real " +
     "audits; confirm they don't apply, fix if they do:";
   const lines = shown.map((p) => `  · ${p.component}: ${p.failureShape}`);
-  const suppShown = suppressedLines.slice(0, MAX_SUPPRESSED);
-  const suppMore =
-    suppressedLines.length > MAX_SUPPRESSED ? ` +${suppressedLines.length - MAX_SUPPRESSED} more` : "";
-  const supp =
-    suppShown.length > 0
-      ? [`  (already-named lines — don't flag: ${suppShown.join(", ")}${suppMore})`]
-      : [];
-  return [header, ...lines, ...supp].join("\n");
+  return [header, ...lines].join("\n");
 }
 
 /**
- * Build the recall self-check for a file from an EXISTING scan result — no second
- * scan: it reuses `scan().resolved.resolutions` + `scan().findings` for the
- * retrieve slice (R1/R2/R3), and parses the file once for the suppressor facts.
+ * Build the recall self-check for a file from an EXISTING scan result. PURE over
+ * the scan: it reuses `scan().resolved.resolutions` + `scan().findings` for the
+ * retrieve slice (R1/R2/R3) and never re-reads or re-parses the file.
+ *
+ * No file-wide suppressed-line list: that list was file-wide (not anchored to the
+ * link patterns it accompanied), cost a SECOND parse on the every-edit hot path
+ * (a TOCTOU race against the editor's in-flight write), and the model already
+ * reads the actual file in its propose→verify loop. The SC-disjoint filter below
+ * plus that reading cover precision for this advisory surface.
+ *
  * Fail-safe: any error → null (the floor whisper still stands). Returns null when
  * the file grounds no eligible pattern (the common case — nothing to self-check).
  */
-function recallContext(filePath: string, result: ScanResult, root: string): string | null {
+function recallWhisper(filePath: string, result: ScanResult, root: string): string | null {
   try {
     const slice = retrieveSlice({
       files: [filePath],
       resolutions: result.resolved.resolutions,
       findings: result.findings,
     });
-    // Eligible AND certified: tier-eligibility alone admits patterns R1 pulls via a
-    // shared token (a keyboard pattern on a plain `<Link>`); the advisory must only
-    // surface what we've measured, so it never points the model at an unmeasured shape.
+    // SC-disjoint: drop any pattern whose SC the floor ALREADY carries, so the
+    // advisory only surfaces SCs the floor was SILENT on. The floor block and this
+    // block become disjoint by SC — no same-SC double-up.
+    const floorScs = new Set(result.findings.flatMap((f) => f.wcag));
+    // Eligible AND certified AND floor-silent: tier-eligibility alone admits
+    // patterns R1 pulls via a shared token (a keyboard pattern on a plain `<Link>`);
+    // the advisory must only surface what we've measured, so it never points the
+    // model at an unmeasured shape.
     const eligible = slice.patterns.filter(
-      (p) => p.eligibleToFlag && CERTIFIED_RECALL_PATTERN_IDS.has(p.id),
+      (p) => p.eligibleToFlag && CERTIFIED_RECALL_PATTERN_IDS.has(p.id) && !floorScs.has(p.sc),
     );
-    if (eligible.length === 0) return null;
 
-    // The floor's per-line suppressors for this file — shown so the model
-    // self-suppresses the known-safe lines (the G3 fact, carried into the hook).
-    const text = readFileSync(filePath, "utf8");
-    const sf = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    const resolvedHosts = buildResolvedHosts(result.resolved.resolutions);
-    const suppressedLines = [...buildSuppressorMap(sf, resolvedHosts).keys()].sort((a, b) => a - b);
-
-    return formatRecall(filePath, eligible, suppressedLines, root);
+    return formatRecall(filePath, eligible, root);
   } catch {
     return null;
   }
@@ -221,23 +206,29 @@ export async function runHook(raw: unknown): Promise<HookOutput | null> {
   // Only .tsx files are scannable — silently no-op on everything else.
   if (!filePath.endsWith(".tsx")) return null;
 
-  const result = await scan([filePath]);
-  const findings = enrichAll(result.findings);
+  // FAIL-SAFE (module contract): from the scan onward, any throw → null. This
+  // wraps the direct (test/non-CLI) callers too, not just `runHookCli`.
+  try {
+    const result = await scan([filePath]);
+    const findings = enrichAll(result.findings);
 
-  // Relativize against the file's directory so the whisper shows a short path,
-  // not the absolute one ESLint reports.
-  const root = base;
-  // Two distinct voices: the PRECISE static floor ("fix these") and the ADVISORY
-  // corpus self-check ("the static check can't verify these — confirm/fix"). Either
-  // may be empty; emit nothing only when BOTH are.
-  const floor = formatWhisper(filePath, findings, root);
-  const recall = recallContext(filePath, result, root);
-  if (floor === null && recall === null) return null;
-  const additionalContext = [floor, recall].filter((b): b is string => b !== null).join("\n\n");
+    // Relativize against the file's directory so the whisper shows a short path,
+    // not the absolute one ESLint reports.
+    const root = base;
+    // Two distinct voices: the PRECISE static floor ("fix these") and the ADVISORY
+    // corpus self-check ("the static check can't verify these — confirm/fix"). Either
+    // may be empty; emit nothing only when BOTH are.
+    const floor = formatWhisper(filePath, findings, root);
+    const recall = recallWhisper(filePath, result, root);
+    if (floor === null && recall === null) return null;
+    const additionalContext = [floor, recall].filter((b): b is string => b !== null).join("\n\n");
 
-  return {
-    hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext },
-  };
+    return {
+      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext },
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Read all of stdin to a string. Returns "" if stdin is empty/closed. */
