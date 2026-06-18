@@ -1,83 +1,58 @@
 {
-  "item-01": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "see more", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"see more\"", "justification": "Visible link text is the generic phrase \"see more\", which conveys no destination out of context. Not suppressed, not in staticFindings; jsx-a11y can't judge text quality so the floor misses it." }
-  ],
-  "item-02": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "learn more", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"learn more\"", "justification": "Visible text \"learn more\" is a canonical non-descriptive link phrase. Unsuppressed, not floor-caught (lint doesn't assess descriptiveness)." }
-  ],
-  "item-05": [
-    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "https://example.com/docs/getting-started", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw URL", "justification": "The visible name is a raw URL read out character-by-character by screen readers — a polluted/noisy name. Unsuppressed, not floor-caught." }
-  ],
-  "item-06": [
-    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "/files/report.pdf?v=2&token=abc123", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a file path with query string", "justification": "Visible name is a file path plus query string/token — noisy, non-descriptive name. Unsuppressed, not floor-caught." }
-  ],
-  "item-07": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "read more", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"read more\"", "justification": "\"read more\" is a canonical generic link phrase conveying no destination. Unsuppressed, not floor-caught." }
-  ],
-  "item-09": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "here", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"here\"", "justification": "\"here\" is a canonical non-descriptive link phrase. Unsuppressed, not floor-caught." }
-  ],
-  "item-10": [
-    { "line": 9, "patternId": "2.4.4-generic-link-text", "codeQuote": "view more", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"view more\"", "justification": "\"view more\" is a canonical generic link phrase. Unsuppressed, not floor-caught." }
-  ],
-  "item-11": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "click", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"click\"", "justification": "Visible text is the bare verb \"click\", which conveys no destination — non-descriptive. Unsuppressed, not floor-caught." }
-  ],
-  "item-12": [
-    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "Home / Catalog / Shoes / Item", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a breadcrumb trail", "justification": "Visible name is a full breadcrumb trail rather than a single descriptive destination — a polluted/noisy name. Unsuppressed, not floor-caught." }
-  ],
-  "item-13": [
-    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "Home / Products / Item", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a breadcrumb trail", "justification": "Visible name is a breadcrumb trail, a noisy multi-segment name not describing one destination. Unsuppressed, not floor-caught." }
-  ],
-  "item-16": [
-    { "line": 9, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "undefined", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is the literal \"undefined\"", "justification": "Visible text is the literal string \"undefined\" — a wrong/polluted name (template leak). Unsuppressed, not floor-caught." }
-  ],
-  "item-17": [
-    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "report_final_v2.pdf", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw filename", "justification": "Visible name is a raw versioned filename rather than a descriptive label — noisy name. Unsuppressed, not floor-caught." }
-  ],
-  "item-18": [
-    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "q3-report-final-v2-FINAL.pdf", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw filename", "justification": "Visible name is a raw filename with version noise — non-descriptive polluted name. Unsuppressed, not floor-caught." }
-  ],
-  "item-19": [
-    { "line": 9, "patternId": "2.4.4-generic-link-text", "codeQuote": "Learn more", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"Learn more\"", "justification": "\"Learn more\" is a canonical generic link phrase conveying no destination. Unsuppressed, not floor-caught." }
-  ],
-  "item-20": [
-    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "/assets/files/export.csv?token=abc123&format=raw", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a path with query string", "justification": "Visible name is a file path plus query string/token — noisy non-descriptive name. Unsuppressed, not floor-caught." }
-  ],
-  "item-23": [
-    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "https://www.example.com/articles/2024/07/index.html", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw URL", "justification": "Visible name is a full raw URL — polluted name read character-by-character. Unsuppressed, not floor-caught." }
-  ],
-  "item-24": [
-    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "https://cdn.example.com/a/b/c?id=42&ref=home", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw URL with query string", "justification": "Visible name is a raw CDN URL with query params — noisy non-descriptive name. Unsuppressed, not floor-caught." }
-  ],
-  "item-25": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "this link", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"this link\"", "justification": "\"this link\" conveys no destination and is meaningless out of context — non-descriptive. Unsuppressed, not floor-caught." }
-  ],
-  "item-26": [
-    { "line": 10, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "/very/long/path/segment", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw path", "justification": "Visible name is a raw URL path rather than a descriptive label — noisy name. Unsuppressed, not floor-caught." }
-  ],
-  "item-27": [
-    { "line": 9, "patternId": "2.4.4-noisy-or-wrong-name", "codeQuote": "SKU-9F3A-XL-BLK-2024", "wcag": ["2.4.4"], "confidence": "high", "message": "Link name is a raw SKU", "justification": "Visible name is a raw SKU code — a noisy, non-human-readable name. Unsuppressed, not floor-caught." }
-  ],
-  "item-31": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "more info", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"more info\"", "justification": "\"more info\" is a canonical generic link phrase. Unsuppressed, not floor-caught." }
-  ],
-  "item-34": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "click here", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"click here\"", "justification": "\"click here\" is the canonical generic link phrase. Unsuppressed, not floor-caught." }
-  ],
-  "item-35": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "read more", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"read more\"", "justification": "\"read more\" is a canonical generic link phrase. Unsuppressed, not floor-caught." }
-  ],
-  "item-36": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "find out more", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"find out more\"", "justification": "\"find out more\" is a canonical generic link phrase. Unsuppressed, not floor-caught." }
-  ],
-  "item-38": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "details", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"details\"", "justification": "\"details\" is a canonical generic link phrase conveying no destination. Unsuppressed, not floor-caught." }
-  ],
-  "item-40": [
-    { "line": 8, "patternId": "2.4.4-generic-link-text", "codeQuote": "continue", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"continue\"", "justification": "\"continue\" is a canonical generic link phrase. Unsuppressed, not floor-caught." }
-  ],
-  "item-42": [
-    { "line": 9, "patternId": "2.4.4-generic-link-text", "codeQuote": "click here", "wcag": ["2.4.4"], "confidence": "high", "message": "Generic link text \"click here\"", "justification": "\"click here\" is the canonical generic link phrase. Unsuppressed, not floor-caught." }
-  ]
+  "item-01": [],
+  "item-02": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"see more","wcag":["2.4.4"],"confidence":"high","message":"Link text 'see more' is generic.","justification":"Visible name 'see more' conveys no destination; not suppressed, not floor-caught."}],
+  "item-03": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"learn more","wcag":["2.4.4"],"confidence":"high","message":"Link text 'learn more' is generic.","justification":"'learn more' is a canonical generic name with no destination context; floor only catches missing names."}],
+  "item-04": [],
+  "item-05": [],
+  "item-06": [{"line":7,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"/files/q3-report.pdf","wcag":["2.4.4"],"confidence":"high","message":"Link text is a raw file path.","justification":"Visible name is the file path itself, meaningless when announced; name present so floor's no-name rule misses."}],
+  "item-07": [{"line":11,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"https://example.com/docs/getting-started","wcag":["2.4.4"],"confidence":"high","message":"Link text is a raw URL.","justification":"Visible name is a raw URL, unreadable to screen readers; name present so floor misses."}],
+  "item-08": [{"line":7,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"https://shop.example.com/p?id=4821&utm=email","wcag":["2.4.4"],"confidence":"high","message":"Link text is a raw URL with query string.","justification":"Visible name is a raw URL plus tracking query, noisy and meaningless; name present."}],
+  "item-09": [{"line":10,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"/files/report.pdf?v=2&token=abc123","wcag":["2.4.4"],"confidence":"high","message":"Link text is a file path with query string.","justification":"Visible name is a path plus token query, noisy and meaningless; name present."}],
+  "item-10": [{"line":7,"patternId":"2.4.4-generic-link-text","codeQuote":"click here","wcag":["2.4.4"],"confidence":"high","message":"Link text 'click here' is generic.","justification":"Canonical generic link-text failure; name present so floor's no-name rule misses."}],
+  "item-11": [{"line":6,"patternId":"2.4.4-generic-link-text","codeQuote":"read more","wcag":["2.4.4"],"confidence":"high","message":"Link text 'read more' is generic.","justification":"'read more' canonical generic; present-but-meaningless name, not floor territory."}],
+  "item-12": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"read more","wcag":["2.4.4"],"confidence":"high","message":"Link text 'read more' is generic.","justification":"'read more' canonical generic; MUI Link resolves to anchor with present name, floor misses."}],
+  "item-13": [],
+  "item-14": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"here","wcag":["2.4.4"],"confidence":"high","message":"Link text 'here' is generic.","justification":"'here' is a canonical generic name; not suppressed, not in static findings."}],
+  "item-15": [{"line":9,"patternId":"2.4.4-generic-link-text","codeQuote":"view more","wcag":["2.4.4"],"confidence":"high","message":"Link text 'view more' is generic.","justification":"'view more' is a non-descriptive generic phrase (same family as 'see more'); name present so floor misses."}],
+  "item-16": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"click","wcag":["2.4.4"],"confidence":"high","message":"Link text 'click' is generic.","justification":"'click' alone conveys no destination; present name, not floor-caught."}],
+  "item-17": [],
+  "item-18": [],
+  "item-19": [],
+  "item-20": [],
+  "item-21": [],
+  "item-22": [{"line":10,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"report_final_v2.pdf","wcag":["2.4.4"],"confidence":"high","message":"Link text is a raw filename.","justification":"Visible name is a filename, meaningless to a screen reader; name present so floor's no-name rule misses."}],
+  "item-23": [{"line":10,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"q3-report-final-v2-FINAL.pdf","wcag":["2.4.4"],"confidence":"high","message":"Link text is a raw filename.","justification":"Visible name is a messy filename, not a human-readable destination; name present."}],
+  "item-24": [{"line":9,"patternId":"2.4.4-generic-link-text","codeQuote":"Learn more","wcag":["2.4.4"],"confidence":"high","message":"Link text 'Learn more' is generic.","justification":"Canonical generic 'learn more'; name present, floor misses."}],
+  "item-25": [{"line":10,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"/assets/files/export.csv?token=abc123&format=raw","wcag":["2.4.4"],"confidence":"high","message":"Link text is a file path with query string.","justification":"Visible name is a path plus query, noisy/polluted name; name present."}],
+  "item-26": [],
+  "item-27": [],
+  "item-28": [{"line":10,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"https://www.example.com/articles/2024/07/index.html","wcag":["2.4.4"],"confidence":"high","message":"Link text is a raw URL.","justification":"Visible name is a full raw URL, unreadable when announced; name present."}],
+  "item-29": [{"line":10,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"https://cdn.example.com/a/b/c?id=42&ref=home","wcag":["2.4.4"],"confidence":"high","message":"Link text is a raw URL with query string.","justification":"Visible name is a CDN URL plus query, noisy/meaningless; name present."}],
+  "item-30": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"this link","wcag":["2.4.4"],"confidence":"high","message":"Link text 'this link' is generic.","justification":"'this link' is a non-descriptive generic phrase conveying no destination."}],
+  "item-31": [{"line":10,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"/very/long/path/segment","wcag":["2.4.4"],"confidence":"high","message":"Link text is a raw path.","justification":"Visible name is a bare path segment, not a human-readable destination."}],
+  "item-32": [{"line":9,"patternId":"2.4.4-noisy-or-wrong-name","codeQuote":"SKU-9F3A-XL-BLK-2024","wcag":["2.4.4"],"confidence":"high","message":"Link text is a raw SKU.","justification":"Visible name is a product SKU code, meaningless to a screen-reader user."}],
+  "item-33": [],
+  "item-34": [],
+  "item-35": [],
+  "item-36": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"more info","wcag":["2.4.4"],"confidence":"high","message":"Link text 'more info' is generic.","justification":"'more info' is a generic vague phrase with no destination context."}],
+  "item-37": [],
+  "item-38": [],
+  "item-39": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"click here","wcag":["2.4.4"],"confidence":"high","message":"Link text 'click here' is generic.","justification":"Canonical generic 'click here'; react-router Link resolves to anchor, name present."}],
+  "item-40": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"read more","wcag":["2.4.4"],"confidence":"high","message":"Link text 'read more' is generic.","justification":"Canonical generic 'read more'; name present so floor's no-name rule misses."}],
+  "item-41": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"find out more","wcag":["2.4.4"],"confidence":"high","message":"Link text 'find out more' is generic.","justification":"'find out more' is a generic vague phrase, same family as 'read more'."}],
+  "item-42": [],
+  "item-43": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"details","wcag":["2.4.4"],"confidence":"high","message":"Link text 'details' is generic.","justification":"'details' is a canonical generic link name."}],
+  "item-44": [],
+  "item-45": [],
+  "item-46": [{"line":7,"patternId":"1.1.1-filename-or-generic-alt","codeQuote":"Slider Image 4","wcag":["1.1.1"],"confidence":"high","message":"Alt is a generic slider placeholder.","justification":"alt='Slider Image 4' is an auto-generated placeholder, not image content; alt present so floor's missing-alt rule misses."}],
+  "item-47": [{"line":7,"patternId":"1.1.1-filename-or-generic-alt","codeQuote":"pim_bu_100093","wcag":["1.1.1"],"confidence":"high","message":"Alt is a technical id.","justification":"alt='pim_bu_100093' is a PIM id, meaningless to a screen reader; alt present."}],
+  "item-48": [],
+  "item-49": [{"line":7,"patternId":"1.1.1-filename-or-generic-alt","codeQuote":"DSC_0042","wcag":["1.1.1"],"confidence":"high","message":"Alt is a camera auto-id.","justification":"alt='DSC_0042' is a camera-generated id, conveys no content."}],
+  "item-50": [{"line":7,"patternId":"1.1.1-filename-or-generic-alt","codeQuote":"image123.png","wcag":["1.1.1"],"confidence":"high","message":"Alt is a filename.","justification":"alt='image123.png' is a filename, meaningless to a screen reader."}],
+  "item-51": [{"line":7,"patternId":"1.1.1-filename-or-generic-alt","codeQuote":"IMG_4821.jpg","wcag":["1.1.1"],"confidence":"high","message":"Alt is a camera filename.","justification":"alt='IMG_4821.jpg' is a camera filename, conveys no content; alt present so floor misses."}],
+  "item-52": [],
+  "item-53": [],
+  "item-54": [{"line":8,"patternId":"2.4.4-generic-link-text","codeQuote":"go","wcag":["2.4.4"],"confidence":"high","message":"Link text 'go' is generic.","justification":"'go' alone is meaningless out of context; present name, not floor-caught."}],
+  "item-55": [{"line":9,"patternId":"2.4.4-generic-link-text","codeQuote":"click here","wcag":["2.4.4"],"confidence":"high","message":"Link text 'click here' is generic.","justification":"Canonical generic 'click here'; name present, floor misses."}],
+  "item-56": []
 }
