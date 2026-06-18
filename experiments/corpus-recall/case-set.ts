@@ -139,6 +139,25 @@ export const CASES: readonly LabelledCase[] = [
   positive("noisy-path-segment-link", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 10, wcag: ["2.4.4"] }]),
   positive("noisy-catalog-breadcrumb-link", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 10, wcag: ["2.4.4"] }]),
 
+  // POSITIVE (R4 — intrinsic <img>, the headline new pattern) — a raw image whose
+  // alt is PRESENT but a filename / technical id / generic placeholder. The floor
+  // (jsx-a11y alt-text) is satisfied because alt exists; only the R4 content-
+  // inspection retriever grounds the present-but-bad alt. Un-retrievable before R4
+  // (an intrinsic <img> has no import → no resolution → empty slice).
+  positive("img-filename-alt", [{ patternId: "1.1.1-filename-or-generic-alt", line: 7, wcag: ["1.1.1"] }]),
+  positive("img-slider-generic-alt", [{ patternId: "1.1.1-filename-or-generic-alt", line: 7, wcag: ["1.1.1"] }]),
+  positive("img-pim-id-alt", [{ patternId: "1.1.1-filename-or-generic-alt", line: 7, wcag: ["1.1.1"] }]),
+  positive("img-numbered-filename-alt", [{ patternId: "1.1.1-filename-or-generic-alt", line: 7, wcag: ["1.1.1"] }]),
+  positive("img-dsc-filename-alt", [{ patternId: "1.1.1-filename-or-generic-alt", line: 7, wcag: ["1.1.1"] }]),
+
+  // POSITIVE (R4 — intrinsic <a>) — raw anchors that extend the already-certified
+  // 2.4.4 link patterns to the INTRINSIC path (raw <a>, not just imported <Link>).
+  // Content present → floor silent; only R4 grounds the generic / noisy name.
+  positive("raw-a-click-here", [{ patternId: "2.4.4-generic-link-text", line: 7, wcag: ["2.4.4"] }]),
+  positive("raw-a-read-more", [{ patternId: "2.4.4-generic-link-text", line: 6, wcag: ["2.4.4"] }]),
+  positive("raw-a-url-name", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 7, wcag: ["2.4.4"] }]),
+  positive("raw-a-path-name", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 7, wcag: ["2.4.4"] }]),
+
   // NEGATIVE — the precision spine (same components as the positives).
   negative("tooltip-titled-icon-button"), // G3: name-injecting-wrapper on the inner IconButton.
   negative("form-label-wrapped-select"), // G3: label-ancestor on the wrapped Select.
@@ -162,4 +181,9 @@ export const CASES: readonly LabelledCase[] = [
   negative("sr-named-social-link"), // G3: resolved renders-own-name.
   negative("floor-caught-dialog"), // cross-dedup: the floor already flags the unnamed <Dialog>.
   negative("antd-tabs-self-managed"), // clean: antd Tabs self-manages selected state (auto-selects first pane).
+  // NEGATIVE (R4 — the img/a leak surfaces, so precision is MEASURED on them).
+  negative("img-good-alt"), // clean: descriptive alt — the agent must abstain (R4 retrieves, agent declines).
+  negative("img-decorative-empty-alt"), // clean: alt="" decorative — premise altState!=="present", never retrieved.
+  negative("img-no-alt-floor-caught"), // cross-dedup: the floor already flags the missing alt (R4 must not double-up).
+  negative("mixed-button-icon-img-a"), // F6 re-proof: img/a rows don't bleed into the button/<IconButton> context.
 ];

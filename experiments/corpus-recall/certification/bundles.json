@@ -7,6 +7,102 @@
       "3: ",
       "4: ",
       "5: ",
+      "6: ",
+      "7: ",
+      "8: ",
+      "9: ",
+      "10: import { IconButton } from \"@mui/material\";",
+      "11: import { Trash } from \"lucide-react\";",
+      "12: ",
+      "13: export const Toolbar = () => (",
+      "14:   <div>",
+      "15:     <IconButton aria-label=\"Delete item\">",
+      "16:       <Trash />",
+      "17:     </IconButton>",
+      "18:     <button type=\"button\">Save changes</button>",
+      "19:     <img src=\"/avatar.jpg\" alt=\"Photo of Jane Doe, account owner\" />",
+      "20:     <a href=\"/settings\">Open your account settings</a>",
+      "21:   </div>",
+      "22: );",
+      "23: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "1.1.1-filename-or-generic-alt",
+        "tier": "common",
+        "component": "informative image",
+        "failureShape": "An informative image has alt text that is a filename, technical id, or generic placeholder (\"image.jpg\", \"pim_bu_100093\", \"Slider Image 4\", \"icon\", \"cover\"), so screen-reader users get a meaningless name instead of the image's content.",
+        "fix": "Write alt text that conveys the image's meaning or purpose. Never use filenames, ids, or generic placeholders. If the image is purely decorative, use an empty alt (alt=\"\") instead.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "2.1.1-native-control-key-broken",
+        "tier": "common",
+        "component": "button / link / checkbox / radio",
+        "failureShape": "A control that should work with the keyboard doesn't — a checkbox or radio won't toggle on Space, a button or link won't activate on Enter/Space — because a custom handler intercepts or replaces the native key behavior.",
+        "fix": "Use native interactive elements (<button>, <a href>, <input>) and don't preventDefault their key handling. For custom controls, handle Enter and Space (and Arrow keys for radios) per the ARIA pattern so activation matches a click.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "2.4.4-generic-link-text",
+        "tier": "common",
+        "component": "non-descriptive link",
+        "failureShape": "A link's text is generic and uninformative out of context (\"click here\", \"more info\", \"read more\", \"details\", \"view more\"), often repeated identically across the page, so its purpose and destination aren't conveyed.",
+        "fix": "Write link text that describes the destination on its own, or add a unique aria-label / visually hidden suffix so repeated links are distinguishable (e.g. \"Read more about admissions\").",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "2.4.4-noisy-or-wrong-name",
+        "tier": "common",
+        "component": "link with polluted name",
+        "failureShape": "A link's accessible name is noise or wrong — a raw URL, a build/slug prefix, a stray symbol, an over-long auto-generated description, or alt text that contradicts the destination — so the announced name doesn't match the link's purpose.",
+        "fix": "Set a clean, accurate accessible name that matches the destination. Strip URLs, technical prefixes, and stray glyphs from the name; fix image alt text inside links so it describes where the link goes.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "4.1.2-button-no-name",
+        "tier": "common",
+        "component": "icon-only button",
+        "failureShape": "A button (often icon-only or with only visual content) exposes no accessible name, so assistive tech announces it as an unlabeled \"button\".",
+        "fix": "Give every button discernible text: visible text content, or an aria-label / aria-labelledby for icon-only buttons. Prefer a native <button> over a clickable <div>/<span>.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "1.1.1-alt-too-long-or-redundant",
+        "tier": "occasional",
+        "component": "image with verbose alt",
+        "failureShape": "An image's alt text is excessively long or redundant — a paragraph of text, or a concatenation that duplicates adjacent visible text — so screen-reader users hear bloated, repeated content.",
+        "fix": "Keep alt text concise (typically under ~125 characters) and non-redundant. If the same information is already in adjacent text, mark the image decorative with alt=\"\".",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-alt-wrong-or-insufficient",
+        "tier": "occasional",
+        "component": "informative image",
+        "failureShape": "An image has alt text that is present but wrong or insufficient — outdated, mismatched to the destination, or too vague to describe a complex visual — so the announced text misleads or under-informs screen-reader users.",
+        "fix": "Make the alt text accurately and sufficiently describe the image's content and purpose in context. Update stale alt text and expand vague names so they match what the image actually conveys.",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "3.2.5-new-window-not-signaled",
+        "tier": "occasional",
+        "component": "link opening new context",
+        "failureShape": "A link opens in a new window/tab (target=\"_blank\"), launches an external app (mailto:), or leaves for an external domain without warning the user in advance, so the context change is unexpected.",
+        "fix": "Warn before the context change: include \"(opens in a new window)\" or \"(external)\" in the link's text or aria-label so the behavior is announced before activation.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-02",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
       "6: import { Link } from \"@chakra-ui/react\";",
       "7: ",
       "8: export const SeeMore = () => <Link href=\"/feed\">see more</Link>;",
@@ -98,7 +194,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-02",
+    "id": "item-03",
     "source": [
       "1: ",
       "2: ",
@@ -196,7 +292,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-03",
+    "id": "item-04",
     "source": [
       "1: ",
       "2: ",
@@ -230,7 +326,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-04",
+    "id": "item-05",
     "source": [
       "1: ",
       "2: ",
@@ -270,7 +366,49 @@
     "staticFindings": []
   },
   {
-    "id": "item-05",
+    "id": "item-06",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: export const ReportLink = () => (",
+      "7:   <a href=\"/files/q3-report.pdf\">/files/q3-report.pdf</a>",
+      "8: );",
+      "9: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "2.4.4-generic-link-text",
+        "tier": "common",
+        "component": "non-descriptive link",
+        "failureShape": "A link's text is generic and uninformative out of context (\"click here\", \"more info\", \"read more\", \"details\", \"view more\"), often repeated identically across the page, so its purpose and destination aren't conveyed.",
+        "fix": "Write link text that describes the destination on its own, or add a unique aria-label / visually hidden suffix so repeated links are distinguishable (e.g. \"Read more about admissions\").",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "2.4.4-noisy-or-wrong-name",
+        "tier": "common",
+        "component": "link with polluted name",
+        "failureShape": "A link's accessible name is noise or wrong — a raw URL, a build/slug prefix, a stray symbol, an over-long auto-generated description, or alt text that contradicts the destination — so the announced name doesn't match the link's purpose.",
+        "fix": "Set a clean, accurate accessible name that matches the destination. Strip URLs, technical prefixes, and stray glyphs from the name; fix image alt text inside links so it describes where the link goes.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "3.2.5-new-window-not-signaled",
+        "tier": "occasional",
+        "component": "link opening new context",
+        "failureShape": "A link opens in a new window/tab (target=\"_blank\"), launches an external app (mailto:), or leaves for an external domain without warning the user in advance, so the context change is unexpected.",
+        "fix": "Warn before the context change: include \"(opens in a new window)\" or \"(external)\" in the link's text or aria-label so the behavior is announced before activation.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-07",
     "source": [
       "1: ",
       "2: ",
@@ -373,7 +511,49 @@
     "staticFindings": []
   },
   {
-    "id": "item-06",
+    "id": "item-08",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: export const Permalink = () => (",
+      "7:   <a href=\"/p?id=4821\">https://shop.example.com/p?id=4821&utm=email</a>",
+      "8: );",
+      "9: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "2.4.4-generic-link-text",
+        "tier": "common",
+        "component": "non-descriptive link",
+        "failureShape": "A link's text is generic and uninformative out of context (\"click here\", \"more info\", \"read more\", \"details\", \"view more\"), often repeated identically across the page, so its purpose and destination aren't conveyed.",
+        "fix": "Write link text that describes the destination on its own, or add a unique aria-label / visually hidden suffix so repeated links are distinguishable (e.g. \"Read more about admissions\").",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "2.4.4-noisy-or-wrong-name",
+        "tier": "common",
+        "component": "link with polluted name",
+        "failureShape": "A link's accessible name is noise or wrong — a raw URL, a build/slug prefix, a stray symbol, an over-long auto-generated description, or alt text that contradicts the destination — so the announced name doesn't match the link's purpose.",
+        "fix": "Set a clean, accurate accessible name that matches the destination. Strip URLs, technical prefixes, and stray glyphs from the name; fix image alt text inside links so it describes where the link goes.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "3.2.5-new-window-not-signaled",
+        "tier": "occasional",
+        "component": "link opening new context",
+        "failureShape": "A link opens in a new window/tab (target=\"_blank\"), launches an external app (mailto:), or leaves for an external domain without warning the user in advance, so the context change is unexpected.",
+        "fix": "Warn before the context change: include \"(opens in a new window)\" or \"(external)\" in the link's text or aria-label so the behavior is announced before activation.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-09",
     "source": [
       "1: ",
       "2: ",
@@ -474,7 +654,90 @@
     "staticFindings": []
   },
   {
-    "id": "item-07",
+    "id": "item-10",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: export const HelpLink = () => (",
+      "7:   <a href=\"/help\">click here</a>",
+      "8: );",
+      "9: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "2.4.4-generic-link-text",
+        "tier": "common",
+        "component": "non-descriptive link",
+        "failureShape": "A link's text is generic and uninformative out of context (\"click here\", \"more info\", \"read more\", \"details\", \"view more\"), often repeated identically across the page, so its purpose and destination aren't conveyed.",
+        "fix": "Write link text that describes the destination on its own, or add a unique aria-label / visually hidden suffix so repeated links are distinguishable (e.g. \"Read more about admissions\").",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "2.4.4-noisy-or-wrong-name",
+        "tier": "common",
+        "component": "link with polluted name",
+        "failureShape": "A link's accessible name is noise or wrong — a raw URL, a build/slug prefix, a stray symbol, an over-long auto-generated description, or alt text that contradicts the destination — so the announced name doesn't match the link's purpose.",
+        "fix": "Set a clean, accurate accessible name that matches the destination. Strip URLs, technical prefixes, and stray glyphs from the name; fix image alt text inside links so it describes where the link goes.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "3.2.5-new-window-not-signaled",
+        "tier": "occasional",
+        "component": "link opening new context",
+        "failureShape": "A link opens in a new window/tab (target=\"_blank\"), launches an external app (mailto:), or leaves for an external domain without warning the user in advance, so the context change is unexpected.",
+        "fix": "Warn before the context change: include \"(opens in a new window)\" or \"(external)\" in the link's text or aria-label so the behavior is announced before activation.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-11",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: export const ArticleLink = () => (",
+      "6:   <a href=\"/articles/42\">read more</a>",
+      "7: );",
+      "8: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "2.4.4-generic-link-text",
+        "tier": "common",
+        "component": "non-descriptive link",
+        "failureShape": "A link's text is generic and uninformative out of context (\"click here\", \"more info\", \"read more\", \"details\", \"view more\"), often repeated identically across the page, so its purpose and destination aren't conveyed.",
+        "fix": "Write link text that describes the destination on its own, or add a unique aria-label / visually hidden suffix so repeated links are distinguishable (e.g. \"Read more about admissions\").",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "2.4.4-noisy-or-wrong-name",
+        "tier": "common",
+        "component": "link with polluted name",
+        "failureShape": "A link's accessible name is noise or wrong — a raw URL, a build/slug prefix, a stray symbol, an over-long auto-generated description, or alt text that contradicts the destination — so the announced name doesn't match the link's purpose.",
+        "fix": "Set a clean, accurate accessible name that matches the destination. Strip URLs, technical prefixes, and stray glyphs from the name; fix image alt text inside links so it describes where the link goes.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "3.2.5-new-window-not-signaled",
+        "tier": "occasional",
+        "component": "link opening new context",
+        "failureShape": "A link opens in a new window/tab (target=\"_blank\"), launches an external app (mailto:), or leaves for an external domain without warning the user in advance, so the context change is unexpected.",
+        "fix": "Warn before the context change: include \"(opens in a new window)\" or \"(external)\" in the link's text or aria-label so the behavior is announced before activation.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-12",
     "source": [
       "1: ",
       "2: ",
@@ -572,7 +835,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-08",
+    "id": "item-13",
     "source": [
       "1: ",
       "2: ",
@@ -763,7 +1026,7 @@
     ]
   },
   {
-    "id": "item-09",
+    "id": "item-14",
     "source": [
       "1: ",
       "2: ",
@@ -861,7 +1124,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-10",
+    "id": "item-15",
     "source": [
       "1: ",
       "2: ",
@@ -960,7 +1223,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-11",
+    "id": "item-16",
     "source": [
       "1: ",
       "2: ",
@@ -1058,7 +1321,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-12",
+    "id": "item-17",
     "source": [
       "1: ",
       "2: ",
@@ -1159,7 +1422,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-13",
+    "id": "item-18",
     "source": [
       "1: ",
       "2: ",
@@ -1260,7 +1523,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-14",
+    "id": "item-19",
     "source": [
       "1: ",
       "2: ",
@@ -1368,7 +1631,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-15",
+    "id": "item-20",
     "source": [
       "1: ",
       "2: ",
@@ -1466,7 +1729,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-16",
+    "id": "item-21",
     "source": [
       "1: ",
       "2: ",
@@ -1565,7 +1828,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-17",
+    "id": "item-22",
     "source": [
       "1: ",
       "2: ",
@@ -1666,7 +1929,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-18",
+    "id": "item-23",
     "source": [
       "1: ",
       "2: ",
@@ -1767,7 +2030,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-19",
+    "id": "item-24",
     "source": [
       "1: ",
       "2: ",
@@ -1866,7 +2129,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-20",
+    "id": "item-25",
     "source": [
       "1: ",
       "2: ",
@@ -1967,7 +2230,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-21",
+    "id": "item-26",
     "source": [
       "1: ",
       "2: ",
@@ -2078,7 +2341,7 @@
     ]
   },
   {
-    "id": "item-22",
+    "id": "item-27",
     "source": [
       "1: ",
       "2: ",
@@ -2184,7 +2447,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-23",
+    "id": "item-28",
     "source": [
       "1: ",
       "2: ",
@@ -2285,7 +2548,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-24",
+    "id": "item-29",
     "source": [
       "1: ",
       "2: ",
@@ -2386,7 +2649,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-25",
+    "id": "item-30",
     "source": [
       "1: ",
       "2: ",
@@ -2484,7 +2747,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-26",
+    "id": "item-31",
     "source": [
       "1: ",
       "2: ",
@@ -2585,7 +2848,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-27",
+    "id": "item-32",
     "source": [
       "1: ",
       "2: ",
@@ -2684,7 +2947,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-28",
+    "id": "item-33",
     "source": [
       "1: ",
       "2: ",
@@ -2725,7 +2988,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-29",
+    "id": "item-34",
     "source": [
       "1: ",
       "2: ",
@@ -2774,7 +3037,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-30",
+    "id": "item-35",
     "source": [
       "1: ",
       "2: ",
@@ -2816,7 +3079,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-31",
+    "id": "item-36",
     "source": [
       "1: ",
       "2: ",
@@ -2914,7 +3177,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-32",
+    "id": "item-37",
     "source": [
       "1: ",
       "2: ",
@@ -2949,7 +3212,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-33",
+    "id": "item-38",
     "source": [
       "1: ",
       "2: ",
@@ -3146,7 +3409,7 @@
     ]
   },
   {
-    "id": "item-34",
+    "id": "item-39",
     "source": [
       "1: ",
       "2: ",
@@ -3244,7 +3507,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-35",
+    "id": "item-40",
     "source": [
       "1: ",
       "2: ",
@@ -3342,7 +3605,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-36",
+    "id": "item-41",
     "source": [
       "1: ",
       "2: ",
@@ -3440,7 +3703,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-37",
+    "id": "item-42",
     "source": [
       "1: ",
       "2: ",
@@ -3491,6 +3754,14 @@
         "failureShape": "A link that opens a PDF, an external site, or a new window/tab doesn't signal that in its accessible name, so users can't anticipate the file type or context change before activating it.",
         "fix": "Include the target behavior in the link's accessible name: append \"(PDF)\", \"(opens in a new window)\", or \"(external)\" via the link text or an aria-label.",
         "eligibleToFlag": false
+      },
+      {
+        "patternId": "3.2.5-new-window-not-signaled",
+        "tier": "occasional",
+        "component": "link opening new context",
+        "failureShape": "A link opens in a new window/tab (target=\"_blank\"), launches an external app (mailto:), or leaves for an external domain without warning the user in advance, so the context change is unexpected.",
+        "fix": "Warn before the context change: include \"(opens in a new window)\" or \"(external)\" in the link's text or aria-label so the behavior is announced before activation.",
+        "eligibleToFlag": false
       }
     ],
     "suppressorMap": {},
@@ -3505,7 +3776,7 @@
     ]
   },
   {
-    "id": "item-38",
+    "id": "item-43",
     "source": [
       "1: ",
       "2: ",
@@ -3603,7 +3874,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-39",
+    "id": "item-44",
     "source": [
       "1: ",
       "2: ",
@@ -3668,7 +3939,372 @@
     "staticFindings": []
   },
   {
-    "id": "item-40",
+    "id": "item-45",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: ",
+      "7: ",
+      "8: ",
+      "9: export const Hero = () => (",
+      "10:   <img src=\"/hero.jpg\" />",
+      "11: );",
+      "12: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "1.1.1-filename-or-generic-alt",
+        "tier": "common",
+        "component": "informative image",
+        "failureShape": "An informative image has alt text that is a filename, technical id, or generic placeholder (\"image.jpg\", \"pim_bu_100093\", \"Slider Image 4\", \"icon\", \"cover\"), so screen-reader users get a meaningless name instead of the image's content.",
+        "fix": "Write alt text that conveys the image's meaning or purpose. Never use filenames, ids, or generic placeholders. If the image is purely decorative, use an empty alt (alt=\"\") instead.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "1.1.1-alt-too-long-or-redundant",
+        "tier": "occasional",
+        "component": "image with verbose alt",
+        "failureShape": "An image's alt text is excessively long or redundant — a paragraph of text, or a concatenation that duplicates adjacent visible text — so screen-reader users hear bloated, repeated content.",
+        "fix": "Keep alt text concise (typically under ~125 characters) and non-redundant. If the same information is already in adjacent text, mark the image decorative with alt=\"\".",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-alt-wrong-or-insufficient",
+        "tier": "occasional",
+        "component": "informative image",
+        "failureShape": "An image has alt text that is present but wrong or insufficient — outdated, mismatched to the destination, or too vague to describe a complex visual — so the announced text misleads or under-informs screen-reader users.",
+        "fix": "Make the alt text accurately and sufficiently describe the image's content and purpose in context. Update stale alt text and expand vague names so they match what the image actually conveys.",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-complex-image-no-text-alt",
+        "tier": "occasional",
+        "component": "chart / gallery / complex image",
+        "failureShape": "A complex image (chart, diagram, SVG/div-based graphic, or gallery) has no text alternative or position information, so the data or sequence it conveys is lost to screen-reader users.",
+        "fix": "Give complex images a text alternative that conveys their data or purpose (e.g. a description or adjacent data table for charts). For galleries, expose position with aria-setsize/aria-posinset or descriptive alt per item.",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-decorative-icon-announced",
+        "tier": "occasional",
+        "component": "decorative icon",
+        "failureShape": "Decorative icons — icon-font glyphs, chevrons, or raw unicode characters — are announced by the screen reader as character codes or symbols, adding noise with no information.",
+        "fix": "Hide decorative icons from assistive tech with aria-hidden=\"true\". For icons that carry meaning, provide a text alternative (aria-label or an SVG <title>) instead.",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-img-missing-alt",
+        "tier": "occasional",
+        "component": "image with no alt",
+        "failureShape": "An image has no alt attribute at all (or is a background image standing in for content), often inside an image-only link, leaving the element with an empty accessible name.",
+        "fix": "Add an alt attribute to every <img>: descriptive text for informative images, or alt=\"\" for decorative ones. For image-only links, the alt text must name the link destination.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": [
+      {
+        "line": 10,
+        "ruleId": "jsx-a11y/alt-text",
+        "wcag": [
+          "1.1.1"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "item-46",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: export const SlideFour = () => (",
+      "7:   <img src=\"/slide-4.jpg\" alt=\"Slider Image 4\" />",
+      "8: );",
+      "9: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "1.1.1-filename-or-generic-alt",
+        "tier": "common",
+        "component": "informative image",
+        "failureShape": "An informative image has alt text that is a filename, technical id, or generic placeholder (\"image.jpg\", \"pim_bu_100093\", \"Slider Image 4\", \"icon\", \"cover\"), so screen-reader users get a meaningless name instead of the image's content.",
+        "fix": "Write alt text that conveys the image's meaning or purpose. Never use filenames, ids, or generic placeholders. If the image is purely decorative, use an empty alt (alt=\"\") instead.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "1.1.1-alt-too-long-or-redundant",
+        "tier": "occasional",
+        "component": "image with verbose alt",
+        "failureShape": "An image's alt text is excessively long or redundant — a paragraph of text, or a concatenation that duplicates adjacent visible text — so screen-reader users hear bloated, repeated content.",
+        "fix": "Keep alt text concise (typically under ~125 characters) and non-redundant. If the same information is already in adjacent text, mark the image decorative with alt=\"\".",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-alt-wrong-or-insufficient",
+        "tier": "occasional",
+        "component": "informative image",
+        "failureShape": "An image has alt text that is present but wrong or insufficient — outdated, mismatched to the destination, or too vague to describe a complex visual — so the announced text misleads or under-informs screen-reader users.",
+        "fix": "Make the alt text accurately and sufficiently describe the image's content and purpose in context. Update stale alt text and expand vague names so they match what the image actually conveys.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-47",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: export const CatalogImage = () => (",
+      "7:   <img src=\"/catalog/100093.jpg\" alt=\"pim_bu_100093\" />",
+      "8: );",
+      "9: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "1.1.1-filename-or-generic-alt",
+        "tier": "common",
+        "component": "informative image",
+        "failureShape": "An informative image has alt text that is a filename, technical id, or generic placeholder (\"image.jpg\", \"pim_bu_100093\", \"Slider Image 4\", \"icon\", \"cover\"), so screen-reader users get a meaningless name instead of the image's content.",
+        "fix": "Write alt text that conveys the image's meaning or purpose. Never use filenames, ids, or generic placeholders. If the image is purely decorative, use an empty alt (alt=\"\") instead.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "1.1.1-alt-too-long-or-redundant",
+        "tier": "occasional",
+        "component": "image with verbose alt",
+        "failureShape": "An image's alt text is excessively long or redundant — a paragraph of text, or a concatenation that duplicates adjacent visible text — so screen-reader users hear bloated, repeated content.",
+        "fix": "Keep alt text concise (typically under ~125 characters) and non-redundant. If the same information is already in adjacent text, mark the image decorative with alt=\"\".",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-alt-wrong-or-insufficient",
+        "tier": "occasional",
+        "component": "informative image",
+        "failureShape": "An image has alt text that is present but wrong or insufficient — outdated, mismatched to the destination, or too vague to describe a complex visual — so the announced text misleads or under-informs screen-reader users.",
+        "fix": "Make the alt text accurately and sufficiently describe the image's content and purpose in context. Update stale alt text and expand vague names so they match what the image actually conveys.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-48",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: export const RevenueChart = () => (",
+      "7:   <img src=\"/q3.png\" alt=\"A bar chart showing Q3 revenue up 12%\" />",
+      "8: );",
+      "9: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "1.1.1-filename-or-generic-alt",
+        "tier": "common",
+        "component": "informative image",
+        "failureShape": "An informative image has alt text that is a filename, technical id, or generic placeholder (\"image.jpg\", \"pim_bu_100093\", \"Slider Image 4\", \"icon\", \"cover\"), so screen-reader users get a meaningless name instead of the image's content.",
+        "fix": "Write alt text that conveys the image's meaning or purpose. Never use filenames, ids, or generic placeholders. If the image is purely decorative, use an empty alt (alt=\"\") instead.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "1.1.1-alt-too-long-or-redundant",
+        "tier": "occasional",
+        "component": "image with verbose alt",
+        "failureShape": "An image's alt text is excessively long or redundant — a paragraph of text, or a concatenation that duplicates adjacent visible text — so screen-reader users hear bloated, repeated content.",
+        "fix": "Keep alt text concise (typically under ~125 characters) and non-redundant. If the same information is already in adjacent text, mark the image decorative with alt=\"\".",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-alt-wrong-or-insufficient",
+        "tier": "occasional",
+        "component": "informative image",
+        "failureShape": "An image has alt text that is present but wrong or insufficient — outdated, mismatched to the destination, or too vague to describe a complex visual — so the announced text misleads or under-informs screen-reader users.",
+        "fix": "Make the alt text accurately and sufficiently describe the image's content and purpose in context. Update stale alt text and expand vague names so they match what the image actually conveys.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-49",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: export const GalleryShot = () => (",
+      "7:   <img src=\"/gallery/0042.jpg\" alt=\"DSC_0042\" />",
+      "8: );",
+      "9: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "1.1.1-filename-or-generic-alt",
+        "tier": "common",
+        "component": "informative image",
+        "failureShape": "An informative image has alt text that is a filename, technical id, or generic placeholder (\"image.jpg\", \"pim_bu_100093\", \"Slider Image 4\", \"icon\", \"cover\"), so screen-reader users get a meaningless name instead of the image's content.",
+        "fix": "Write alt text that conveys the image's meaning or purpose. Never use filenames, ids, or generic placeholders. If the image is purely decorative, use an empty alt (alt=\"\") instead.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "1.1.1-alt-too-long-or-redundant",
+        "tier": "occasional",
+        "component": "image with verbose alt",
+        "failureShape": "An image's alt text is excessively long or redundant — a paragraph of text, or a concatenation that duplicates adjacent visible text — so screen-reader users hear bloated, repeated content.",
+        "fix": "Keep alt text concise (typically under ~125 characters) and non-redundant. If the same information is already in adjacent text, mark the image decorative with alt=\"\".",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-alt-wrong-or-insufficient",
+        "tier": "occasional",
+        "component": "informative image",
+        "failureShape": "An image has alt text that is present but wrong or insufficient — outdated, mismatched to the destination, or too vague to describe a complex visual — so the announced text misleads or under-informs screen-reader users.",
+        "fix": "Make the alt text accurately and sufficiently describe the image's content and purpose in context. Update stale alt text and expand vague names so they match what the image actually conveys.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-50",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: export const Thumbnail = () => (",
+      "7:   <img src=\"/thumbs/123.png\" alt=\"image123.png\" />",
+      "8: );",
+      "9: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "1.1.1-filename-or-generic-alt",
+        "tier": "common",
+        "component": "informative image",
+        "failureShape": "An informative image has alt text that is a filename, technical id, or generic placeholder (\"image.jpg\", \"pim_bu_100093\", \"Slider Image 4\", \"icon\", \"cover\"), so screen-reader users get a meaningless name instead of the image's content.",
+        "fix": "Write alt text that conveys the image's meaning or purpose. Never use filenames, ids, or generic placeholders. If the image is purely decorative, use an empty alt (alt=\"\") instead.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "1.1.1-alt-too-long-or-redundant",
+        "tier": "occasional",
+        "component": "image with verbose alt",
+        "failureShape": "An image's alt text is excessively long or redundant — a paragraph of text, or a concatenation that duplicates adjacent visible text — so screen-reader users hear bloated, repeated content.",
+        "fix": "Keep alt text concise (typically under ~125 characters) and non-redundant. If the same information is already in adjacent text, mark the image decorative with alt=\"\".",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-alt-wrong-or-insufficient",
+        "tier": "occasional",
+        "component": "informative image",
+        "failureShape": "An image has alt text that is present but wrong or insufficient — outdated, mismatched to the destination, or too vague to describe a complex visual — so the announced text misleads or under-informs screen-reader users.",
+        "fix": "Make the alt text accurately and sufficiently describe the image's content and purpose in context. Update stale alt text and expand vague names so they match what the image actually conveys.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-51",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: export const ProductPhoto = () => (",
+      "7:   <img src=\"/p.jpg\" alt=\"IMG_4821.jpg\" />",
+      "8: );",
+      "9: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "1.1.1-filename-or-generic-alt",
+        "tier": "common",
+        "component": "informative image",
+        "failureShape": "An informative image has alt text that is a filename, technical id, or generic placeholder (\"image.jpg\", \"pim_bu_100093\", \"Slider Image 4\", \"icon\", \"cover\"), so screen-reader users get a meaningless name instead of the image's content.",
+        "fix": "Write alt text that conveys the image's meaning or purpose. Never use filenames, ids, or generic placeholders. If the image is purely decorative, use an empty alt (alt=\"\") instead.",
+        "eligibleToFlag": true
+      },
+      {
+        "patternId": "1.1.1-alt-too-long-or-redundant",
+        "tier": "occasional",
+        "component": "image with verbose alt",
+        "failureShape": "An image's alt text is excessively long or redundant — a paragraph of text, or a concatenation that duplicates adjacent visible text — so screen-reader users hear bloated, repeated content.",
+        "fix": "Keep alt text concise (typically under ~125 characters) and non-redundant. If the same information is already in adjacent text, mark the image decorative with alt=\"\".",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-alt-wrong-or-insufficient",
+        "tier": "occasional",
+        "component": "informative image",
+        "failureShape": "An image has alt text that is present but wrong or insufficient — outdated, mismatched to the destination, or too vague to describe a complex visual — so the announced text misleads or under-informs screen-reader users.",
+        "fix": "Make the alt text accurately and sufficiently describe the image's content and purpose in context. Update stale alt text and expand vague names so they match what the image actually conveys.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-52",
+    "source": [
+      "1: ",
+      "2: ",
+      "3: ",
+      "4: ",
+      "5: ",
+      "6: ",
+      "7: ",
+      "8: export const Divider = () => (",
+      "9:   <img src=\"/divider.svg\" alt=\"\" />",
+      "10: );",
+      "11: "
+    ],
+    "corpusContext": [
+      {
+        "patternId": "1.1.1-alt-too-long-or-redundant",
+        "tier": "occasional",
+        "component": "image with verbose alt",
+        "failureShape": "An image's alt text is excessively long or redundant — a paragraph of text, or a concatenation that duplicates adjacent visible text — so screen-reader users hear bloated, repeated content.",
+        "fix": "Keep alt text concise (typically under ~125 characters) and non-redundant. If the same information is already in adjacent text, mark the image decorative with alt=\"\".",
+        "eligibleToFlag": false
+      },
+      {
+        "patternId": "1.1.1-alt-wrong-or-insufficient",
+        "tier": "occasional",
+        "component": "informative image",
+        "failureShape": "An image has alt text that is present but wrong or insufficient — outdated, mismatched to the destination, or too vague to describe a complex visual — so the announced text misleads or under-informs screen-reader users.",
+        "fix": "Make the alt text accurately and sufficiently describe the image's content and purpose in context. Update stale alt text and expand vague names so they match what the image actually conveys.",
+        "eligibleToFlag": false
+      }
+    ],
+    "suppressorMap": {},
+    "staticFindings": []
+  },
+  {
+    "id": "item-53",
     "source": [
       "1: ",
       "2: ",
@@ -3766,7 +4402,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-41",
+    "id": "item-54",
     "source": [
       "1: ",
       "2: ",
@@ -3864,7 +4500,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-42",
+    "id": "item-55",
     "source": [
       "1: ",
       "2: ",
@@ -3963,7 +4599,7 @@
     "staticFindings": []
   },
   {
-    "id": "item-43",
+    "id": "item-56",
     "source": [
       "1: ",
       "2: ",

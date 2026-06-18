@@ -1,5 +1,6 @@
 import { type CorpusPattern, corpusJourneyTags, corpusPatterns } from "./corpus";
 import type { Finding } from "./core";
+import type { IntrinsicElement, IntrinsicSignals } from "./intrinsic-elements";
 import type { ComponentResolution } from "./resolve-components";
 
 /**
@@ -65,6 +66,13 @@ export interface RetrieveInput {
   readonly resolutions: readonly ComponentResolution[];
   /** The static findings (`scan().findings`) — R2 reads their SCs. */
   readonly findings: readonly Finding[];
+  /**
+   * The INTRINSIC (lowercase-tag) elements in the scanned files
+   * (`collectIntrinsicElements`) — R4 reads their tag + coarse content signal.
+   * The caller does the one walk (it already holds the parse), keeping this
+   * retriever AST-free and pure. Absent ⇒ R4 contributes nothing (back-compat).
+   */
+  readonly intrinsics?: readonly IntrinsicElement[];
 }
 
 /** Only these tiers may flag; `occasional` (and `unknown`) are context-only. */
@@ -83,7 +91,57 @@ const FLAGGABLE_TIERS: ReadonlySet<CorpusPattern["tier"]> = new Set(["very-commo
 export const CERTIFIED_RECALL_PATTERN_IDS: ReadonlySet<string> = new Set([
   "2.4.4-generic-link-text",
   "2.4.4-noisy-or-wrong-name",
+  // R4 (intrinsic `<img>`): a present-but-bad alt (filename / id / placeholder) —
+  // floor-clean (alt IS present) and un-retrievable before R4 (no import).
+  "1.1.1-filename-or-generic-alt",
 ]);
+
+/**
+ * R4 — the EXPLICIT intrinsic-tag → corpus-pattern-id table (RFC
+ * `r4-content-inspection-retriever`, §4). The deliberate OPPOSITE of R1's token
+ * overlap: an `<img>` grounds image patterns because THIS TABLE says so, never
+ * because a word matched. That is what makes R4 leak-proof — the F6 cross-kind
+ * overlap (an `image`/`icon` token pulling a LINK pattern into a button slice)
+ * has no path here: a tag resolves to EXACTLY the ids under its key, and a human
+ * put each one there. Right pattern-set or empty, never wrong-pattern — the
+ * intrinsic-element analogue of the resolver's "correct host or stay opaque".
+ *
+ * Only CONTENT-QUALITY / non-floor shapes belong here — the static floor already
+ * owns the hard-missing cases (no-alt, no-name). `when` is the per-pattern
+ * CONTENT-PREMISE predicate (§4.4): a pattern is unioned only when the element's
+ * coarse signal is consistent with that pattern's premise (e.g.
+ * `1.1.1-filename-or-generic-alt` is about a present-but-bad alt, so it requires
+ * `altState === "present"` — a missing-alt `<img>` is a FLOOR case). Predicate-
+ * less rows are `occasional`-tier context-only entries (never flag, retrieved so
+ * the agent's slice is complete); `when: () => true` is implied where omitted.
+ */
+interface R4Entry {
+  readonly id: string;
+  /** The content premise that must hold for this id to be unioned (default: always). */
+  readonly when?: (s: IntrinsicSignals) => boolean;
+}
+
+export const R4_ELEMENT_PATTERNS: Record<string, readonly R4Entry[]> = {
+  img: [
+    // common — alt present but a filename / id / placeholder. THE headline win.
+    { id: "1.1.1-filename-or-generic-alt", when: (s) => s.altState === "present" },
+    // occasional (context-only — never flags): verbose / redundant, or wrong alt.
+    { id: "1.1.1-alt-too-long-or-redundant" },
+    { id: "1.1.1-alt-wrong-or-insufficient" },
+  ],
+  a: [
+    // common — visible text present but non-descriptive ("click here", "read more").
+    { id: "2.4.4-generic-link-text", when: (s) => s.hasVisibleText },
+    // common — visible text present but polluted (raw URL / path / filename / SKU).
+    { id: "2.4.4-noisy-or-wrong-name", when: (s) => s.hasVisibleText },
+    // occasional (context-only): a new-window link that doesn't signal the change.
+    { id: "3.2.5-new-window-not-signaled" },
+  ],
+  // Content-quality button shapes are floor-owned (no-name) or trusted-component
+  // state (selected/expanded) — no common, intrinsic, floor-missed, certifiable
+  // button content pattern today. `button` maps to [] (the F6 row stays empty).
+  button: [],
+};
 
 /**
  * Token-overlap stopwords — connective/structural words in a pattern's prose
@@ -208,6 +266,17 @@ export function retrieveSlice(input: RetrieveInput): RetrievedSlice {
   // R3 — journeys active for the scanned file paths.
   const active = activeJourneyTags(input.files);
 
+  // R4 — explicit intrinsic-tag → pattern-id table, gated by each id's content
+  // premise (§4.4). An id is admitted only when SOME intrinsic element of that tag
+  // satisfies the id's `when` predicate, so `1.1.1-filename-or-generic-alt` enters
+  // only on a present-alt `<img>` (a missing-alt one is a floor case, never R4).
+  const r4Ids = new Set<string>();
+  for (const el of input.intrinsics ?? []) {
+    for (const entry of R4_ELEMENT_PATTERNS[el.tag] ?? []) {
+      if (entry.when === undefined || entry.when(el.signals)) r4Ids.add(entry.id);
+    }
+  }
+
   const matched = new Map<string, CorpusPattern>();
   for (const p of all) {
     const compTokens = componentTokensById.get(p.id) ?? tokenize(p.component);
@@ -215,7 +284,8 @@ export function retrieveSlice(input: RetrieveInput): RetrievedSlice {
     const r2 = findingScs.has(p.sc);
     const r3 =
       active.size > 0 && (journeyTags.get(p.id) ?? []).some((t) => active.has(t));
-    if (r1 || r2 || r3) matched.set(p.id, p);
+    const r4 = r4Ids.has(p.id);
+    if (r1 || r2 || r3 || r4) matched.set(p.id, p);
   }
 
   // G0 — empty union ⇒ empty slice. No grounding.

@@ -28,6 +28,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { z } from "zod";
 import { scan, type ScanResult } from "./core";
 import { corpusFix, corpusTier, type CorpusTier, type EnrichedFinding, enrichAll } from "./corpus";
+import { collectIntrinsicElements } from "./intrinsic-elements";
 import { CERTIFIED_RECALL_PATTERN_IDS, type RetrievedPattern, retrieveSlice } from "./retrieve";
 
 /**
@@ -148,7 +149,9 @@ function formatRecall(
 /**
  * Build the recall self-check for a file from an EXISTING scan result. PURE over
  * the scan: it reuses `scan().resolved.resolutions` + `scan().findings` for the
- * retrieve slice (R1/R2/R3) and never re-reads or re-parses the file.
+ * retrieve slice (R1/R2/R3) and, for R4, the SourceFile `scan()` ALREADY parsed
+ * (`resolved.sourceFiles`) — so it never re-reads or re-parses the file on this
+ * every-edit hot path (no `readFileSync`/`ts.createSourceFile` here).
  *
  * No file-wide suppressed-line list: that list was file-wide (not anchored to the
  * link patterns it accompanied), cost a SECOND parse on the every-edit hot path
@@ -161,10 +164,15 @@ function formatRecall(
  */
 function recallWhisper(filePath: string, result: ScanResult, root: string): string | null {
   try {
+    // R4 — reuse scan's parse for this file (no hot-path re-parse). Absent only
+    // if the file couldn't be read, in which case R4 simply contributes nothing.
+    const sf = result.resolved.sourceFiles.get(filePath);
+    const intrinsics = sf === undefined ? [] : collectIntrinsicElements(sf);
     const slice = retrieveSlice({
       files: [filePath],
       resolutions: result.resolved.resolutions,
       findings: result.findings,
+      intrinsics,
     });
     // SC-disjoint: drop any pattern whose SC the floor ALREADY carries, so the
     // advisory only surfaces SCs the floor was SILENT on. The floor block and this

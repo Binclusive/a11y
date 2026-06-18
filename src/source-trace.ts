@@ -350,7 +350,7 @@ function isStaticTextChild(child: ts.JsxChild): boolean {
  * static name and is ignored. Conservative by construction: anything unreadable
  * leaves the result false.
  */
-function rendersStaticNameInChildren(element: ts.JsxElement): boolean {
+export function rendersStaticNameInChildren(element: ts.JsxElement): boolean {
   for (const child of element.children) {
     if (isStaticTextChild(child)) return true;
     if (ts.isJsxElement(child)) {
