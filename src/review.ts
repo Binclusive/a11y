@@ -83,13 +83,6 @@ interface StaticFacts {
   readonly intrinsics: readonly IntrinsicElement[];
 }
 
-/** Parse a `.tsx` file into a SourceFile, or null if it can't be read. */
-function parseTsx(file: string): ts.SourceFile | null {
-  const text = ts.sys.readFile(file);
-  if (text === undefined) return null;
-  return ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-}
-
 /**
  * A per-file, per-line suppressor map plus the JSX-element line index for that
  * file. Built off the GIVEN `ts.SourceFile` so the line numbering is consistent
@@ -129,18 +122,14 @@ function fileFacts(
 async function buildStaticFacts(files: readonly string[]): Promise<StaticFacts> {
   const result = await scan(files);
 
-  // Reuse the parse `scan()` already did (`resolved.sourceFiles`) — one parse per
-  // file per round trip, shared across the enforce-abstentions walk (G4), the
-  // suppressor / jsxLines walk (G3/G2), AND the R4 intrinsics walk. A file absent
-  // from the cache (resolver-skipped / ignored) falls back to a local parse so
-  // coverage is identical to the pre-consolidation parse-per-file loop; both
-  // walks below skip a file only when even that fallback can't read it.
-  const tsx = [...files].filter((p) => p.endsWith(".tsx"));
-  const sourceFiles = new Map<string, ts.SourceFile>();
-  for (const file of tsx) {
-    const sf = result.resolved.sourceFiles.get(file) ?? parseTsx(file);
-    if (sf !== null) sourceFiles.set(file, sf);
-  }
+  // Work over EXACTLY what `scan()` processed — its per-file parse cache, already
+  // filtered by `binclusive.json` ignore globs and read failures. Deriving the file
+  // set from this cache (not the raw input list) shares the one parse across the
+  // enforce-abstentions walk (G4), the suppressor / jsxLines walk (G3/G2), AND the
+  // R4 intrinsics walk, AND keeps all of them in agreement — so an IGNORED file can
+  // never ground a recall pattern through one walk that the others excluded.
+  const sourceFiles = new Map(result.resolved.sourceFiles);
+  const tsx = [...sourceFiles.keys()];
 
   // G4 — abstentions, re-derived from the floor's own enforce pass (same input
   // scan used), over the SHARED parses. Keyed `file -> { "line:sc" }`.
@@ -298,10 +287,11 @@ const INSTRUCTION = [
  */
 async function retrieve(files: readonly string[]): Promise<ReviewRetrieveResult> {
   const result = await scan(files);
-  const tsx = [...files].filter((p) => p.endsWith(".tsx"));
-  // Reuse the parse `scan()` already did (`resolved.sourceFiles`) for EVERY walk
-  // below — no second read/parse anywhere in this round trip.
+  // Work over EXACTLY what `scan()` processed (its parse cache, post binclusive.json
+  // ignore + read failures) for EVERY walk — R3 journey hints, the suppressor map,
+  // and R4 intrinsics — so they agree and an ignored file never grounds a pattern.
   const sourceFiles = result.resolved.sourceFiles;
+  const tsx = [...sourceFiles.keys()];
 
   // R4 — each file's intrinsic (lowercase-tag) elements + their coarse content
   // signal feed the explicit tag→pattern table.
@@ -316,15 +306,13 @@ async function retrieve(files: readonly string[]): Promise<ReviewRetrieveResult>
     intrinsics,
   });
 
-  // Per-file suppressor facts, serialized for the wire (Map/Set -> plain object).
-  // Reuse the shared parse when `scan()` kept one for this file; fall back to a
-  // local parse only for a file absent from the cache (a resolver-skipped file),
-  // so coverage is identical to the pre-consolidation read+parse-per-file loop.
+  // Per-file suppressor facts, serialized for the wire (Map/Set -> plain object),
+  // off the same shared parse the slice used.
   const resolvedHosts = buildResolvedHosts(result.resolved.resolutions);
   const suppressorMap: Record<string, Record<number, readonly string[]>> = {};
   for (const file of tsx) {
-    const sf = sourceFiles.get(file) ?? parseTsx(file);
-    if (sf === null) continue;
+    const sf = sourceFiles.get(file);
+    if (sf == null) continue;
     const facts = fileFacts(sf, resolvedHosts);
     const perLine: Record<number, readonly string[]> = {};
     for (const [line, names] of facts.suppressors) perLine[line] = [...names];
