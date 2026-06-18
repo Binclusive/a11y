@@ -159,6 +159,15 @@ export interface ResolvedComponents {
    * needed. Non-empty signals the cold-scan blind spot: "install deps to trace".
    */
   readonly unresolvedPackages: readonly string[];
+  /**
+   * The parsed `ts.SourceFile` for each SCANNED file (keyed by the path passed
+   * in), built by the walk this resolver already does. Surfaced so a downstream
+   * consumer (R4's `collectIntrinsicElements`, the edit-time hook's recall
+   * whisper) can reuse the parse instead of re-reading + re-parsing the file —
+   * the no-second-parse guarantee the hot hook path needs. A file that couldn't
+   * be read is absent (the resolver `continue`s on a read failure).
+   */
+  readonly sourceFiles: ReadonlyMap<string, ts.SourceFile>;
 }
 
 /** A capitalized JSX name used in a file, with its local-import context. */
@@ -368,10 +377,14 @@ export function resolveComponents(
   // Collect bare package specifiers that are unresolvable on disk AND produced a
   // declare-bucket opaque. Deduplicated; built into `unresolvedPackages` at the end.
   const unresolvedPkgSet = new Set<string>();
+  // Keep each scanned file's parse so a downstream consumer (R4) can reuse it
+  // rather than re-read+re-parse — this is the parse the resolver already does.
+  const sourceFiles = new Map<string, ts.SourceFile>();
 
   for (const filePath of filePaths) {
     const sf = readSourceFile(filePath);
     if (sf === null) continue;
+    sourceFiles.set(filePath, sf);
 
     for (const used of collectUsedComponents(sf)) {
       // Dedupe across files by (name@module) so the report counts each wrapper
@@ -534,5 +547,5 @@ export function resolveComponents(
   };
 
   const unresolvedPackages = [...unresolvedPkgSet].sort();
-  return { map, coverage, resolutions, unresolvedPackages };
+  return { map, coverage, resolutions, unresolvedPackages, sourceFiles };
 }

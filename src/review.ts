@@ -47,6 +47,7 @@ import { resolve } from "node:path";
 import ts from "typescript";
 import { collectTsx } from "./collect";
 import { type Finding, dedupeRecall, scan } from "./core";
+import { type IntrinsicElement, collectIntrinsicElements } from "./intrinsic-elements";
 import {
   type LocatedAbstention,
   type ResolvedHost,
@@ -75,6 +76,11 @@ interface StaticFacts {
   readonly jsxLines: ReadonlyMap<string, ReadonlySet<number>>;
   /** Per-file source text, line-split (1-based access via `[line-1]`) — G2. */
   readonly sourceLines: ReadonlyMap<string, readonly string[]>;
+  /**
+   * The intrinsic (lowercase-tag) elements across all scanned files — R4's input
+   * for the grounding slice. Collected off the SHARED parses (no second parse).
+   */
+  readonly intrinsics: readonly IntrinsicElement[];
 }
 
 /** Parse a `.tsx` file into a SourceFile, or null if it can't be read. */
@@ -156,11 +162,14 @@ async function buildStaticFacts(files: readonly string[]): Promise<StaticFacts> 
   const suppressors = new Map<string, SuppressorMap>();
   const jsxLines = new Map<string, ReadonlySet<number>>();
   const sourceLines = new Map<string, readonly string[]>();
+  // R4 — collect intrinsic elements off the SAME shared parse the gate facts use.
+  const intrinsics: IntrinsicElement[] = [];
   for (const [file, sf] of sourceFiles) {
     const facts = fileFacts(sf, resolvedHosts);
     suppressors.set(file, facts.suppressors);
     jsxLines.set(file, facts.jsxLines);
     sourceLines.set(file, facts.sourceLines);
+    intrinsics.push(...collectIntrinsicElements(sf));
   }
 
   return {
@@ -170,6 +179,7 @@ async function buildStaticFacts(files: readonly string[]): Promise<StaticFacts> 
     abstentions: abstentionsByFile,
     jsxLines,
     sourceLines,
+    intrinsics,
   };
 }
 
@@ -288,10 +298,18 @@ const INSTRUCTION = [
 async function retrieve(files: readonly string[]): Promise<ReviewRetrieveResult> {
   const result = await scan(files);
   const tsx = [...files].filter((p) => p.endsWith(".tsx"));
+  // R4 — reuse the parse `scan()` already did (`resolved.sourceFiles`); no second
+  // read/parse. Each file's intrinsic (lowercase-tag) elements + their coarse
+  // content signal feed the explicit tag→pattern table.
+  const intrinsics: IntrinsicElement[] = [];
+  for (const sf of result.resolved.sourceFiles.values()) {
+    intrinsics.push(...collectIntrinsicElements(sf));
+  }
   const slice = retrieveSlice({
     files: tsx,
     resolutions: result.resolved.resolutions,
     findings: result.findings,
+    intrinsics,
   });
 
   // Per-file suppressor facts, serialized for the wire (Map/Set -> plain object).
@@ -454,6 +472,7 @@ async function verify(
     files: tsx,
     resolutions: facts.resolutions,
     findings: facts.findings,
+    intrinsics: facts.intrinsics,
   });
 
   const { survivors, dropped } = gate(candidates, slice.patterns, facts);
