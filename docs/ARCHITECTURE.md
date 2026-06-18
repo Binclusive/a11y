@@ -66,7 +66,7 @@ what happens, in order, with the real files and functions.
         ├─ 2c. PASS ONE — structural lint                        [core.ts → buildESLint]
         │        run eslint-plugin-jsx-a11y over the resolved map (SCORED_RULES)
         │        each hit → normalize + map rule→WCAG SC          [wcag-map.ts → wcagForRuleId]
-        │        drop false positives on injected / aria-hidden lines  [trans-suppress.ts]
+        │        drop false positives on injected / aria-hidden lines  [suppression-ranges.ts]
         │
         ├─ 2d. PASS TWO — call-site content check                [enforce.ts → enforceContent]
         │        recognize the control TYPE at the call site (classify):
@@ -208,7 +208,7 @@ The deterministic spine. Catches the *absence* of a name/alt. Owns the exit code
 | `core.ts` | **The conductor — `scan()`.** Runs resolve, then pass one (jsx-a11y), then pass two (enforce), dedupes, returns `{ findings, coverage, … , recall }`. The `recall` field is the quarantine slot — `scan()` itself never fills it. Start here to read the system. |
 | `enforce.ts` | **Pass two.** The corpus-driven call-site content check + every conservatism guard. The biggest single file — this is the floor's recall win and the false-positive discipline. Exports `buildResolvedHosts` + `enforceContentWithAbstentions`, which the recall layer reuses as G3/G4 inputs. |
 | `suppressors.ts` | **The floor's shared suppressor predicates** (is the `type` exempt? is it hidden? is it a label/name-injecting container?), lifted into their own module (ADR 0003) so the recall layer can reuse them *unchanged* as a precision pre-filter. |
-| `trans-suppress.ts` | Computes the line ranges where a content finding is a false positive (runtime-injected children like `<Trans>`, or `aria-hidden`), so neither pass fires there. |
+| `suppression-ranges.ts` | Computes the line ranges where a content finding is a false positive (runtime-injected children like `<Trans>`, or `aria-hidden`), so neither pass fires there. |
 | `wcag-map.ts` | Maps each jsx-a11y rule id → its WCAG SC. The bridge that lets a finding be matched to the corpus. |
 | `collect-dom.ts` | **The second producer.** Renders a URL in real Chromium (Playwright) and runs axe-core against the live DOM — for source-less / non-React pages. Reads the WCAG SC off axe `tags` (so no rule-id crosswalk), anchors each finding on a CSS selector, tags it `provenance: "axe"`, then hands off to the same `enrichAll`. |
 
@@ -318,7 +318,7 @@ by hand, failing loud on a broken shape. No `as any` smuggling bad data inward.
 
 **The directory tree, annotated:**
 ```
-packages/a11y-checker/
+<repo root>                       this repo (a11y-checker-plugin); → packages/a11y-checker/ after the #1646 migration
 ├── src/
 │   ├── cli.ts                 the command + the report      ← delivery
 │   ├── core.ts                scan() — THE CONDUCTOR        ← read this first
@@ -328,7 +328,7 @@ packages/a11y-checker/
 │   ├── workspace-resolve.ts   /  tsconfig-aliases.ts  /  imports-resolve.ts   ← job 1 (alias resolvers)
 │   ├── enforce.ts             pass two + the FP guards      ← job 2 (the floor's recall win)
 │   ├── suppressors.ts         shared suppressor predicates  ← job 2 (reused by recall as G3/G4)
-│   ├── trans-suppress.ts      false-positive line ranges    ← job 2
+│   ├── suppression-ranges.ts      false-positive line ranges    ← job 2
 │   ├── wcag-map.ts            rule id → WCAG SC             ← job 2 (bridge)
 │   ├── collect-dom.ts         render URL + axe-core         ← job 2 (the second producer)
 │   ├── review.ts              review_a11y + G0–G6 gates     ← job 2b (the recall shell)
