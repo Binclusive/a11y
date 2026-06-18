@@ -1,13 +1,15 @@
 # RFC: Corpus Regeneration Flywheel (the compounding layer)
 
-Status: **Design — v3, revised after a second review** · Date: 2026-06-18
+Status: **Design — v4, `avt_*` contract resolved** · Date: 2026-06-18
 Successor to `docs/rfc-phase1-detection.md` (the recall layer reads the corpus;
 this makes the corpus *grow itself*). Tracks epic Binclusive/monorepo#1645,
-blocked on the migration epic #1646. Revised twice: a first 3-agent review folded
-B1–B3 (see **Review log**); a second grill + 3 skeptical verifiers (2026-06-18)
-folded the **detection-layer coupling**, the **containment metric**, the **aging
-story**, **incremental clustering**, and surfaced the `avt_*` id contract as a
-blocking unknown — and corrected two over-reaches the grill made (see end).
+blocked on the migration epic #1646. Revised three times: a first 3-agent review
+folded B1–B3; a second grill + 3 skeptical verifiers folded the **detection-layer
+coupling**, the **containment metric**, the **aging story**, **incremental
+clustering**, and surfaced the `avt_*` id contract as a blocking unknown; a third
+investigation (2026-06-18) **resolved that unknown — `avt_*` is PER-OCCURRENCE**,
+making **defect-canonicalization a required F1 prerequisite** (the matcher keys on
+a canonical content-key, not raw `avt_*`). See **Review log**.
 
 > Close the loop: cloud audits → new findings → re-cluster → corpus grows →
 > sharper checker + better-grounded agents. The whole design turns on one
@@ -110,16 +112,42 @@ containment = |old ∩ new| / |old|     # fraction of the BLESSED findings the c
   (no confident match, or a near-tie between two old twins) the matcher errs to
   **quarantine-retain**, whose worst case the invariant already tolerates. F1 must
   unit-test the boundary directly, including the split/merge and near-tie cases.
+- **The sets are CANONICAL per-defect keys, NOT raw `avt_*`** (resolved below):
+  `avt_*` is per-occurrence, so everywhere this section says "finding-set" /
+  "blessed findings" it means the canonicalized content-keys the F1 canonicalizer
+  emits. The containment math is identical; only the element identity changes.
 
-> **Blocking unknown — `avt_*` id stability.** The whole matcher rests on the
-> `avt_*` ids being **stable per logical defect** (a re-audit of the same site
-> yields the same ids). This repo establishes only that they are *opaque*; their
-> generation lifecycle lives upstream (`b8e` / monorepo). **If `avt_*` is
-> per-occurrence** (a fresh id each scan), a re-audit mints a near-disjoint
-> finding-set → the matcher reads stable real-world facts as all-new → mass
-> false-quarantine, and the keystone is void. **Cite the upstream id contract and
-> confirm per-defect stability before building F1.** If it is per-occurrence, F1
-> needs a defect-canonicalization step *before* the matcher.
+> **Resolved (2026-06-18) — `avt_*` is PER-OCCURRENCE; defect-canonicalization is
+> now a REQUIRED F1 prerequisite, not an "if".** Traced in the monorepo: `avt_*`
+> is a random **ULID minted at row creation** (`services/auditer/src/drizzle/
+> schema_pg.ts:704` → `id("avt")` → `ulid()` from `ulidx`), and on re-audit
+> findings are **INSERTed fresh, never upserted** — the agentic ingest inserts a
+> new row on BOTH the "new" AND "duplicate" verdicts (`audit-agents/src/
+> storekeeper.ts:348, 372`); a duplicate gets a *new* id plus a `duplicateOfID`
+> pointer to the original, not the original's id reused. (The docstring's intended
+> `lastSeenAt` bump on a duplicate is **dead code** — the
+> `updateAgenticTicketLastSeen` RPC is never called.) So a re-audit yields a
+> near-disjoint `avt_*` set; raw-id overlap would read stable defects as all-new →
+> mass false-quarantine, and the keystone would be void.
+>
+> **F1 MUST canonicalize each `avt_*` to a stable per-defect key BEFORE the
+> matcher**, by either: **(a)** a content hash over a **delimiter-safe
+> serialization** of `(org, project, url, element, wcag)` — length-prefixed or
+> JSON-encoded, **NOT bare string concatenation** (which collides: `a|bc` ==
+> `ab|c`). It's computed server-side over already-private audit rows; if the key
+> ever crosses the verifier's egress boundary (it shouldn't — see *Privacy*), use a
+> **keyed hash** (HMAC with a server secret) so `url`/`element` can't be confirmed
+> by offline guessing. Prior art: the *older* non-agentic `violation` table already
+> keys on a `.unique()` `violationHash` (`schema_pg.ts:274`); the agentic table
+> dropped that pattern for the random ULID — or **(b)** follow the `duplicateOfID`
+> chain to its root to collapse a defect's occurrences into one canonical id. The
+> containment matcher keys on those canonical keys, never raw `avt_*`.
+>
+> **Cleaner alternative — fix it upstream.** Make the agentic ticket table stable
+> at the source (wire the already-intended `lastSeenAt` reuse, or add a
+> `violationHash` like the old table). Then the flywheel can key on `avt_*`
+> directly *and* the live duplicate-tracking bug is fixed. Worth a `monorepo`
+> issue independent of the flywheel.
 
 ## Why re-cluster churn is safe (for the engine) — and where it ISN'T (detection)
 
@@ -180,11 +208,14 @@ still monotonic-with-human):
   a correct default) generates **no new findings** → matches no candidate → is
   retained as last-good **forever** → the checker flags a non-problem and the
   report ships a fix for it. Nothing in the current design can even *notice* this.
-  Add an absence signal: a blessed pattern whose `avt_*` ids fail to reappear
-  across **M consecutive regenerations over a growing corpus** is evidence the
-  world moved → route it to a **human retirement queue** (symmetric to quarantine,
-  opposite polarity). Retirement still needs a human — the invariant holds — but
-  now there is a mechanism that surfaces the candidate.
+  Add an absence signal: a blessed pattern whose **canonical content-keys** (NOT
+  raw `avt_*`, which never recurs) fail to reappear across **M consecutive
+  regenerations over a growing corpus** (M a configurable parameter; default ~3)
+  is evidence the world moved → route it to a
+  **human retirement queue** (symmetric to quarantine, opposite polarity).
+  Retirement still needs a human — the invariant holds — but now there is a
+  mechanism that surfaces the candidate. (This signal is *only meaningful* once
+  canonicalization exists — another reason it's an F1 prerequisite.)
 
 - **Re-verification of the retained substrate.** Monotonic-retain never re-runs a
   gate on a retained pattern, so patterns blessed **before F3** (by the weaker
@@ -198,7 +229,7 @@ still monotonic-with-human):
 
 | # | Check | Kind | Status |
 |---|---|---|---|
-| ② identity | **Containment** match on `avt_*` sets; split/merge → quarantine | deterministic | **new (v3: containment, not Jaccard)** |
+| ② identity | **Containment** match on **canonical content-key** sets (F1 canonicalizer, NOT raw `avt_*`); split/merge → quarantine | deterministic | **new (v3: containment; v4: canonical keys)** |
 | ② k≥3 | `MIN_ORGS=3` distinct-org floor (`src/distill/distill.ts`) | deterministic | **exists** |
 | ② drop-ledger Δ | `belowK` / `unclassified` counts vs last run (`ledger-*.json`) | deterministic | **exists** |
 | ② matrix Δ | `matrix:check` over 31 pinned repos — SC-coverage regression only; byte-blind to corpus content | deterministic | **exists (narrow)** |
@@ -259,8 +290,9 @@ and `demo/**/raw-*.txt`. Still required before any **unattended** phase:
    quiet period can't silently freeze the corpus against a changing world.
    Replace the vague "when a human is the bottleneck" F3/F4 unblock with a
    **quantified** new-org-cadence number (reviews/week), named in F4.
-2. **Cluster identity = asymmetric containment (≥0.7), quarantine-on-ambiguity**,
-   split/merge → quarantine-retain. Pending the `avt_*` stability contract.
+2. **Cluster identity = asymmetric containment (≥0.7) over CANONICAL content-keys**
+   (NOT raw `avt_*` — it's per-occurrence), quarantine-on-ambiguity, split/merge →
+   quarantine-retain. The canonicalizer (F1.0) is the prerequisite, not pending.
 3. **Incremental / delta clustering is a first-class requirement (cost).** What is
    re-clustered is the **raw findings** (~635 today, growing monotonically), not
    the ~51 distilled patterns — so full re-cluster per new-org trigger is
@@ -272,10 +304,11 @@ and `demo/**/raw-*.txt`. Still required before any **unattended** phase:
    sweep (above).
 5. **corpus-baseline tolerances = monotonic hard floor + bounded new-churn.** No
    blessed cluster disappears or drops tier (structural, via retain-last-good).
-   Coverage = **distinct `avt_*` ids in the shipped union, deduped** (summing
-   per-cluster counts double-counts retained-old + new). Bounded tolerance applies
-   only to net-new churn; re-bless the baseline in the same PR as a deliberate
-   corpus change.
+   Coverage = **distinct CANONICAL content-keys in the shipped union, deduped**
+   (raw `avt_*` would *over*-count — the same defect re-audited mints a fresh id,
+   so a per-`avt_*` tally inflates coverage every audit; the canonical key is what
+   makes "distinct defects covered" honest). Bounded tolerance applies only to
+   net-new churn; re-bless the baseline in the same PR as a deliberate corpus change.
 6. **Detection coupling in the gate.** Recall cert re-run in ②; `eligibleToFlag`
    reads a live tier. A corpus change that moves certified detection re-blesses
    the recall certificate in the same PR.
@@ -293,12 +326,21 @@ and `demo/**/raw-*.txt`. Still required before any **unattended** phase:
 1. **F0** — corpus-baseline format + `corpus:baseline` / `corpus:check` (analog of
    `matrix:baseline`/`matrix:check`; neither exists yet) **and the recall-cert
    re-run wired into the gate**. *No model.*
-2. **F1** — the **containment** identity matcher (split/merge detection,
-   quarantine-on-ambiguity) + per-cluster provenance (`blessedByBatch`,
-   `verifyStatus`) + retain-last-good merge + the **live-tier `eligibleToFlag`**
-   fix. **Unit-test the monotonic invariant directly, including split/merge and the
-   containment boundary.** *Gated on the `avt_*` stability contract.* *No model.*
-3. **F2** — make the clustering pipeline (`extract-for-clustering` → cluster →
+2. **F1.0 — the defect canonicalizer (NEW prerequisite, v4).** `avt_*` is
+   per-occurrence (resolved), so before the matcher can run, map each `avt_*` row
+   to a stable per-defect key: a **delimiter-safe** content hash of
+   `(org, project, url, element, wcag)` (see the canonicalizer note in *Cluster
+   identity* for the serialization + keyed-hash caveat; mirrors the old `violation`
+   table's `violationHash`) or the `duplicateOfID` chain root. Unit-test that two
+   audits of the same defect collapse to ONE key and two distinct defects don't
+   collide. *Or* land the upstream fix (stable
+   `avt_*`) and make F1.0 a pass-through. *No model.*
+3. **F1 — the matcher.** The **containment** identity matcher over the F1.0 canonical
+   keys (split/merge detection, quarantine-on-ambiguity) + per-cluster provenance
+   (`blessedByBatch`, `verifyStatus`) + retain-last-good merge + the **live-tier
+   `eligibleToFlag`** fix. **Unit-test the monotonic invariant directly, including
+   split/merge and the containment boundary.** *No model.*
+4. **F2** — make the clustering pipeline (`extract-for-clustering` → cluster →
    `run-distill`) callable end-to-end. **This wires in the LLM clustering
    judgment** — it is *not* "deterministic, normal CI." It must **not auto-commit
    cluster files**; output stays human-reviewed until F3 gates it. **Add a
@@ -308,17 +350,20 @@ and `demo/**/raw-*.txt`. Still required before any **unattended** phase:
    human-review covers safety, not throughput).
 
 **Deferred — the autonomy (gated on Phase 1 detection live + measured cadence):**
-4. **F3** — the verifier (unanimous / author-from-findings / fix-SC refute) + the
+5. **F3** — the verifier (unanimous / author-from-findings / fix-SC refute) + the
    backfill re-verification sweep + quarantine/retirement queues + the egress
    policy. The model enters here.
-5. **F4** — the quantified new-signal + wall-clock trigger, incremental clustering,
+6. **F4** — the quantified new-signal + wall-clock trigger, incremental clustering,
    and the nightly job; full loop.
 
 ## Dependencies & sequencing
 
 - Blocked on #1646 (engine + corpus must compose into `b8e` first).
-- **`avt_*` id-stability contract** (per-defect, not per-occurrence) — a blocking
-  unknown for F1; confirm against the upstream audit/export system.
+- **`avt_*` id-stability contract — RESOLVED (2026-06-18): per-occurrence.** No
+  longer a blocking unknown; it dictates F1.0 (the defect canonicalizer) as a hard
+  prerequisite to the matcher. Cleanest path is the upstream fix (stable `avt_*` at
+  the source — wire the intended `lastSeenAt` reuse or add a `violationHash`),
+  which also fixes the live duplicate-tracking bug; worth a `monorepo` issue.
 - **Gated behind Phase 1 detection** — this is the *ingestion* link; growth shows
   value only once detection consumes a bigger corpus. (Detection already retrieves
   ~100 patterns over the 51 shipped — not a thin consumer; the second review's
@@ -368,3 +413,20 @@ and `demo/**/raw-*.txt`. Still required before any **unattended** phase:
   from a structural kill to a metric choice (split/merge already benched the growth
   case safely; containment removes the spurious quarantine). "Deduped coverage hides
   ghosts" was refuted (split detection catches the duplicate lineage upstream).
+
+**Third investigation (2026-06-18, monorepo trace — code-verified):**
+- **`avt_*` blocking unknown → RESOLVED: per-occurrence.** `avt_*` is a random ULID
+  minted at row creation (`auditer/.../schema_pg.ts:704` → `id("avt")` → `ulid()`);
+  re-audits INSERT fresh, never upsert — the agentic ingest inserts on BOTH the
+  "new" and "duplicate" verdicts (`audit-agents/.../storekeeper.ts:348,372`), a
+  duplicate getting a new id + a `duplicateOfID` pointer, not the original id. So
+  raw-`avt_*` overlap reads stable defects as all-new.
+- **Folded:** the containment matcher, the absence-retirement signal, and the
+  coverage count now all key on a **canonical content-key**, not raw `avt_*`; a
+  new **F1.0 canonicalizer** (a delimiter-safe content hash of
+  `(org, project, url, element, wcag)`, prior art `violationHash`
+  `schema_pg.ts:274`, or the `duplicateOfID` root) is a hard prerequisite to F1's
+  matcher.
+- **Upstream bug found:** the "duplicate" verdict's intended `lastSeenAt` bump is
+  dead code (`updateAgenticTicketLastSeen` never called). Fixing `avt_*` stability
+  at the source would moot F1.0 *and* fix this — recommended as a `monorepo` issue.
