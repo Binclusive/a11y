@@ -9,7 +9,7 @@ This harness is **separate from `matrix:check` by construction**: `matrix:check`
 is a count-snapshot gate for the static *floor*; `recall:eval` is a precision-
 floor gate for the recall *ceiling*. They never share a baseline.
 
-## Certified grounded run (2026-06-17) — PASS ✅
+## Certified grounded run (2026-06-18, incl. R4 image-alt) — PASS ✅
 
 3 independent **blind** grounding passes (model nominations produced WITHOUT
 sight of the labels — see `certification/` and "The blind grounded run" below),
@@ -17,14 +17,16 @@ scored through the real gate stack and **pooled**:
 
 | Metric | Value |
 |---|---|
-| Pooled precision (point) | **1.000** — 78/78 surfaced findings correct |
-| Precision **Wilson 95% lower bound** | **0.9531** → **clears the 0.95 gate** |
-| False positives on the 15 hard decoys | **0** (Tooltip / label-ancestor / resolved toggle / renders-own-name / floor-caught / self-managing antd all stayed silent) |
-| Per-pass recall | 27/28, 24/28, 27/28 (misses are abstentions on borderline phrases — never FPs) |
+| Pooled precision (point) | **1.000** — 93/93 surfaced findings correct |
+| Precision **Wilson 95% lower bound** | **0.9603** → **clears the 0.95 gate** |
+| False positives on the 19 hard decoys | **0** (Tooltip / label-ancestor / resolved toggle / renders-own-name / floor-caught / self-managing antd / good-alt / decorative `alt=""` / no-alt-floor-caught / mixed icon-button+img+a all stayed silent) |
+| Per-pass recall | 32/37, 31/37, 30/37 (misses are abstentions on borderline phrases — never FPs) |
 
 Read: across three independent blind passes the layer surfaced **zero** wrong
-findings and leaked **zero** decoys; the pooled sample (78 all-correct) is large
-enough for the Wilson lower bound to certify ≥0.95.
+findings and leaked **zero** decoys; the pooled sample (93 all-correct) is large
+enough for the Wilson lower bound to certify ≥0.95. (The prior Phase-1 run —
+before the R4 content-inspection retriever added image-alt + intrinsic reach —
+was 78/78, Wilson 0.9531; R4 grew it to the above.)
 
 This certificate is **enforced deterministically by
 `test/recall-certification.test.ts` in `pnpm test`** (it re-scores the committed
@@ -33,16 +35,21 @@ needed**). There is no nightly or CI job that re-runs the agents — the committ
 artifacts ARE the certificate, and the test re-derives the score from them.
 
 **Honest scope of this certificate.** It certifies the patterns that are honestly
-fixture-able through a *trusted* design-system component — the ones where the app
-pours a bad **name** into a shell the component can't fix:
-`2.4.4-generic-link-text` and `2.4.4-noisy-or-wrong-name`. The
-`selected/current-state-missing`, keyboard, focus, and heading patterns are **not**
-in this certificate: trusted tab/toggle/dialog components *self-manage* that state
-at runtime (antd `<Tabs>` auto-selects its first pane and renders `aria-selected`,
-so a static selected-state nomination on it is a false positive — it now lives as
-the `antd-tabs-self-managed` hard negative), and a single snippet can't show a
-heading skip. Those are real-in-the-wild failures the retriever cannot yet ground
-honestly; certifying them is deferred, not faked.
+fixture-able — where the app pours bad **content** into a shell that can't fix it,
+on EITHER a trusted design-system component OR a raw intrinsic element (the R4
+content-inspection retriever, `src/intrinsic-elements.ts`, made the intrinsic
+surface reachable). Three patterns: `2.4.4-generic-link-text`,
+`2.4.4-noisy-or-wrong-name` (bad link text/name, on `<Link>` and raw `<a>`), and
+`1.1.1-filename-or-generic-alt` (an `<img>`/`<Image>` whose `alt` is a filename /
+placeholder). The `selected/current-state-missing`, keyboard, focus, and heading
+patterns are **not** in this certificate: trusted tab/toggle/dialog components
+*self-manage* that state at runtime (antd `<Tabs>` auto-selects its first pane and
+renders `aria-selected`, so a static selected-state nomination on it is a false
+positive — it lives as the `antd-tabs-self-managed` hard negative), and a single
+snippet can't show a heading skip. Those are real-in-the-wild failures the
+retriever cannot yet ground honestly; certifying them is deferred, not faked. This
+is the documented **certified ceiling** — see `docs/ARCHITECTURE.md` §3 for the
+three-tier detection scope (floor → certified auto-flag → gated-agent).
 
 ### Reproduce
 
@@ -126,19 +133,19 @@ patternId, or the author comments):
 3. `score` — map each pass back to its case, run the REAL `runEval` per pass, and
    **pool** all surfaced findings across the 3 passes for one Wilson lower bound.
 
-**Why pool 3 passes:** a single pass over 28 positives certifies only ≈0.85 (the
+**Why pool 3 passes:** a single pass over ~37 positives certifies only ≈0.88 (the
 Wilson bound is conservative on a small sample). Three *independent* model runs are
 three genuine draws of "when the layer surfaces a finding, is it right?"; pooling
-them (≈78 surfaced) tightens the bound enough to certify ≥0.95 when precision
+them (≈93 surfaced) tightens the bound enough to certify ≥0.95 when precision
 really is ~1.0. A lucky-but-tiny run cannot pass.
 
 **Honest caveat — the passes are correlated.** The 3 passes ground over the SAME
-fixtures, so the surfaced findings are NOT independent: pooled n=78 is **not 78
-i.i.d. samples**, and 0.953 must be read as a **pooled lower bound under
+fixtures, so the surfaced findings are NOT independent: pooled n=93 is **not 93
+i.i.d. samples**, and 0.960 must be read as a **pooled lower bound under
 correlation**, not a textbook binomial bound. What makes the certificate
 trustworthy is the **trio of signals together**, not the Wilson number alone:
 
-1. **Point precision 1.0** — 78/78 surfaced findings correct (zero wrong findings
+1. **Point precision 1.0** — 93/93 surfaced findings correct (zero wrong findings
    across all three passes).
 2. **Zero decoy leaks** — across every negative × 3 passes, nothing surfaced on a
    single hard decoy.
