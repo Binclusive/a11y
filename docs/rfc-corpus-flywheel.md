@@ -128,7 +128,9 @@ containment = |old ∩ new| / |old|     # fraction of the BLESSED findings the c
   and dedups by id — so re-clustering changes only display text *for the engine's
   enrichment*.
 - **But the recall/detection layer is NOT SC-keyed and is NOT churn-safe.** It
-  binds to hand-authored **slugs** (`CERTIFIED_RECALL_PATTERN_IDS` in
+  binds to hand-authored **slugs** — in this codebase the pattern *id* IS the
+  slug, the same non-canonical string `2.4.4-generic-link-text`
+  (`CERTIFIED_RECALL_PATTERN_IDS` in
   `src/retrieve.ts`) and to the per-pattern **frequency tier**. Churn there can
   silently invalidate certified detection — which is why the recall cert is now a
   gate and `eligibleToFlag` must read a live tier (next section).
@@ -201,7 +203,7 @@ still monotonic-with-human):
 | ② drop-ledger Δ | `belowK` / `unclassified` counts vs last run (`ledger-*.json`) | deterministic | **exists** |
 | ② matrix Δ | `matrix:check` over 31 pinned repos — SC-coverage regression only; byte-blind to corpus content | deterministic | **exists (narrow)** |
 | ② corpus-baseline Δ | per-SC pattern count, distinct findings in the shipped union, ledger totals | deterministic | **new** |
-| ② **recall-cert** | re-run `recall-certification.test.ts`: certified-slug↔corpus binding, flaggable tier, Wilson ≥0.95 | deterministic | **new (v3)** |
+| ② **recall-cert** | re-run `test/recall-certification.test.ts`: certified-id↔corpus binding, flaggable tier, Wilson ≥0.95 | deterministic | **new (v3)** |
 | ③ verify | unanimous skeptics refute shape + fix/SC mapping | model | **new, deferred (F3)** |
 
 ## Failure modes → guards
