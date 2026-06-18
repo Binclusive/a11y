@@ -54,11 +54,7 @@ import {
   buildResolvedHosts,
   enforceContentWithAbstentions,
 } from "./enforce";
-import {
-  type ComponentResolution,
-  collectUsedComponents,
-  jsxKeyFor,
-} from "./resolve-components";
+import { type ComponentResolution, collectUsedComponents } from "./resolve-components";
 import { type RetrievedPattern, retrieveSlice } from "./retrieve";
 import { type SuppressorMap, buildSuppressorMap } from "./suppressor-map";
 
@@ -179,12 +175,15 @@ async function buildStaticFacts(files: readonly string[]): Promise<StaticFacts> 
   // PER-FILE slice scoping (G1 vocabulary leak fix): resolutions are GLOBALLY
   // deduped by `name@module`, so a resolution carries no file home. Attribute each
   // to the files that actually USE it by re-walking each file's already-cached
-  // parse (`collectUsedComponents`, pure) and matching on the jsx-a11y key — the
-  // same key the resolver maps on. R1's only inputs are a resolution's name/host
-  // tokens, so a name-keyed attribution is exactly the per-file R1 universe.
+  // parse (`collectUsedComponents`, pure) and matching on the FULL `name@module`
+  // identity — NOT a collapsed jsx-a11y key, which merges `Foo.Member`/`Bar.Member`
+  // and drops the module, so a same-named wrapper imported from a different module
+  // in another file would be cross-attributed. `ComponentResolution.name ===
+  // UsedComponent.local` (both the raw JSX name) and both carry `.module`, so the
+  // key matches a file's own usage exactly and never a sibling's.
   const resolutionsByKey = new Map<string, ComponentResolution[]>();
   for (const r of result.resolved.resolutions) {
-    const key = jsxKeyFor(r.name);
+    const key = `${r.name}@${r.module}`;
     const bucket = resolutionsByKey.get(key);
     if (bucket === undefined) resolutionsByKey.set(key, [r]);
     else bucket.push(r);
@@ -218,7 +217,7 @@ async function buildStaticFacts(files: readonly string[]): Promise<StaticFacts> 
     // for each wrapper this file uses (a file may use the same wrapper as another;
     // the resolution is shared — correct, the host is the same). Findings: this
     // file's own. Intrinsics: this file's own.
-    const usedKeys = new Set(collectUsedComponents(sf).map((u) => jsxKeyFor(u.local)));
+    const usedKeys = new Set(collectUsedComponents(sf).map((u) => `${u.local}@${u.module}`));
     const fileResolutions: ComponentResolution[] = [];
     for (const key of usedKeys) {
       const matched = resolutionsByKey.get(key);
