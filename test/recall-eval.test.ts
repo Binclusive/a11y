@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CASES, type LabelledCase } from "../experiments/corpus-recall/case-set";
 import {
@@ -108,22 +109,23 @@ describe("recall:eval — scoring synthetic nominations through the real gate st
     expect(c?.surfaced[0]?.correct).toBe(true);
   });
 
-  it("all six positives surface their expected finding (recall = 1.0)", async () => {
-    const noms: Nominations = {
-      "positive/generic-link-text": [correctNomination("positive/generic-link-text", "<Link")],
-      "positive/learn-more-link": [correctNomination("positive/learn-more-link", "<Link")],
-      "positive/noisy-link-name": [correctNomination("positive/noisy-link-name", "<Link")],
-      "positive/raw-anchor-noisy-name": [correctNomination("positive/raw-anchor-noisy-name", "<Link")],
-      "positive/tab-selected-state-missing": [
-        correctNomination("positive/tab-selected-state-missing", "<Tab"),
-      ],
-      "positive/tab-current-item-missing": [
-        correctNomination("positive/tab-current-item-missing", "<Tab"),
-      ],
-    };
+  it("EVERY positive surfaces its expected finding under a correct nomination (recall = 1.0)", async () => {
+    // Data-driven over CASES so it can't rot as the fixture set grows: for each
+    // positive, nominate its expected (patternId, line) with the verbatim trimmed
+    // source line as the G2 quote. This doubles as a structural guard that every
+    // positive fixture genuinely GROUNDS (G1) and clears G0-G6 — if any new
+    // positive is non-retrievable or self-suppressed, its catch drops here.
+    const positives = CASES.filter((c) => c.kind === "positive");
+    const noms: Nominations = {};
+    for (const c of positives) {
+      if (c.kind !== "positive") continue;
+      const e = c.expect[0]!;
+      const quote = (readFileSync(c.file, "utf8").split("\n")[e.line - 1] ?? "").trim();
+      noms[c.id] = [correctNomination(c.id, quote)];
+    }
     const r = await runEval(noms);
     expect(r.recall).toBe(1);
-    expect(r.caughtTotal).toBe(6);
+    expect(r.caughtTotal).toBe(positives.length);
     // Every surfaced finding is correct ⇒ point precision 1.0; no FP leaks.
     expect(r.precision).toBe(1);
     expect(r.surfacedCorrect).toBe(r.surfacedTotal);
@@ -235,11 +237,13 @@ describe("recall:eval — scoring synthetic nominations through the real gate st
 });
 
 describe("recall:eval — the case set", () => {
-  it("has ~6 positive and ~6 hard-negative fixtures", () => {
+  it("carries enough positives + hard negatives to bound precision at 0.95", () => {
+    // The certification set: ~24+ honest positives (so a 3-pass pooled, all-correct
+    // run can clear the Wilson 0.95 lower bound) and a hard-negative precision spine.
     const positives = CASES.filter((c) => c.kind === "positive");
     const negatives = CASES.filter((c) => c.kind === "negative");
-    expect(positives.length).toBeGreaterThanOrEqual(6);
-    expect(negatives.length).toBeGreaterThanOrEqual(6);
+    expect(positives.length).toBeGreaterThanOrEqual(24);
+    expect(negatives.length).toBeGreaterThanOrEqual(10);
   });
 
   it("every positive expects at least one (patternId, line, wcag) finding", () => {

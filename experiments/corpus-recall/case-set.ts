@@ -110,6 +110,43 @@ export const CASES: readonly LabelledCase[] = [
     { patternId: "4.1.2-selected-or-current-state-missing", line: 10, wcag: ["4.1.2"] },
   ]),
 
+  // POSITIVE (Phase-1 certification expansion) — honest, RETRIEVABLE, floor-missed
+  // variants of the only three patterns a trusted design-system component can
+  // genuinely fail on (the app pours bad CONTENT/STATE into a shell the component
+  // can't fix). Each verified end-to-end: grounds via R1, floor-clean, survives the
+  // G0-G6 verify stack on a correct nomination. Keyboard/focus/heading/no-name
+  // patterns are deliberately ABSENT — trusted components handle those, or the floor
+  // already catches them, so they are not honest floor-missed positives.
+  //   generic / non-descriptive link text (present name, useless out of context):
+  positive("link-read-more", [{ patternId: "2.4.4-generic-link-text", line: 8, wcag: ["2.4.4"] }]),
+  positive("link-this-link", [{ patternId: "2.4.4-generic-link-text", line: 8, wcag: ["2.4.4"] }]),
+  positive("link-details", [{ patternId: "2.4.4-generic-link-text", line: 8, wcag: ["2.4.4"] }]),
+  positive("link-more-info", [{ patternId: "2.4.4-generic-link-text", line: 8, wcag: ["2.4.4"] }]),
+  positive("link-here-mui", [{ patternId: "2.4.4-generic-link-text", line: 8, wcag: ["2.4.4"] }]),
+  positive("link-click-here-router", [{ patternId: "2.4.4-generic-link-text", line: 8, wcag: ["2.4.4"] }]),
+  positive("link-go-next", [{ patternId: "2.4.4-generic-link-text", line: 8, wcag: ["2.4.4"] }]),
+  positive("link-learn-more-chakra", [{ patternId: "2.4.4-generic-link-text", line: 8, wcag: ["2.4.4"] }]),
+  positive("link-click-mui", [{ patternId: "2.4.4-generic-link-text", line: 8, wcag: ["2.4.4"] }]),
+  positive("link-read-more-router", [{ patternId: "2.4.4-generic-link-text", line: 8, wcag: ["2.4.4"] }]),
+  //   noisy / polluted link name (URL, path, filename, SKU, breadcrumb, "undefined"):
+  positive("noisy-cdn-link", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 10, wcag: ["2.4.4"] }]),
+  positive("noisy-filename-link", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 10, wcag: ["2.4.4"] }]),
+  positive("noisy-https-url-link", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 10, wcag: ["2.4.4"] }]),
+  positive("noisy-querystring-link", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 10, wcag: ["2.4.4"] }]),
+  positive("noisy-report-filename-link", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 10, wcag: ["2.4.4"] }]),
+  positive("noisy-sku-link", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 9, wcag: ["2.4.4"] }]),
+  positive("noisy-breadcrumb-link", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 10, wcag: ["2.4.4"] }]),
+  positive("noisy-undefined-link", [{ patternId: "2.4.4-noisy-or-wrong-name", line: 9, wcag: ["2.4.4"] }]),
+  //   named tab/toggle/nav item with NO selected/current state exposed:
+  positive("toggle-button-state-missing", [{ patternId: "4.1.2-selected-or-current-state-missing", line: 8, wcag: ["4.1.2"] }]),
+  positive("chakra-tab-state-missing", [{ patternId: "4.1.2-selected-or-current-state-missing", line: 8, wcag: ["4.1.2"] }]),
+  positive("mantine-tab-state-missing", [{ patternId: "4.1.2-selected-or-current-state-missing", line: 10, wcag: ["4.1.2"] }]),
+  positive("mui-tab-group-state-missing", [{ patternId: "4.1.2-selected-or-current-state-missing", line: 11, wcag: ["4.1.2"] }]),
+  positive("antd-tab-state-missing", [{ patternId: "4.1.2-selected-or-current-state-missing", line: 11, wcag: ["4.1.2"] }]),
+  positive("menuitem-nav-state-missing", [{ patternId: "4.1.2-selected-or-current-state-missing", line: 11, wcag: ["4.1.2"] }]),
+  positive("toggle-button-group-state-missing", [{ patternId: "4.1.2-selected-or-current-state-missing", line: 11, wcag: ["4.1.2"] }]),
+  positive("chakra-tab-list-state-missing", [{ patternId: "4.1.2-selected-or-current-state-missing", line: 11, wcag: ["4.1.2"] }]),
+
   // NEGATIVE — the precision spine (same components as the positives).
   negative("tooltip-titled-icon-button"), // G3: name-injecting-wrapper on the inner IconButton.
   negative("form-label-wrapped-select"), // G3: label-ancestor on the wrapped Select.
@@ -124,4 +161,12 @@ export const CASES: readonly LabelledCase[] = [
   // control that renders its own name (G3 `renders-own-name`).
   negative("radix-toggle-checkbox"), // G3: resolved toggle-role.
   negative("sr-only-named-control"), // G3: resolved renders-own-name.
+  // NEGATIVE (certification expansion) — new hard decoys on the honest patterns,
+  // each tripping exactly ONE veto so a nomination there surfaces zero.
+  negative("tooltip-titled-link"), // G3: name-injecting-wrapper (titled Tooltip over a Link).
+  negative("tooltip-titled-slider"), // G3: name-injecting-wrapper (titled Tooltip over the inner control).
+  negative("label-wrapped-slider"), // G3: label-ancestor on the wrapped control.
+  negative("radix-switch-toggle"), // G3: resolved toggle-role (button[role=switch]) — selected-state veto.
+  negative("sr-named-social-link"), // G3: resolved renders-own-name.
+  negative("floor-caught-dialog"), // cross-dedup: the floor already flags the unnamed <Dialog>.
 ];
