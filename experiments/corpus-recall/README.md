@@ -26,6 +26,12 @@ Read: across three independent blind passes the layer surfaced **zero** wrong
 findings and leaked **zero** decoys; the pooled sample (78 all-correct) is large
 enough for the Wilson lower bound to certify ≥0.95.
 
+This certificate is **enforced deterministically by
+`test/recall-certification.test.ts` in `pnpm test`** (it re-scores the committed
+nominations under `certification/` through the real verify path; **no model
+needed**). There is no nightly or CI job that re-runs the agents — the committed
+artifacts ARE the certificate, and the test re-derives the score from them.
+
 **Honest scope of this certificate.** It certifies the patterns that are honestly
 fixture-able through a *trusted* design-system component — the ones where the app
 pours a bad **name** into a shell the component can't fix:
@@ -125,6 +131,22 @@ Wilson bound is conservative on a small sample). Three *independent* model runs 
 three genuine draws of "when the layer surfaces a finding, is it right?"; pooling
 them (≈78 surfaced) tightens the bound enough to certify ≥0.95 when precision
 really is ~1.0. A lucky-but-tiny run cannot pass.
+
+**Honest caveat — the passes are correlated.** The 3 passes ground over the SAME
+fixtures, so the surfaced findings are NOT independent: pooled n=78 is **not 78
+i.i.d. samples**, and 0.953 must be read as a **pooled lower bound under
+correlation**, not a textbook binomial bound. What makes the certificate
+trustworthy is the **trio of signals together**, not the Wilson number alone:
+
+1. **Point precision 1.0** — 78/78 surfaced findings correct (zero wrong findings
+   across all three passes).
+2. **Zero decoy leaks** — across every negative × 3 passes, nothing surfaced on a
+   single hard decoy.
+3. **The pooled Wilson bound** — ≥0.95 even on the conservative pooled count.
+
+The rigorous path to a *stronger* bound is **MORE DISTINCT fixtures** (which add
+genuinely independent draws), **not** more re-runs over the same set (which only
+deepen the correlation).
 
 `pnpm recall:eval` with no map wired in still prints the **empty-nomination
 baseline** (nothing surfaces, precision vacuously 1.0, recall 0) — the wiring
