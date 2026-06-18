@@ -6,6 +6,8 @@ import { runHook } from "../src/hook";
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "hook");
 const VIOLATION = join(FIXTURES, "violation.tsx");
 const CLEAN = join(FIXTURES, "clean.tsx");
+const LINK_GENERIC = join(FIXTURES, "link-generic.tsx");
+const IMG_AND_LINK = join(FIXTURES, "img-and-link.tsx");
 
 /** Build a PostToolUse payload pointing at `filePath` (absolute). */
 function payload(filePath: string, toolName = "Edit"): unknown {
@@ -45,6 +47,54 @@ describe("runHook — inject case", () => {
       expect(out, `${tool} should inject`).not.toBeNull();
       expect(out?.hookSpecificOutput.additionalContext).toContain("anchor-has-content");
     }
+  });
+});
+
+describe("runHook — recall self-check (Phase 1.5)", () => {
+  it("speaks up on a floor-CLEAN file with a generic-text Link (recall only)", async () => {
+    // <Link>click here</Link> has text, so the floor stays silent — but the corpus
+    // recall layer grounds the generic-link-text shape. The advisory fires alone.
+    const out = await runHook(payload(LINK_GENERIC));
+    expect(out).not.toBeNull();
+    const ctx = out?.hookSpecificOutput.additionalContext ?? "";
+    expect(ctx).toContain("Self-check");
+    expect(ctx).toContain("advisory");
+    expect(ctx.toLowerCase()).toContain("non-descriptive link");
+    // No floor whisper — the file is floor-clean.
+    expect(ctx).not.toContain("fix them now");
+    // Path relativized, no absolute leak.
+    expect(ctx).toContain("link-generic.tsx");
+    expect(ctx).not.toContain(FIXTURES);
+  });
+
+  it("surfaces ONLY certified patterns — no R1 cross-token noise (e.g. keyboard)", async () => {
+    // The keyboard pattern (2.1.1) shares a `link` token with the Link resolution,
+    // so R1 pulls it — but it isn't certified, so the advisory must NOT show it.
+    const out = await runHook(payload(LINK_GENERIC));
+    const ctx = out?.hookSpecificOutput.additionalContext ?? "";
+    expect(ctx.toLowerCase()).not.toContain("keyboard");
+    expect(ctx.toLowerCase()).not.toContain("space");
+  });
+
+  it("combines the precise floor whisper AND the advisory self-check when both apply", async () => {
+    // img-and-link.tsx: a 1.1.1 floor finding (img missing alt) AND a 2.4.4 recall
+    // (generic-text <Link>) the floor is silent on — so SC-disjoint keeps both.
+    const out = await runHook(payload(IMG_AND_LINK));
+    const ctx = out?.hookSpecificOutput.additionalContext ?? "";
+    expect(ctx).toContain("fix them now"); // floor voice
+    expect(ctx).toContain("alt"); // the image/alt floor finding
+    expect(ctx).toContain("Self-check"); // recall voice
+    // The two blocks are separated, floor first.
+    expect(ctx.indexOf("fix them now")).toBeLessThan(ctx.indexOf("Self-check"));
+  });
+
+  it("does NOT double up the floor's own SC", async () => {
+    // violation.tsx is a 2.4.4 floor finding. The 2.4.4 recall pattern is suppressed
+    // because the floor already covers 2.4.4 — the two blocks stay disjoint by SC.
+    const out = await runHook(payload(VIOLATION));
+    const ctx = out?.hookSpecificOutput.additionalContext ?? "";
+    expect(ctx).toContain("fix them now"); // floor present
+    expect(ctx).not.toContain("Self-check"); // recall suppressed (2.4.4 floor-covered)
   });
 });
 

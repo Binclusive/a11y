@@ -26,8 +26,9 @@
 
 import { isAbsolute, relative, resolve } from "node:path";
 import { z } from "zod";
-import { scan } from "./core";
+import { scan, type ScanResult } from "./core";
 import { corpusFix, corpusTier, type CorpusTier, type EnrichedFinding, enrichAll } from "./corpus";
+import { CERTIFIED_RECALL_PATTERN_IDS, type RetrievedPattern, retrieveSlice } from "./retrieve";
 
 /**
  * The slice of the PostToolUse payload we use. The full event carries more
@@ -102,6 +103,87 @@ export function formatWhisper(
   return [header, ...lines, ...more].join("\n");
 }
 
+/** Cap the recall self-check: a few of the highest-tier floor-missed shapes. */
+const MAX_RECALL = 3;
+
+/**
+ * The ADVISORY recall whisper (Phase 1.5). Where {@link formatWhisper} reports the
+ * PRECISE static floor ("fix these"), this surfaces the corpus RECALL grounding —
+ * the floor-MISSED failure shapes (a `<Link>` whose text is present but generic /
+ * noisy) that only a reading of the code can catch. It is deliberately framed as a
+ * SELF-CHECK, not a finding: the deterministic hook cannot run the model's
+ * propose→verify loop, so it hands the in-loop model the same grounding the
+ * certified `review_a11y` retrieve step produces and asks it to self-review.
+ *
+ * OWNS its own empty-check: returns null when no shape survives dedup/cap, so the
+ * caller hands it the eligible patterns directly and returns the result — one
+ * empty-check, not two. Shipped only because the surfaced precision is certified +
+ * enforced by `test/recall-certification.test.ts` (pooled Wilson >= 0.95, zero
+ * decoy leaks).
+ */
+function formatRecall(
+  filePath: string,
+  patterns: readonly RetrievedPattern[],
+  root: string,
+): string | null {
+  // Dedup by failure shape (several link patterns share a shape) and cap.
+  const seen = new Set<string>();
+  const shown: RetrievedPattern[] = [];
+  for (const p of patterns) {
+    if (seen.has(p.failureShape)) continue;
+    seen.add(p.failureShape);
+    shown.push(p);
+    if (shown.length >= MAX_RECALL) break;
+  }
+  if (shown.length === 0) return null;
+
+  const header =
+    `Self-check ${relative(root, filePath)} (corpus, advisory — the static check ` +
+    "can't verify these). Components here show these floor-missed failures in real " +
+    "audits; confirm they don't apply, fix if they do:";
+  const lines = shown.map((p) => `  · ${p.component}: ${p.failureShape}`);
+  return [header, ...lines].join("\n");
+}
+
+/**
+ * Build the recall self-check for a file from an EXISTING scan result. PURE over
+ * the scan: it reuses `scan().resolved.resolutions` + `scan().findings` for the
+ * retrieve slice (R1/R2/R3) and never re-reads or re-parses the file.
+ *
+ * No file-wide suppressed-line list: that list was file-wide (not anchored to the
+ * link patterns it accompanied), cost a SECOND parse on the every-edit hot path
+ * (a TOCTOU race against the editor's in-flight write), and the model already
+ * reads the actual file in its propose→verify loop. The SC-disjoint filter below
+ * plus that reading cover precision for this advisory surface.
+ *
+ * Fail-safe: any error → null (the floor whisper still stands). Returns null when
+ * the file grounds no eligible pattern (the common case — nothing to self-check).
+ */
+function recallWhisper(filePath: string, result: ScanResult, root: string): string | null {
+  try {
+    const slice = retrieveSlice({
+      files: [filePath],
+      resolutions: result.resolved.resolutions,
+      findings: result.findings,
+    });
+    // SC-disjoint: drop any pattern whose SC the floor ALREADY carries, so the
+    // advisory only surfaces SCs the floor was SILENT on. The floor block and this
+    // block become disjoint by SC — no same-SC double-up.
+    const floorScs = new Set(result.findings.flatMap((f) => f.wcag));
+    // Eligible AND certified AND floor-silent: tier-eligibility alone admits
+    // patterns R1 pulls via a shared token (a keyboard pattern on a plain `<Link>`);
+    // the advisory must only surface what we've measured, so it never points the
+    // model at an unmeasured shape.
+    const eligible = slice.patterns.filter(
+      (p) => p.eligibleToFlag && CERTIFIED_RECALL_PATTERN_IDS.has(p.id) && !floorScs.has(p.sc),
+    );
+
+    return formatRecall(filePath, eligible, root);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Run the checker on ONE edited file and return the `additionalContext`
  * envelope, or null to no-op. Pulls `file_path` from `tool_input`, resolves it
@@ -124,18 +206,29 @@ export async function runHook(raw: unknown): Promise<HookOutput | null> {
   // Only .tsx files are scannable — silently no-op on everything else.
   if (!filePath.endsWith(".tsx")) return null;
 
-  const result = await scan([filePath]);
-  const findings = enrichAll(result.findings);
+  // FAIL-SAFE (module contract): from the scan onward, any throw → null. This
+  // wraps the direct (test/non-CLI) callers too, not just `runHookCli`.
+  try {
+    const result = await scan([filePath]);
+    const findings = enrichAll(result.findings);
 
-  // Relativize against the file's directory so the whisper shows a short path,
-  // not the absolute one ESLint reports.
-  const root = base;
-  const additionalContext = formatWhisper(filePath, findings, root);
-  if (additionalContext === null) return null;
+    // Relativize against the file's directory so the whisper shows a short path,
+    // not the absolute one ESLint reports.
+    const root = base;
+    // Two distinct voices: the PRECISE static floor ("fix these") and the ADVISORY
+    // corpus self-check ("the static check can't verify these — confirm/fix"). Either
+    // may be empty; emit nothing only when BOTH are.
+    const floor = formatWhisper(filePath, findings, root);
+    const recall = recallWhisper(filePath, result, root);
+    if (floor === null && recall === null) return null;
+    const additionalContext = [floor, recall].filter((b): b is string => b !== null).join("\n\n");
 
-  return {
-    hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext },
-  };
+    return {
+      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext },
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Read all of stdin to a string. Returns "" if stdin is empty/closed. */
