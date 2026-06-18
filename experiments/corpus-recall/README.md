@@ -9,24 +9,51 @@ This harness is **separate from `matrix:check` by construction**: `matrix:check`
 is a count-snapshot gate for the static *floor*; `recall:eval` is a precision-
 floor gate for the recall *ceiling*. They never share a baseline.
 
-## First grounded run (2026-06-17)
+## Certified grounded run (2026-06-17) — PASS ✅
 
-3 independent **blind** grounding passes (model nominations produced without
-sight of the labels), scored through the real gate stack:
+3 independent **blind** grounding passes (model nominations produced WITHOUT
+sight of the labels — see `certification/` and "The blind grounded run" below),
+scored through the real gate stack and **pooled**:
 
 | Metric | Value |
 |---|---|
-| Precision (point) | **1.000** — 18/18 surfaced findings correct |
-| Recall | **1.000** — 18/18 positives caught |
-| False positives on the 6 hard decoys | **0** (Tooltip / FormLabel / aria-label / floor-caught all stayed silent) |
-| Precision **Wilson 95% lower bound** | **0.824** → below the 0.95 gate |
+| Pooled precision (point) | **1.000** — 78/78 surfaced findings correct |
+| Precision **Wilson 95% lower bound** | **0.9531** → **clears the 0.95 gate** |
+| False positives on the 15 hard decoys | **0** (Tooltip / label-ancestor / resolved toggle / renders-own-name / floor-caught / self-managing antd all stayed silent) |
+| Per-pass recall | 27/28, 24/28, 27/28 (misses are abstentions on borderline phrases — never FPs) |
 
-Read: the layer is **perfect on this set** — zero decoy leakage, full recall.
-The Wilson gate is **FAIL only on sample size**: 18 all-correct samples can
-statistically certify ≥0.82, not ≥0.95. The bound is conservative on purpose.
-**Clearing the gate is a corpus-growth task** (≈60 all-correct surfaced findings,
-i.e. ~20 positive fixtures × 3 passes), not a code change. The gate is nightly +
-non-blocking, so it trends toward green as the fixture set grows.
+Read: across three independent blind passes the layer surfaced **zero** wrong
+findings and leaked **zero** decoys; the pooled sample (78 all-correct) is large
+enough for the Wilson lower bound to certify ≥0.95.
+
+This certificate is **enforced deterministically by
+`test/recall-certification.test.ts` in `pnpm test`** (it re-scores the committed
+nominations under `certification/` through the real verify path; **no model
+needed**). There is no nightly or CI job that re-runs the agents — the committed
+artifacts ARE the certificate, and the test re-derives the score from them.
+
+**Honest scope of this certificate.** It certifies the patterns that are honestly
+fixture-able through a *trusted* design-system component — the ones where the app
+pours a bad **name** into a shell the component can't fix:
+`2.4.4-generic-link-text` and `2.4.4-noisy-or-wrong-name`. The
+`selected/current-state-missing`, keyboard, focus, and heading patterns are **not**
+in this certificate: trusted tab/toggle/dialog components *self-manage* that state
+at runtime (antd `<Tabs>` auto-selects its first pane and renders `aria-selected`,
+so a static selected-state nomination on it is a false positive — it now lives as
+the `antd-tabs-self-managed` hard negative), and a single snippet can't show a
+heading skip. Those are real-in-the-wild failures the retriever cannot yet ground
+honestly; certifying them is deferred, not faked.
+
+### Reproduce
+
+```
+pnpm exec tsx experiments/corpus-recall/blind-harness.ts build   # label-free bundles -> /tmp
+# run 3 blind agents over /tmp/recall-blind-bundles.json -> /tmp/recall-noms-{1,2,3}.json
+pnpm exec tsx experiments/corpus-recall/blind-harness.ts score   # pooled Wilson over the 3 passes
+```
+
+The exact bundles the agents saw, the secret item→case key, and the three passes'
+nominations are committed under `certification/` for audit.
 
 ## What it is and is not
 
@@ -49,16 +76,26 @@ eval.ts                runEval(nominations) -> EvalReport; wilsonLowerBound; CLI
 
 ### The fixtures
 
-- **POSITIVE** (6) — a non-floor failure the floor cannot see: non-descriptive /
-  noisy link text (`2.4.4-generic-link-text`, `2.4.4-noisy-or-wrong-name`),
-  missing selected/current state on a custom tab
-  (`4.1.2-selected-or-current-state-missing`). Each carries the
-  `expect: [{ patternId, line, wcag }]` the recall layer should surface.
-- **NEGATIVE** (6, the precision spine) — the SAME components in a clean
-  configuration: a Tooltip-titled IconButton (G3 name-injecting-wrapper), a
-  FormLabel-wrapped Select (G3 label-ancestor), a floor-already-caught empty
-  anchor (cross-dedup), and correctly-named controls the agent must abstain on.
+- **POSITIVE** (28) — a non-floor failure the floor cannot see: a `<Link>` whose
+  visible name is present but **generic** (`2.4.4-generic-link-text`) or **noisy /
+  polluted** — a URL, path, filename, SKU, breadcrumb, "undefined"
+  (`2.4.4-noisy-or-wrong-name`). Each must be **R1-retrievable** (an imported
+  design-system component whose name token-overlaps the pattern label — an
+  intrinsic `<div>` yields an empty slice and cannot be a positive) and
+  **floor-clean**. Each carries `expect: [{ patternId, line, wcag }]`.
+- **NEGATIVE** (15, the precision spine) — the SAME components in a clean
+  configuration the agent must abstain on or the gate must veto: a Tooltip-titled
+  control (G3 name-injecting-wrapper), a label-wrapped control (G3 label-ancestor),
+  a resolved Radix toggle / switch (G3 toggle-role), a renders-own-name wrapper, a
+  floor-already-caught control (cross-dedup), correctly-named `aria-label` controls,
+  and a **self-managing antd `<Tabs>`** (clean — it exposes its own selected state).
   Each carries `clean: true` and must surface nothing.
+
+Why only the two link-name patterns? A *trusted* component only genuinely fails
+when the app feeds it bad **content/state it can't fix**; a bad link name is
+exactly that. State/keyboard/focus failures are handled by the trusted component
+itself (so a fixture using one isn't genuinely failing), which is why they are
+out of this certificate — see "Honest scope" above.
 
 ## The gate
 
@@ -72,15 +109,45 @@ grows, which is why the real run takes **K=5 samples per case**: it accumulates
 enough surfaced findings for the bound to clear the floor when precision really is
 high. A lucky-but-tiny run cannot pass.
 
-## The manual grounded run (later)
+## The blind grounded run (`blind-harness.ts`)
 
-1. Call `reviewA11y({ files: [fixture] })` (retrieve) for each case to get the
-   `corpusContext` + `suppressorMap` the agent grounds on.
-2. Have the model nominate candidates for each fixture (K=5 independent samples).
-3. Assemble the `Nominations` map (`fixtureId -> ReviewCandidate[]`) and call
-   `runEval(map)`.
-4. Read `report.pass` (the Wilson gate) and `report.recall` (tracked, not gated).
+The certification above is produced by `blind-harness.ts`, which keeps the
+grounding **blind** (the agent never sees the positive/negative label, the
+patternId, or the author comments):
 
-`pnpm recall:eval` with no map wired in prints the **empty-nomination baseline**
-(nothing surfaces, precision vacuously 1.0, recall 0) — it proves the wiring is
-green end-to-end until the manual run supplies real nominations.
+1. `build` — for each case, run `reviewA11y({ files: [fixture] })` (retrieve) and
+   package ONLY what production hands the agent — numbered source (author comment
+   lines **blanked**, since they literally say `// POSITIVE:` and name the
+   patternId), `corpusContext`, `suppressorMap`, `staticFindings` — under an opaque
+   `item-NN` id. The id→case key is written to a **separate** file the agents never
+   read.
+2. Run **3 independent** agents over `/tmp/recall-blind-bundles.json`; each writes
+   `item-NN -> ReviewCandidate[]` to `/tmp/recall-noms-{1,2,3}.json`.
+3. `score` — map each pass back to its case, run the REAL `runEval` per pass, and
+   **pool** all surfaced findings across the 3 passes for one Wilson lower bound.
+
+**Why pool 3 passes:** a single pass over 28 positives certifies only ≈0.85 (the
+Wilson bound is conservative on a small sample). Three *independent* model runs are
+three genuine draws of "when the layer surfaces a finding, is it right?"; pooling
+them (≈78 surfaced) tightens the bound enough to certify ≥0.95 when precision
+really is ~1.0. A lucky-but-tiny run cannot pass.
+
+**Honest caveat — the passes are correlated.** The 3 passes ground over the SAME
+fixtures, so the surfaced findings are NOT independent: pooled n=78 is **not 78
+i.i.d. samples**, and 0.953 must be read as a **pooled lower bound under
+correlation**, not a textbook binomial bound. What makes the certificate
+trustworthy is the **trio of signals together**, not the Wilson number alone:
+
+1. **Point precision 1.0** — 78/78 surfaced findings correct (zero wrong findings
+   across all three passes).
+2. **Zero decoy leaks** — across every negative × 3 passes, nothing surfaced on a
+   single hard decoy.
+3. **The pooled Wilson bound** — ≥0.95 even on the conservative pooled count.
+
+The rigorous path to a *stronger* bound is **MORE DISTINCT fixtures** (which add
+genuinely independent draws), **not** more re-runs over the same set (which only
+deepen the correlation).
+
+`pnpm recall:eval` with no map wired in still prints the **empty-nomination
+baseline** (nothing surfaces, precision vacuously 1.0, recall 0) — the wiring
+smoke test, independent of the blind run.

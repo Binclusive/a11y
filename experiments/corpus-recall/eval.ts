@@ -40,13 +40,20 @@ import { CASES, type LabelledCase } from "./case-set";
  */
 export type Nominations = Readonly<Record<string, readonly ReviewCandidate[]>>;
 
-/** A surfaced recall finding flattened to the (file, line, patternId) it asserts. */
+/** A surfaced recall finding flattened to the (file, line, patternId, wcag) it asserts. */
 interface SurfacedFinding {
   readonly caseId: string;
   readonly line: number;
   readonly patternId: string;
+  /** The WCAG SCs the surfaced finding asserts (matched against the expected set). */
+  readonly wcag: readonly string[];
   /** True iff this surfaced finding matches an expected finding on a positive. */
   readonly correct: boolean;
+}
+
+/** Two WCAG SC sets are equal iff same length and every member of one is in the other (order-insensitive). */
+function sameWcag(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((sc) => b.includes(sc));
 }
 
 /** Per-case scoring outcome — what surfaced and whether the label was satisfied. */
@@ -110,13 +117,20 @@ export function wilsonLowerBound(correct: number, total: number, z: number = WIL
 }
 
 /**
- * Whether a surfaced `(line, patternId)` matches one of a positive case's
- * expected findings. Patterns and lines must both match — a right pattern on the
- * wrong line (or vice versa) is a false positive, not a catch.
+ * Whether a surfaced `(line, patternId, wcag)` matches one of a positive case's
+ * expected findings. Pattern, line, AND the WCAG set must all match — a right
+ * pattern on the wrong line, or with the wrong SC axis, is a false positive.
  */
-function isExpected(c: LabelledCase, line: number, patternId: string): boolean {
+function isExpected(
+  c: LabelledCase,
+  line: number,
+  patternId: string,
+  wcag: readonly string[],
+): boolean {
   if (c.kind !== "positive") return false;
-  return c.expect.some((e) => e.line === line && e.patternId === patternId);
+  return c.expect.some(
+    (e) => e.line === line && e.patternId === patternId && sameWcag(e.wcag, wcag),
+  );
 }
 
 /**
@@ -149,7 +163,8 @@ async function runCase(
       caseId: c.id,
       line: f.line,
       patternId: f.patternId ?? "",
-      correct: isExpected(c, f.line, f.patternId ?? ""),
+      wcag: f.wcag,
+      correct: isExpected(c, f.line, f.patternId ?? "", f.wcag),
     }));
 
   const expected = c.kind === "positive" ? c.expect.length : 0;
@@ -157,7 +172,9 @@ async function runCase(
   const caught =
     c.kind === "positive"
       ? c.expect.filter((e) =>
-          surfaced.some((s) => s.line === e.line && s.patternId === e.patternId),
+          surfaced.some(
+            (s) => s.line === e.line && s.patternId === e.patternId && sameWcag(s.wcag, e.wcag),
+          ),
         ).length
       : 0;
 
