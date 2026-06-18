@@ -68,6 +68,25 @@ describe("retrieveSlice: R1 by resolved component", () => {
     expect(ids(slice)).toContain("4.1.2-button-no-name");
   });
 
+  it("keeps the selected/current-state pattern RETRIEVABLE for a tab/toggle component", () => {
+    // Standing capability guard for `4.1.2-selected-or-current-state-missing`, a
+    // pattern intentionally WITHOUT a positive fixture: trusted tab/toggle
+    // components self-manage selected state at runtime, so it isn't honestly
+    // fixture-able yet (see the corpus-recall README's "Honest scope"). With no
+    // positive fixture and no recall coverage, the only thing keeping it from
+    // silently rotting to permanently-suppressed is this assertion that R1 still
+    // RETRIEVES it (eligibleToFlag) for a component whose name token-overlaps its
+    // "custom tab / toggle / current item" label.
+    const slice = retrieveSlice({
+      files: ["/app/profile/page.tsx"], // no journey hint
+      resolutions: [opaque("Tab")], // tokenizes to `tab`, overlapping the pattern label
+      findings: [],
+    });
+    const sel = slice.patterns.find((p) => p.id === "4.1.2-selected-or-current-state-missing");
+    expect(sel).toBeDefined();
+    expect(sel?.eligibleToFlag).toBe(true);
+  });
+
   it("does NOT leak the LINK pattern into an icon-only BUTTON slice (icon stopworded)", () => {
     // `IconButton` → tokens `{button}` (`icon` is a cross-kind stopword). The LINK
     // pattern `2.4.4-link-no-name` is labelled "icon / image / empty link"; before
