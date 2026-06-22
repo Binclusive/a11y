@@ -434,3 +434,22 @@ describe("enforce: native form controls (#16 — control-has-associated-label ga
     expect(findings.every((f) => f.ruleId === "enforce/input-no-name")).toBe(true);
   });
 });
+
+describe("structural: router Link mapped to host `a` (issue #33)", () => {
+  // The fixture's co-located binclusive.json maps `Link`/`NavLink` → `a`, so the
+  // structural jsx-a11y pass runs `anchor-is-valid` on them. The `specialLink:
+  // ['to']` alias makes a valid `to` satisfy the href requirement.
+  const routerLinks = join(here, "fixtures", "router-link-href", "links.tsx");
+
+  it("fires anchor-is-valid ONLY on the empty/hash `to`, never on a valid `to`", async () => {
+    const { findings } = await scan([routerLinks]);
+    const anchorLines = findings
+      .filter((f) => f.ruleId === "jsx-a11y/anchor-is-valid")
+      .map((f) => f.line)
+      .sort((a, b) => a - b);
+    // ValidLink (13) + ValidNavLink (16) must NOT appear (the FP this fix kills);
+    // EmptyToLink (19) + HashToLink (22) MUST appear (the alias narrows, never
+    // disables, the rule). So exactly [19, 22].
+    expect(anchorLines).toEqual([19, 22]);
+  });
+});
