@@ -72,6 +72,13 @@ export interface Declarations {
    * primitive, e.g. `{ "Button": "button", "FancyLink": "a" }`. Fills gaps the
    * tracer can't (host hidden behind library indirection) and OVERRIDES the
    * derived map on conflict — the customer's word wins over inference.
+   *
+   * A compound/namespaced member is declared by the dotted name as it appears in
+   * JSX: `{ "Dialog.Close": "button", "Tabs.Tab": "button" }` maps exactly that
+   * member. A bare leaf (`{ "Close": "button" }`) also resolves, but matches
+   * EVERY `*.Close` member — the dotted form is the precise way to scope it to
+   * one wrapper. (See `resolveComponents`' declared-lookup step for the lookup
+   * order: full dotted name first, then leaf fallback.)
    */
   readonly components: Readonly<Record<string, string>>;
   /**

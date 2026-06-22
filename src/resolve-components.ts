@@ -429,10 +429,23 @@ export function resolveComponents(
       };
 
       // 0. Customer declaration wins outright — the escape hatch for hosts the
-      //    checker can't infer. Keyed by the JSX name jsx-a11y matches on. A
-      //    declared host carries no role and no internal name (the customer
-      //    declares only the host).
-      const declaredHost = declared[jsxKeyFor(used.local)];
+      //    checker can't infer. A declared host carries no role and no internal
+      //    name (the customer declares only the host).
+      //
+      //    Lookup tries the FULL dotted local name first (`Dialog.Close`), then
+      //    falls back to the leaf (`Close`). A compound member rendered as
+      //    `<Dialog.Close>` is what the customer SEES in JSX, so declaring
+      //    `"Dialog.Close": "button"` is the natural, precise way to map exactly
+      //    that member — without bleeding across every unrelated `*.Close`. The
+      //    leaf fallback keeps the older bare-leaf declaration working and is the
+      //    only key shape that exists for a plain (non-member) wrapper.
+      //
+      //    The jsx-a11y map (line below, via `jsxKeyFor`) stays LEAF-keyed
+      //    regardless: jsx-a11y's `components` setting matches a `NS.Member` tag
+      //    on its trailing identifier, so the host must land under the leaf for
+      //    the structural pass to fire. Declaration shape and map shape are
+      //    deliberately independent here.
+      const declaredHost = declared[used.local] ?? declared[jsxKeyFor(used.local)];
       if (declaredHost !== undefined) {
         recordResolved(declaredHost, "declared", null, false);
         continue;
