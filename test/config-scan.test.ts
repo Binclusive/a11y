@@ -62,6 +62,71 @@ describe("declarations.components: merge into the map as declared coverage", () 
     })();
   });
 
+  it("a declared COMPOUND member (`Dialog.Close`) resolves via the dotted name it has in JSX", async () => {
+    // A namespace import rendered as a compound member. Before the fix the
+    // declared lookup keyed on the LEAF only (`Close`), so `"Dialog.Close"`
+    // never matched and the member stayed in the `declare` bucket. The dotted
+    // name is exactly what the customer SEES in JSX.
+    const code = `
+      import * as Dialog from "@acme/ui/Dialog";
+      export const X = () => (<Dialog.Root><Dialog.Close /></Dialog.Root>);
+    `;
+    const file = join(tmpdir(), "decl-compound.tsx");
+    await writeFile(file, code);
+    try {
+      const declared = { "Dialog.Close": "button" };
+      const { map, coverage, resolutions } = resolveComponents([file], declared);
+
+      const byName = new Map(resolutions.map((r) => [r.name, r]));
+      // The declared dotted member resolves — no longer opaque/declare.
+      expect(byName.get("Dialog.Close")?.provenance).toBe("declared");
+      expect(byName.get("Dialog.Close")?.host).toBe("button");
+      expect(coverage.declared).toBe(1);
+      // jsx-a11y matches a `NS.Member` tag on its leaf, so the host lands under
+      // the leaf key for the structural pass to fire.
+      expect(map.Close).toBe("button");
+    } finally {
+      await rm(file, { force: true });
+    }
+  });
+
+  it("a bare-leaf declaration (`Close`) still resolves a compound member (back-compat)", async () => {
+    const code = `
+      import * as Dialog from "@acme/ui/Dialog";
+      export const X = () => <Dialog.Close />;
+    `;
+    const file = join(tmpdir(), "decl-leaf-fallback.tsx");
+    await writeFile(file, code);
+    try {
+      const { map, resolutions } = resolveComponents([file], { Close: "button" });
+      expect(resolutions[0]?.provenance).toBe("declared");
+      expect(map.Close).toBe("button");
+    } finally {
+      await rm(file, { force: true });
+    }
+  });
+
+  it("the dotted form scopes to ONE wrapper — an unrelated `*.Close` stays opaque", async () => {
+    // `"Dialog.Close"` must NOT bleed onto `Menu.Close`. This is the precision
+    // win over the bare-leaf workaround, which matched every `*.Close`.
+    const code = `
+      import * as Dialog from "@acme/ui/Dialog";
+      import * as Menu from "@acme/ui/Menu";
+      export const X = () => (<><Dialog.Close /><Menu.Close /></>);
+    `;
+    const file = join(tmpdir(), "decl-compound-scoped.tsx");
+    await writeFile(file, code);
+    try {
+      const { resolutions } = resolveComponents([file], { "Dialog.Close": "button" });
+      const byName = new Map(resolutions.map((r) => [r.name, r]));
+      expect(byName.get("Dialog.Close")?.provenance).toBe("declared");
+      // Menu.Close was NOT declared by its dotted name → not resolved as declared.
+      expect(byName.get("Menu.Close")?.provenance).not.toBe("declared");
+    } finally {
+      await rm(file, { force: true });
+    }
+  });
+
   it("a declared component that no file uses is ignored (coverage tracks code)", async () => {
     const code = `import { Opaque } from "@acme/ui"; export const X = () => <Opaque />;`;
     const file = join(tmpdir(), "decl-stale.tsx");
