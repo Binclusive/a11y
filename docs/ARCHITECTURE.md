@@ -4,6 +4,9 @@ The one document that answers: *what is this machinery, how does it find and
 match things, which code does what, and how is it organized.* Read it once and
 you can explain the whole project from memory.
 
+> For *why* this engine exists and how it fits the wider strategy, see the
+> ecosystem frame: [`docs/ecosystem.md`](./ecosystem.md).
+
 ---
 
 ## 1. What it is — say this to a coworker
