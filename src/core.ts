@@ -12,7 +12,13 @@ import {
 } from "./config-scan";
 import type { Contract } from "./contract";
 import { enforceContent } from "./enforce";
-import { type Coverage, type ResolvedComponents, resolveComponents } from "./resolve-components";
+import { isRouterLinkControl } from "./registry";
+import {
+  type ComponentResolution,
+  type Coverage,
+  type ResolvedComponents,
+  resolveComponents,
+} from "./resolve-components";
 import {
   ariaHiddenLineRanges,
   isContentSuppressed,
@@ -148,15 +154,56 @@ const SCORED_RULES: readonly string[] = [
 // widgets, etc. We ship a SCOPED version instead (`enforce/prefer-tag-over-role`
 // in enforce.ts) limited to landmark/structural roles with one clean native tag.
 
-function buildRuleConfig(): Linter.RulesRecord {
+/**
+ * The router-Link destination prop. react-router / Remix `Link` / `NavLink`
+ * render `<a>` but carry the navigation target on `to`, NOT `href` — so once
+ * such a wrapper is mapped to host `a` (a `binclusive.json` `components`
+ * declaration), `anchor-is-valid` reads the literal missing `href` and false-
+ * positives on every valid `<Link to="/route">`. The fix is jsx-a11y's own
+ * `specialLink` lever: it ALIASES `to` onto the rule's href check, so a valid
+ * `to` satisfies it. It narrows the rule, it does NOT disable it — an empty
+ * `to=""` or `to="#"` still lands in the rule's invalid-href branch and flags.
+ */
+const ROUTER_LINK_HREF_PROP = "to";
+
+/**
+ * Whether any resolved wrapper that landed in the jsx-a11y component map is a
+ * react-router / Remix link control mapped to host `a` — i.e. the user mapped
+ * `Link`/`NavLink` → `a` in `binclusive.json`. ONLY then do we alias `to` onto
+ * `anchor-is-valid` (see {@link ROUTER_LINK_HREF_PROP}). When no router Link is
+ * mapped, the rule config is byte-identical to before — zero-config and
+ * non-router scans (and the matrix baseline) are untouched.
+ *
+ * Matches on `r.imported` (the original export name), NOT `r.name` (the local
+ * JSX alias): a repo may `import { Link as RouterLink }` and map `RouterLink` ->
+ * `a`, so the alias is `RouterLink` while the export the registry recognizes is
+ * `Link`. Keying off the alias would silently disarm the fix for aliased imports.
+ */
+function mapsRouterLinkToAnchor(resolutions: readonly ComponentResolution[]): boolean {
+  return resolutions.some(
+    (r) => r.host === "a" && isRouterLinkControl(r.module, r.imported),
+  );
+}
+
+function buildRuleConfig(aliasRouterLinkHref: boolean): Linter.RulesRecord {
   const rules: Linter.RulesRecord = {};
   for (const id of SCORED_RULES) {
-    rules[`jsx-a11y/${id}`] = "error";
+    rules[`jsx-a11y/${id}`] =
+      id === "anchor-is-valid" && aliasRouterLinkHref
+        ? // `specialLink: ['to']` adds `to` to the props that satisfy the href
+          // requirement, so a router `<Link to="/route">` is valid — while an
+          // empty `to=""`/`to="#"` still flags via the invalid-href aspect.
+          ["error", { specialLink: [ROUTER_LINK_HREF_PROP] }]
+        : "error";
   }
   return rules;
 }
 
-function buildESLint(cwd: string, components: Readonly<Record<string, string>>): ESLint {
+function buildESLint(
+  cwd: string,
+  components: Readonly<Record<string, string>>,
+  aliasRouterLinkHref: boolean,
+): ESLint {
   return new ESLint({
     cwd,
     // Self-contained: ignore any eslintrc / flat config found on disk so the
@@ -182,7 +229,7 @@ function buildESLint(cwd: string, components: Readonly<Record<string, string>>):
             components,
           },
         },
-        rules: buildRuleConfig(),
+        rules: buildRuleConfig(aliasRouterLinkHref),
       },
     ],
   });
@@ -259,7 +306,11 @@ export async function scan(filePaths: readonly string[]): Promise<ScanResult> {
   }
 
   const resolved = resolveComponents(tsxPaths, declarations?.components ?? {});
-  const eslint = buildESLint(commonBaseDir(tsxPaths), resolved.map);
+  const eslint = buildESLint(
+    commonBaseDir(tsxPaths),
+    resolved.map,
+    mapsRouterLinkToAnchor(resolved.resolutions),
+  );
   const results = await eslint.lintFiles([...tsxPaths]);
 
   const injectsChildren = declarations?.injectsChildren ?? [];

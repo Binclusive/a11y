@@ -11,6 +11,7 @@ function resolved(name: string, host: string): ComponentResolution {
   return {
     name,
     module: "@/components/ui",
+    imported: name,
     host,
     provenance: "trace",
     role: null,

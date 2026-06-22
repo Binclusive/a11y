@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "stack": {
+    "framework": "react-router",
+    "router": null,
+    "designSystem": "none",
+    "language": "ts"
+  },
+  "enforcement": {
+    "block": [],
+    "warn": []
+  },
+  "learned": [],
+  "components": {
+    "Link": "a",
+    "NavLink": "a"
+  }
+}

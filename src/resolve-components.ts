@@ -92,6 +92,14 @@ export type ComponentResolution =
   | {
       readonly name: string;
       readonly module: string;
+      /**
+       * The ORIGINAL imported/exported name (`used.imported`), NOT the local
+       * JSX alias in `name`. Router-link detection must match on this: a repo
+       * may `import { Link as RouterLink }` and map `RouterLink` -> `a`, so the
+       * local `name` is `RouterLink` but the export name (`Link`) is what the
+       * registry recognizes (see `isRouterLinkControl` in core.ts).
+       */
+      readonly imported: string;
       readonly host: string;
       readonly provenance: ResolvedProvenance;
       /**
@@ -421,6 +429,7 @@ export function resolveComponents(
         resolutions.push({
           name: used.local,
           module: used.module,
+          imported: used.imported,
           host,
           provenance,
           role,
