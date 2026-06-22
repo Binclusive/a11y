@@ -33,9 +33,10 @@ user at a different moment. **Same corpus, three latencies:**
 | Local engine + corpus | the developer | **commit-time** | deterministic checker, offline, source-grounded | this repo → `monorepo/packages/a11y-checker` |
 | Cloud platform CLI | audit team + buyer | **audit-time** | rendered, agentic, ticketed, SARIF | `monorepo/packages/cli` |
 
-The CLI (`b8e`, → commander.js) is the **single spine**: `b8e check` (local),
-`b8e audit` (cloud), `b8e mcp`, `b8e skills install`. One install, one auth, one
-mental model — surfaced wherever the user already is.
+The CLI (`b8e`, built on `@effect/cli`) is the **single spine**: `b8e check`
+(local), `b8e audit` (cloud), `b8e mcp`, `b8e skills install`. One install, one
+auth, one mental model — surfaced wherever the user already is. (Today this engine
+ships that CLI as `a11y-checker`; `b8e` is the converged spine it folds into.)
 
 ## The flywheel (why it compounds)
 
