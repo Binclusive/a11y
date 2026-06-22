@@ -173,10 +173,15 @@ const ROUTER_LINK_HREF_PROP = "to";
  * `anchor-is-valid` (see {@link ROUTER_LINK_HREF_PROP}). When no router Link is
  * mapped, the rule config is byte-identical to before — zero-config and
  * non-router scans (and the matrix baseline) are untouched.
+ *
+ * Matches on `r.imported` (the original export name), NOT `r.name` (the local
+ * JSX alias): a repo may `import { Link as RouterLink }` and map `RouterLink` ->
+ * `a`, so the alias is `RouterLink` while the export the registry recognizes is
+ * `Link`. Keying off the alias would silently disarm the fix for aliased imports.
  */
 function mapsRouterLinkToAnchor(resolutions: readonly ComponentResolution[]): boolean {
   return resolutions.some(
-    (r) => r.host === "a" && isRouterLinkControl(r.module, r.name),
+    (r) => r.host === "a" && isRouterLinkControl(r.module, r.imported),
   );
 }
 

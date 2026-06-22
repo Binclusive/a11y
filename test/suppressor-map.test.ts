@@ -96,6 +96,7 @@ describe("buildSuppressorMap: resolved-host skips (findings #2/#3/#8)", () => {
       {
         name: "ConsentBox",
         module: "@/components/ui/consent-box",
+        imported: "ConsentBox",
         host: "button",
         provenance: "trace",
         role: "checkbox",
@@ -105,6 +106,7 @@ describe("buildSuppressorMap: resolved-host skips (findings #2/#3/#8)", () => {
       {
         name: "CarouselPrevious",
         module: "@/components/ui/carousel",
+        imported: "CarouselPrevious",
         host: "button",
         provenance: "trace",
         role: null,
@@ -114,6 +116,7 @@ describe("buildSuppressorMap: resolved-host skips (findings #2/#3/#8)", () => {
       {
         name: "SearchField",
         module: "@/components/ui/search-field",
+        imported: "SearchField",
         host: "input",
         provenance: "trace",
         role: null,
@@ -123,6 +126,7 @@ describe("buildSuppressorMap: resolved-host skips (findings #2/#3/#8)", () => {
       {
         name: "Card",
         module: "@/components/ui/card",
+        imported: "Card",
         host: "div",
         provenance: "trace",
         role: null,

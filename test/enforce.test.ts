@@ -238,6 +238,7 @@ describe("enforce: module-scoped resolved host (no leaf-name collision)", () => 
       {
         name: "TextField",
         module: "@mui/material",
+        imported: "TextField",
         host: "input",
         provenance: "registry",
         role: null,
@@ -260,6 +261,7 @@ describe("enforce: module-scoped resolved host (no leaf-name collision)", () => 
       {
         name: "TextField",
         module: "@mui/material",
+        imported: "TextField",
         host: "input",
         provenance: "registry",
         role: null,
@@ -291,6 +293,7 @@ describe("enforce: role-aware toggle skip (#5 — Radix toggle ≠ bare button)"
       {
         name: "CheckboxPrimitive.Root",
         module: "@radix-ui/react-checkbox",
+        imported: "Root",
         host: "button",
         provenance: "trace",
         role: "checkbox",
@@ -451,5 +454,22 @@ describe("structural: router Link mapped to host `a` (issue #33)", () => {
     // EmptyToLink (19) + HashToLink (22) MUST appear (the alias narrows, never
     // disables, the rule). So exactly [19, 22].
     expect(anchorLines).toEqual([19, 22]);
+  });
+
+  // PR #35 review finding: the gate must match on the ORIGINAL imported name,
+  // not the local JSX alias. Here `Link` is imported as `RouterLink` and the
+  // co-located binclusive.json maps `RouterLink` → `a`. Keying off the alias
+  // would leave `specialLink` disarmed and re-open the #33 FP flood.
+  const aliasedRouterLinks = join(here, "fixtures", "router-link-href-aliased", "links.tsx");
+
+  it("arms specialLink for an ALIASED router-link import (`Link as RouterLink`)", async () => {
+    const { findings } = await scan([aliasedRouterLinks]);
+    const anchorLines = findings
+      .filter((f) => f.ruleId === "jsx-a11y/anchor-is-valid")
+      .map((f) => f.line)
+      .sort((a, b) => a - b);
+    // ValidLink (14) must NOT appear (alias resolved to its `Link` export);
+    // EmptyToLink (17) MUST still appear. So exactly [17].
+    expect(anchorLines).toEqual([17]);
   });
 });
