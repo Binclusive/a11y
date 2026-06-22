@@ -440,11 +440,13 @@ export function resolveComponents(
       //    leaf fallback keeps the older bare-leaf declaration working and is the
       //    only key shape that exists for a plain (non-member) wrapper.
       //
-      //    The jsx-a11y map (line below, via `jsxKeyFor`) stays LEAF-keyed
-      //    regardless: jsx-a11y's `components` setting matches a `NS.Member` tag
-      //    on its trailing identifier, so the host must land under the leaf for
-      //    the structural pass to fire. Declaration shape and map shape are
-      //    deliberately independent here.
+      //    The jsx-a11y map write (above in `recordResolved`, via
+      //    `map[jsxKeyFor(used.local)] = host`) stays LEAF-keyed regardless:
+      //    jsx-a11y's `components` setting matches a `NS.Member` tag on its
+      //    trailing identifier, so the host must land under the leaf for the
+      //    structural pass to fire. The dotted-then-leaf DECLARATION lookup
+      //    below feeds that same write through `recordResolved`. Declaration
+      //    shape and map shape are deliberately independent here.
       const declaredHost = declared[used.local] ?? declared[jsxKeyFor(used.local)];
       if (declaredHost !== undefined) {
         recordResolved(declaredHost, "declared", null, false);
