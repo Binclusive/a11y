@@ -62,3 +62,38 @@ it green, and extend its generators when you add resolver capability.
   rule → a case in `test/enforce.test.ts` + a fixture in `test/fixtures/`).
 - The corpus is SHA-pinned (`experiments/stack-matrix/manifest.json`); the only
   thing that may move the baseline numbers is this checker's own code.
+
+## Library patterns (read before writing code against these libs)
+
+Source-grounded pattern docs live in `.patterns/<subject>/`. Read the relevant
+file before using the library — they exist to stop API hallucination.
+
+### `@shopify/liquid-html-parser` — the Liquid → AST parser (Shopify producer, #47/L1)
+
+Before parsing `.liquid`, read `.patterns/liquid-html-parser/index.md`.
+
+| Task | Read |
+|------|------|
+| Parse a `.liquid` string to an AST | `.patterns/liquid-html-parser/parsing.md` → `node-taxonomy.md` |
+| Decide attribute present vs dynamic vs absent (the precision seam) | `.patterns/liquid-html-parser/attributes.md` |
+| Walk/visit nodes, read source positions | `.patterns/liquid-html-parser/traversal.md` |
+
+### `@shopify/theme-check-common` — authoring static checks (Shopify producer, #47/L2)
+
+Before writing a structural-absence rule, read `.patterns/theme-check-common/index.md`.
+
+| Task | Read |
+|------|------|
+| Author a check (visitor over the AST) | `.patterns/theme-check-common/check-definition.md` → `visitor-api.md` |
+| Report a finding with a location/severity | `.patterns/theme-check-common/reporting-offenses.md` |
+| Prior art: missing-attribute checks (img alt) | `.patterns/theme-check-common/html-attribute-checks.md` |
+
+### `@effect/cli` — the CLI framework (`check-shopify`, #47/L3, and existing commands)
+
+Before adding/altering a command, read `.patterns/effect-cli/index.md`.
+
+| Task | Read |
+|------|------|
+| Define a command + handler | `.patterns/effect-cli/command.md` |
+| Positional args / named flags | `.patterns/effect-cli/args.md`, `options.md` |
+| Wire a subcommand into the root | `.patterns/effect-cli/subcommands.md` → `running.md` |
