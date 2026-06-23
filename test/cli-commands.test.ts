@@ -100,6 +100,27 @@ describe("@effect/cli dispatch: each subcommand parses + invokes its runner", ()
     expect(stdout).toContain("No SwiftUI a11y violations found.");
   });
 
+  it("`check-shopify <dir>` routes to runCheckShopify", { timeout: 30_000 }, async () => {
+    // An empty dir has no .liquid files: scanLiquid returns zero findings, the
+    // runner prints its empty-state and exits clean — proving the verb dispatched.
+    const { stdout, exit } = await runVerb(["check-shopify", emptyDir]);
+    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(stdout).toContain(`No .liquid files under ${emptyDir}`);
+  });
+
+  it(
+    "`check-shopify <dir> --json` parses the boolean flag and emits the machine report",
+    { timeout: 30_000 },
+    async () => {
+      const { stdout, exit } = await runVerb(["check-shopify", emptyDir, "--json"]);
+      expect(Exit.isSuccess(exit)).toBe(true);
+      const report = JSON.parse(stdout);
+      expect(report.tool).toBe("a11y-checker");
+      expect(report.findings).toEqual([]);
+      expect(report.coverage.total).toBe(0);
+    },
+  );
+
   it(
     "`init <dir>` then `gen <dir>` route to runInit / runGen (optional dir parsed)",
     { timeout: 30_000 },

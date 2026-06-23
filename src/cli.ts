@@ -5,6 +5,7 @@ import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import { Effect, Option } from "effect";
 import { collectTsx } from "./collect";
 import { scanUrl } from "./collect-dom";
+import { scanLiquid } from "./collect-liquid";
 import { scanSwift } from "./collect-swift";
 import { gen, init, type LearnInput, learn } from "./commands";
 import { type FindingProvenance, scan } from "./core";
@@ -543,6 +544,52 @@ async function runCheckSwift(dir: string): Promise<void> {
   });
 }
 
+/**
+ * The Liquid counterpart to `runCheck`: statically scan `.liquid` theme source
+ * (in-process — `@shopify/liquid-html-parser` + the structural-absence rules),
+ * enrich through the SAME corpus cross-ref, and report findings anchored on
+ * `file:line` like the jsx-a11y and SwiftUI passes. No browser, no network. Liquid
+ * has no component resolver, so coverage is zeroed in the `--json` shape. A file
+ * the parser rejects is skipped (surfaced as a count), never fatal.
+ */
+async function runCheckShopify(dir: string, json = false): Promise<void> {
+  const { root, files, findings: raw, parseErrors } = await scanLiquid(dir);
+  const findings = enrichAll(raw);
+
+  if (json) {
+    // Liquid carries no resolver coverage — emit the zeroed coverage literal so
+    // the JSON shape stays identical to `check`.
+    const report = buildJsonReport(
+      root,
+      files.length,
+      { total: 0, declared: 0, registry: 0, traced: 0, opaque: 0, trusted: 0, icons: 0, structural: 0, declare: 0 },
+      findings,
+    );
+    console.log(JSON.stringify(report, null, 2));
+    const blocking = findings.filter((f) => f.enforcement === "block").length;
+    process.exitCode = blocking > 0 ? 1 : 0;
+    return;
+  }
+
+  if (files.length === 0) {
+    console.log(`No .liquid files under ${root}`);
+    return;
+  }
+
+  console.log(`a11y-checker — scanned ${files.length} .liquid file(s) under ${root}`);
+  if (parseErrors.length > 0) {
+    console.log(`  (${parseErrors.length} file(s) skipped — could not parse)`);
+  }
+  console.log("");
+
+  renderReport(findings, {
+    emptyMessage: "No Liquid a11y violations found.",
+    groupKey: (f) => f.file,
+    groupHeader: (file) => relative(root, file),
+    formatItem: (f) => formatFinding(f, root),
+  });
+}
+
 async function runInit(suggest: boolean, dirArg: string): Promise<void> {
   const dir = resolve(dirArg);
   const r = await init(dir, { suggest });
@@ -684,6 +731,16 @@ const checkSwiftCommand = Command.make(
   ({ dir }) => Effect.promise(() => runCheckSwift(dir)),
 ).pipe(Command.withDescription("scan .swift for SwiftUI accessibility findings (static)"));
 
+const checkShopifyCommand = Command.make(
+  "check-shopify",
+  { dir: dirArg, json: Options.boolean("json") },
+  ({ dir, json }) => Effect.promise(() => runCheckShopify(dir, json)),
+).pipe(
+  Command.withDescription(
+    "scan .liquid Shopify theme source for structural a11y findings (static, no browser; --json: machine-readable)",
+  ),
+);
+
 const initCommand = Command.make(
   "init",
   { suggest: Options.boolean("suggest"), dir: optionalDir },
@@ -762,6 +819,7 @@ const rootCommand = Command.make("a11y-checker", { dir: rootDir }, ({ dir }) =>
     checkCommand,
     checkUrlCommand,
     checkSwiftCommand,
+    checkShopifyCommand,
     initCommand,
     learnCommand,
     genCommand,
