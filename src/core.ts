@@ -58,7 +58,7 @@ import { wcagForRuleId } from "./wcag-map";
  *     CLI exit code. This keeps `scan()`'s output byte-identical and the floor's
  *     precision intact.
  */
-export type FindingProvenance = "jsx-a11y" | "enforce" | "axe" | "swiftui" | "corpus-agent";
+export type FindingProvenance = "jsx-a11y" | "enforce" | "axe" | "swiftui" | "liquid" | "corpus-agent";
 
 /**
  * Which layer a finding belongs to. `floor` is the deterministic static floor
