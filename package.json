@@ -48,6 +48,7 @@
     "@effect/platform": "0.96.1",
     "@effect/platform-node": "0.107.0",
     "@modelcontextprotocol/sdk": "1.26.0",
+    "@shopify/liquid-html-parser": "^2.9.2",
     "@typescript-eslint/parser": "^8.21.0",
     "effect": "3.21.3",
     "eslint": "^9.18.0",
