@@ -2,11 +2,11 @@
   "Shopify/dawn": {
     "sha": "83d5e6b4094d8019820bffafe04b242d0602ffe2",
     "filesScanned": 95,
-    "findingsCount": 14,
+    "findingsCount": 12,
     "parseErrorCount": 0,
     "parseErrorRate": 0,
     "byRule": {
-      "liquid/control-no-name": 4,
+      "liquid/control-no-name": 2,
       "liquid/duplicate-id": 5,
       "liquid/empty-heading": 2,
       "liquid/heading-order": 1,
@@ -40,11 +40,6 @@
         "ruleId": "liquid/label-for-dangling"
       },
       {
-        "file": "sections/main-cart-items.liquid",
-        "line": 95,
-        "ruleId": "liquid/control-no-name"
-      },
-      {
         "file": "sections/main-collection-product-grid.liquid",
         "line": 150,
         "ruleId": "liquid/duplicate-id"
@@ -68,11 +63,6 @@
         "file": "sections/pickup-availability.liquid",
         "line": 40,
         "ruleId": "liquid/duplicate-id"
-      },
-      {
-        "file": "snippets/cart-drawer.liquid",
-        "line": 138,
-        "ruleId": "liquid/control-no-name"
       },
       {
         "file": "snippets/facets.liquid",

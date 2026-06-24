@@ -81,6 +81,25 @@ describe("liquid/control-no-name — 4.1.2", () => {
   it("still fires on a genuinely nameless icon button (empty svg)", () => {
     expect(ruleIds(`<button><svg></svg></button>`)).toContain("liquid/control-no-name");
   });
+
+  // #64 — a control out of the a11y tree (aria-hidden) is not a missing-name defect.
+  it("stays silent when the control itself is aria-hidden=\"true\"", () => {
+    expect(ruleIds(`<a href="/x" aria-hidden="true"><svg></svg></a>`)).toEqual([]);
+    expect(ruleIds(`<button aria-hidden="true"></button>`)).toEqual([]);
+  });
+  it("stays silent when an ancestor is aria-hidden=\"true\"", () => {
+    expect(ruleIds(`<div aria-hidden="true"><button></button></div>`)).toEqual([]);
+    expect(ruleIds(`<span aria-hidden="true"><a href="/x"></a></span>`)).toEqual([]);
+  });
+  it("treats a dynamic aria-hidden as possibly-hidden (conservative skip)", () => {
+    expect(ruleIds(`<button aria-hidden="{{ hide }}"></button>`)).toEqual([]);
+  });
+  it("still fires on a non-hidden empty control (aria-hidden=\"false\")", () => {
+    expect(ruleIds(`<button aria-hidden="false"></button>`)).toEqual(["liquid/control-no-name"]);
+    expect(ruleIds(`<div aria-hidden="false"><button></button></div>`)).toEqual([
+      "liquid/control-no-name",
+    ]);
+  });
 });
 
 describe("liquid/input-no-label — 1.3.1/4.1.2", () => {
@@ -186,6 +205,9 @@ describe("liquid/svg-no-name — 1.1.1", () => {
   });
   it("does not double-report an svg inside a control (control-no-name owns it)", () => {
     expect(ruleIds(`<button><svg></svg></button>`)).toEqual(["liquid/control-no-name"]);
+  });
+  it("stays silent on a standalone svg inside an aria-hidden ancestor (#64)", () => {
+    expect(ruleIds(`<div aria-hidden="true"><svg><path/></svg></div>`)).toEqual([]);
   });
   it("carries the WCAG SC 1.1.1", () => {
     const [f] = run(`<svg><path/></svg>`);
