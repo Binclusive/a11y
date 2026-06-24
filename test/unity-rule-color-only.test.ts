@@ -27,6 +27,12 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const unityProject = join(here, "fixtures", "unity-project");
 const colorOnlyDir = join(here, "fixtures", "unity-color-only");
+// Dedicated, sibling-proof project dir for the project-level scan tests below: a copy
+// of the canonical ColorTint Button.prefab + the opaque Binary.prefab, and nothing else.
+// `unity-project` is shared across rules (#66 Phase 3), so siblings (e.g. #70's
+// LocalizedButton.prefab, itself a ColorTint Selectable) would otherwise leak extra
+// findings into a "exactly one finding" assertion. This dir is owned by this test.
+const colorOnlyProject = join(here, "fixtures", "unity-color-only-project");
 const buttonPrefab = join(unityProject, "Button.prefab");
 const spriteSwapPrefab = join(colorOnlyDir, "ToggleSpriteSwap.prefab");
 const animationPrefab = join(colorOnlyDir, "ButtonAnimation.prefab");
@@ -75,7 +81,7 @@ describe("unity color-only state: consumes the collect-unity producer output", (
   });
 
   it("flags the ColorTint Selectable when the canonical Button project is scanned", async () => {
-    const scan = await scanUnity(unityProject);
+    const scan = await scanUnity(colorOnlyProject);
     const findings = scanColorOnlyState(scan);
     expect(findings.length).toBe(1);
     expect(findings[0]!.ruleId).toBe(COLOR_ONLY_STATE_RULE_ID);
@@ -83,7 +89,7 @@ describe("unity color-only state: consumes the collect-unity producer output", (
   });
 
   it("an opaque (binary) asset contributes no finding, never crashes", async () => {
-    const scan = await scanUnity(unityProject);
+    const scan = await scanUnity(colorOnlyProject);
     const findings = scanColorOnlyState(scan);
     // Binary.prefab is opaque; only Button.prefab fires.
     expect(findings.every((f) => f.file.endsWith("Button.prefab"))).toBe(true);
