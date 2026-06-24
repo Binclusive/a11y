@@ -51,6 +51,15 @@ export interface UnityComponent {
   /** A static `m_text` literal, when present (TMP/Text accessible-name source). The
    * #70 label seam reads this; captured here so the graph is sufficient for it. */
   readonly text: string | null;
+  /**
+   * The uGUI `Selectable.m_Transition` enum, when present — the field every
+   * Selectable (Button/Toggle/Slider/…) serializes: `0`=None, `1`=ColorTint,
+   * `2`=SpriteSwap, `3`=Animation. `null` on any component that has no
+   * `m_Transition` (i.e. not a Selectable: Image, Transform, Text). Captured here
+   * so the graph is sufficient for the color-only-state rule (#73) to read it
+   * without a re-parse, and `null` IS the "not a Selectable" signal.
+   */
+  readonly transition: number | null;
 }
 
 /** A serialized GameObject — the node the hierarchy is built from. */
@@ -190,6 +199,20 @@ function readComponentIds(lines: readonly string[]): FileId[] {
   return out;
 }
 
+/**
+ * Read the Selectable `m_Transition` enum from a component block, or `null` if the
+ * block has no `m_Transition` (it is not a Selectable). The match is anchored to the
+ * `m_Transition:` mapping key at the component's own indent, never a nested key, so a
+ * non-numeric or absent value yields `null` — a Selectable always serializes an
+ * integer here, and `null` is the unambiguous "not a Selectable" signal.
+ */
+function readTransition(lines: readonly string[]): number | null {
+  const raw = field(lines, "m_Transition");
+  if (raw === null) return null;
+  const value = Number(raw);
+  return Number.isInteger(value) ? value : null;
+}
+
 /** First captured scalar for `key:` in the block, or null. */
 function field(lines: readonly string[], key: string): string | null {
   const re = new RegExp(`^\\s*${key}:\\s*(.*)$`);
@@ -244,6 +267,7 @@ export function parseUnityDocument(source: string): UnityParseResult {
         scriptGuid: guidMatch ? guidMatch[1]!.toLowerCase() : null,
         children: readChildren(doc.lines),
         text: field(doc.lines, "m_text"),
+        transition: readTransition(doc.lines),
       });
     }
 
