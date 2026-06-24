@@ -1,0 +1,88 @@
+{
+  "Shopify/dawn": {
+    "sha": "83d5e6b4094d8019820bffafe04b242d0602ffe2",
+    "filesScanned": 95,
+    "findingsCount": 4,
+    "parseErrorCount": 0,
+    "parseErrorRate": 0,
+    "byRule": {
+      "liquid/control-no-name": 4
+    },
+    "findings": [
+      {
+        "file": "sections/announcement-bar.liquid",
+        "line": 37,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "sections/announcement-bar.liquid",
+        "line": 97,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "sections/main-cart-items.liquid",
+        "line": 95,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "snippets/cart-drawer.liquid",
+        "line": 138,
+        "ruleId": "liquid/control-no-name"
+      }
+    ],
+    "error": null
+  },
+  "Shopify/horizon": {
+    "sha": "7479288eef36b0f0815423d183e8749ffd2faf75",
+    "filesScanned": 261,
+    "findingsCount": 8,
+    "parseErrorCount": 0,
+    "parseErrorRate": 0,
+    "byRule": {
+      "liquid/control-no-name": 8
+    },
+    "findings": [
+      {
+        "file": "blocks/_blog-post-card.liquid",
+        "line": 26,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "blocks/_card.liquid",
+        "line": 24,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "blocks/_header-logo.liquid",
+        "line": 28,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "blocks/product-title.liquid",
+        "line": 7,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "sections/hero.liquid",
+        "line": 509,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "sections/section-rendering-product-card.liquid",
+        "line": 44,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "snippets/cart-products.liquid",
+        "line": 169,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "snippets/group.liquid",
+        "line": 45,
+        "ruleId": "liquid/control-no-name"
+      }
+    ],
+    "error": null
+  }
+}

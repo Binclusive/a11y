@@ -40,6 +40,9 @@
     "matrix:report": "tsx experiments/stack-matrix/report.ts",
     "matrix:baseline": "tsx experiments/stack-matrix/baseline.ts",
     "matrix:check": "tsx experiments/stack-matrix/check.ts",
+    "shopify:matrix:run": "tsx experiments/shopify-matrix/run.ts",
+    "shopify:matrix:baseline": "tsx experiments/shopify-matrix/baseline.ts",
+    "shopify:matrix:check": "tsx experiments/shopify-matrix/check.ts",
     "recall:eval": "tsx experiments/corpus-recall/eval.ts"
   },
   "dependencies": {
