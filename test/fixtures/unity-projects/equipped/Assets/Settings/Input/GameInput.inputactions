@@ -1,0 +1,29 @@
+{
+    "name": "GameInput",
+    "maps": [
+        {
+            "name": "Gameplay",
+            "id": "37734faa-64e4-48a4-901b-e0ff80b636be",
+            "actions": [
+                {
+                    "name": "Move",
+                    "type": "Value",
+                    "id": "103cf56a-d357-491a-8559-592da00641cc",
+                    "expectedControlType": "Vector2",
+                    "processors": "StickDeadzone",
+                    "interactions": ""
+                },
+                {
+                    "name": "Jump",
+                    "type": "Button",
+                    "id": "d603fc26-b424-4cff-a593-71ee48e3d0ef",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": ""
+                }
+            ],
+            "bindings": []
+        }
+    ],
+    "controlSchemes": []
+}
