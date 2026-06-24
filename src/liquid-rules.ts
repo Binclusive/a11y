@@ -142,6 +142,30 @@ function isSvg(node: HtmlElementNode): boolean {
   return elementName(node)?.toLowerCase() === "svg";
 }
 
+/**
+ * Is this element removed from the accessibility tree via its own `aria-hidden`?
+ * A static `aria-hidden="true"` is unambiguously hidden. A *dynamic*
+ * `aria-hidden="{{ x }}"` is ambiguous (it may resolve to `true`), so we treat it
+ * conservatively as possibly-hidden — better to under-report than risk a false
+ * positive on a control the author may intend to hide. Any other value (`false`,
+ * absent, empty) is not hidden.
+ */
+function isSelfAriaHidden(node: HtmlElementNode): boolean {
+  const a = attr(node, "aria-hidden");
+  if (a.kind === "dynamic") return true; // could resolve to "true" → conservative skip.
+  return a.kind === "static" && a.text.trim().toLowerCase() === "true";
+}
+
+/**
+ * Is this element out of the accessibility tree — either it is itself
+ * `aria-hidden="true"`, or any ancestor is? A missing accessible name on a node
+ * hidden from assistive tech is not a defect, so the naming rules skip it (#64).
+ */
+function inAriaHiddenSubtree(node: HtmlElementNode, ctx: LiquidRuleContext): boolean {
+  if (isSelfAriaHidden(node)) return true;
+  return (ctx.ancestorsOf?.(node) ?? []).some((a) => isSelfAriaHidden(a));
+}
+
 /** Is this `<svg>` explicitly hidden from assistive tech (`aria-hidden="true"`)? */
 function svgIsHidden(node: HtmlElementNode): boolean {
   return /\baria-hidden\s*=\s*["']?\s*true\b/i.test(rawSourceOf(node));
@@ -255,6 +279,9 @@ const controlNoName: LiquidRule = (node, ctx) => {
   const isButton = name === "button";
   const isLink = name === "a" && attr(node, "href").kind !== "absent";
   if (!isButton && !isLink) return null;
+  // A control hidden from assistive tech (itself or via an ancestor `aria-hidden`)
+  // is intentionally out of the a11y tree — a missing name is not a defect (#64).
+  if (inAriaHiddenSubtree(node, ctx)) return null;
   if (subtreeHasName(node)) return null;
   const label = isButton ? "Button" : "Link";
   return makeFinding(
@@ -405,7 +432,10 @@ const NAME_OWNING_ANCESTORS: ReadonlySet<string> = new Set(["a", "button", "labe
  */
 const svgNoName: LiquidRule = (node, ctx) => {
   if (!isSvg(node)) return null;
-  if (svgIsHidden(node)) return null; // decorative → exempt.
+  if (svgIsHidden(node)) return null; // decorative (own `aria-hidden`) → exempt.
+  // Also exempt when an ancestor is `aria-hidden="true"` — the svg is out of the
+  // a11y tree, so a missing name is not a defect (#64).
+  if (inAriaHiddenSubtree(node, ctx)) return null;
   if (svgHasName(node)) return null;
   const inControl = (ctx.ancestorsOf?.(node) ?? []).some((a) =>
     NAME_OWNING_ANCESTORS.has(elementName(a)?.toLowerCase() ?? ""),
