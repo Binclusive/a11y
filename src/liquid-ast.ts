@@ -186,3 +186,18 @@ export function spanOf(node: LiquidHtmlNode): SourceSpan {
   const position = (node as { position: SourceSpan }).position;
   return { start: position.start, end: position.end };
 }
+
+/**
+ * The exact source text a node covers, reconstructed from its position span. The
+ * one way to read inside an `HtmlRawNode` (`<svg>`, `<script>`, `<style>`): its
+ * body is opaque raw markup, never parsed into child nodes, so a name source like
+ * an `<svg>`'s `<title>` is only visible here. See
+ * `.patterns/liquid-html-parser/node-taxonomy.md` (HtmlRawNode) and `traversal.md`
+ * (source position). Returns `""` if the node carries no `source`/`position`.
+ */
+export function rawSourceOf(node: LiquidHtmlNode): string {
+  const source = (node as { source?: string }).source;
+  const position = (node as { position?: SourceSpan }).position;
+  if (typeof source !== "string" || !position) return "";
+  return source.slice(position.start, position.end);
+}
