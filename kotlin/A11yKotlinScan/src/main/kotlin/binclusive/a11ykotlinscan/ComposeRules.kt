@@ -49,10 +49,25 @@ private fun KtCallExpression.calleeName(): String? = calleeExpression?.text
 private fun KtCallExpression.namedArg(name: String): KtValueArgument? =
     valueArguments.firstOrNull { it.getArgumentName()?.asName?.asString() == name }
 
+/**
+ * The trimmed source text of an `Icon`/`Image` call's `contentDescription`, or null if
+ * it has none. Compose's signature is `Icon(source, contentDescription, …)`, so the
+ * argument may be NAMED (`contentDescription = …`) or the 2nd POSITIONAL argument
+ * (`Icon(Icons.Menu, null)`) — real code uses both, so both must be read or a positional
+ * description reads as a false "no name". A 2nd positional is unambiguous: the only other
+ * thing it could be is `contentDescription` (a `Modifier` there would not type-check).
+ */
+private fun contentDescriptionText(call: KtCallExpression): String? {
+    call.namedArg("contentDescription")?.getArgumentExpression()?.let { return it.text.trim() }
+    val second = call.valueArguments.getOrNull(1) ?: return null
+    if (second.getArgumentName() != null) return null // a different named arg, not positional
+    return second.getArgumentExpression()?.text?.trim()
+}
+
 /** Does this `Icon`/`Image` call carry a non-null `contentDescription` (a real name)? */
 private fun imageHasName(call: KtCallExpression): Boolean {
-    val expr = call.namedArg("contentDescription")?.getArgumentExpression() ?: return false
-    return expr.text.trim() != "null"
+    val text = contentDescriptionText(call) ?: return false
+    return text != "null"
 }
 
 /** The trailing content lambda of a composable call (`IconButton(onClick) { … }`). */

@@ -79,6 +79,37 @@ class ComposeRuleTest {
     }
 
     @Test
+    fun positionalNullDescriptionIsFlagged() {
+        // The Seal/ReadYou real-world shape: `Icon(Icons.Menu, null)` — contentDescription
+        // passed POSITIONALLY as null. A genuine unnamed control; must fire.
+        val src = """
+            @Composable fun Bar() {
+                IconButton(onClick = { open() }) {
+                    Icon(Icons.Outlined.Menu, null)
+                }
+            }
+        """.trimIndent()
+        assertTrue(
+            ruleIds(src).contains("compose/icon-button-no-name"),
+            "a positional null contentDescription is still nameless",
+        )
+    }
+
+    @Test
+    fun positionalNamedDescriptionIsNotFlagged() {
+        // The latent false positive: `Icon(Icons.Menu, stringResource(...))` — a real name
+        // passed POSITIONALLY. Reading only the named arg would wrongly flag it.
+        val src = """
+            @Composable fun Bar() {
+                IconButton(onClick = { open() }) {
+                    Icon(Icons.Outlined.Menu, stringResource(R.string.open_menu))
+                }
+            }
+        """.trimIndent()
+        assertEquals(emptyList(), ruleIds(src), "a positional non-null description names the control")
+    }
+
+    @Test
     fun iconButtonWithTextIsNotFlagged() {
         val src = """
             @Composable fun Bar() {

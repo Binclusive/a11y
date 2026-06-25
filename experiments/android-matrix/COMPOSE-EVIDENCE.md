@@ -41,6 +41,27 @@ only flags when the content is *provably* nameless. After the fix: **0 findings 
 (correct for an a11y-reference app); recall is held by the unit test that flags a real
 `IconButton { Icon(..., contentDescription = null) }`.
 
+## Recall validation — three real Compose apps
+
+NiA proves *precision* (0 false positives on clean code) but not *recall* — it has no
+real unnamed-icon-button defects. Two community Compose apps closed that gap:
+
+| app | `.kt` | findings | verdict |
+|---|---:|---:|---|
+| android/nowinandroid | 310 | 0 | clean reference app (precision anchor) |
+| JunkFood02/Seal | 140 | 2 | both true positives — `Icon(Icons.Outlined.Menu, null)` and `Icon(Icons.Outlined.Settings, null)` icon buttons, no name |
+| Ashinch/ReadYou | 379 | 1 | true positive — a certificate-chooser `IconButton` holding only `Icon(Key, contentDescription = null)` |
+
+**3/3 true positives** — the rule fires on genuine defects in real code, not just fixtures.
+
+The recall run also surfaced a latent **precision** bug the clean app couldn't: Compose's
+`contentDescription` is frequently passed POSITIONALLY (`Icon(Icons.Menu, null)` — the 2nd
+positional arg), and the rule originally read only the *named* argument. The real nulls
+were caught by luck, but a positional non-null description (`Icon(x, stringResource(...))`,
+6 such call sites in Seal) would have been a false positive. Fixed: read the
+`contentDescription` whether named or the 2nd positional arg. Re-scan after the fix held
+all three results (NiA 0, Seal 2, ReadYou 1) — recall preserved, the latent FP closed.
+
 ## Bearing on the parser choice
 
 Because the rules are syntactic, a tree-sitter CST *could* in principle serve — but the
