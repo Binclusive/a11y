@@ -110,6 +110,14 @@ describe("precision: the false-positive classes the NewPipe corpus exposed", () 
     const survivor = findings.find((f) => f.file.endsWith("precision.xml"));
     expect(survivor?.message).toContain("<FrameLayout>");
   });
+
+  it("does not flag a field wrapped in a Material TextInputLayout (parent owns the label)", async () => {
+    const { findings } = await scanAndroidXml(projectDir);
+    const editable = findings.filter(
+      (f) => f.file.endsWith("precision.xml") && f.ruleId.endsWith("editable-no-label"),
+    );
+    expect(editable).toEqual([]);
+  });
 });
 
 describe("--json report shape (consistent with check)", () => {

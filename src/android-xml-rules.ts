@@ -144,11 +144,13 @@ function subtreeSuppliesName(el: XmlElement, hidden: boolean): boolean {
   return false;
 }
 
-/** Carried down the tree: whether an ancestor hid the subtree, or suppressed the
- * contentDescription lint over it. */
+/** Carried down the tree: whether an ancestor hid the subtree, suppressed the
+ * contentDescription lint over it, or is a `TextInputLayout` (which owns the label
+ * for the `EditText` it wraps — statically or at runtime). */
 interface Inherited {
   readonly hidden: boolean;
   readonly cdSuppressed: boolean;
+  readonly inTextInputLayout: boolean;
 }
 
 /**
@@ -210,7 +212,15 @@ export function runAndroidXmlRules(
       }
     }
 
-    if (!hidden && EDIT_TAGS.has(tag) && !ignoreList(el).some((id) => id === "LabelFor" || id === "all")) {
+    // A field wrapped in a Material TextInputLayout is labelled by that parent (its
+    // floating hint, set statically or in code) — stay opaque rather than flag it,
+    // the conservatism the real corpus (AntennaPod) demanded.
+    if (
+      !hidden &&
+      !inh.inTextInputLayout &&
+      EDIT_TAGS.has(tag) &&
+      !ignoreList(el).some((id) => id === "LabelFor" || id === "all")
+    ) {
       const id = idTarget(localAttr(el, "id"));
       const labelled = id !== undefined && labelledIds.has(id);
       if (!hasValue(el, "hint") && !labelled) {
@@ -224,10 +234,14 @@ export function runAndroidXmlRules(
       }
     }
 
-    const childInh: Inherited = { hidden: inh.hidden || hidesDescendants(el), cdSuppressed };
+    const childInh: Inherited = {
+      hidden: inh.hidden || hidesDescendants(el),
+      cdSuppressed,
+      inTextInputLayout: inh.inTextInputLayout || tag === "TextInputLayout",
+    };
     for (const child of el.children) walk(child, childInh);
   };
 
-  for (const root of roots) walk(root, { hidden: false, cdSuppressed: false });
+  for (const root of roots) walk(root, { hidden: false, cdSuppressed: false, inTextInputLayout: false });
   return findings;
 }

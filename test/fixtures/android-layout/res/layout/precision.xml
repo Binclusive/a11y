@@ -39,6 +39,18 @@
         android:src="@drawable/ic_more"
         tools:ignore="ContentDescription" />
 
+    <!-- clean: a Material text field — the TextInputLayout owns the label (its hint
+         is set statically or at runtime), so the wrapped field stays opaque -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/password"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textPassword" />
+    </com.google.android.material.textfield.TextInputLayout>
+
     <!-- VIOLATION (control-no-name only): a clickable container with no name anywhere
          in its subtree — its single child image is decorative, so nothing labels it -->
     <FrameLayout
