@@ -13,9 +13,10 @@ CLI over the Kotlin compiler frontend (PSI, `kotlin-compiler-embeddable`) that p
 
 ## Rules (today)
 
-| ruleId | WCAG | what |
-|---|---|---|
-| `compose/icon-button-no-name` | 4.1.2 | An `IconButton` / `IconToggleButton` / `FilledIconButton` (…) whose content is **provably nameless** — a literal `Icon`/`Image` with `contentDescription = null`, no `Text`, and nothing opaque. |
+| ruleId | WCAG | surface | what |
+|---|---|---|---|
+| `compose/icon-button-no-name` | 4.1.2 | Compose (lane 2) | An `IconButton` / `IconToggleButton` / `FilledIconButton` (…) whose content is **provably nameless** — a literal `Icon`/`Image` with `contentDescription = null` (named *or* the 2nd positional arg), no `Text`, nothing opaque. |
+| `view/touch-no-performclick` | 4.1.2 | programmatic View (lane 3) | A `view.setOnTouchListener { … }` whose body never calls `performClick()` (Android Lint `ClickableViewAccessibility`) — TalkBack activates via `performClick()`, not raw touch, so the control is inoperable for it. A by-reference listener is opaque, not flagged. |
 
 **Precision (the invariant).** A standalone decorative `Icon(contentDescription = null)`
 is never flagged (only icons that are the sole content of an interactive control are),
@@ -65,6 +66,12 @@ build/install/A11yKotlinScan/bin/A11yKotlinScan <project-dir>   # JSON Finding[]
 
 ## Scope (ADR 0006)
 
-This is **lane 2** — Compose. The programmatic-Kotlin View surface (`imageView.contentDescription = …`,
-`setOnClickListener`, custom `View`s) is the same engine, additional rules, and is where
-the Analysis API would be adopted *if* a rule needs a receiver's type. Not built yet.
+Covers **lane 2** (Compose) and the start of **lane 3** (programmatic Kotlin Views) —
+same engine, two rule families. A real-corpus check (5 apps) found the Kotlin
+programmatic-View surface is **thin**: `setOnTouchListener` appears in Kotlin in 1 of 5
+apps (modern UI is Compose; legacy Views are mostly Java). So lane 3 leads with the
+high-precision, PSI-tractable `ClickableViewAccessibility` rule (1 true positive / 0 FP
+on NewPipe). The higher-frequency programmatic rules — a missing `contentDescription` on
+a dynamically-configured `ImageView` — need **type resolution** (is this receiver an
+`ImageView`?), which is where the Analysis API enters; deferred until that surface earns
+it.

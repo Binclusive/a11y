@@ -65,7 +65,7 @@ fun scanSource(source: String, filePath: String): List<Finding> {
     try {
         val environment = createEnvironment(disposable)
         val ktFile = KtPsiFactory(environment.project).createFile(filePath, source)
-        return runComposeRules(ktFile, source, filePath)
+        return runComposeRules(ktFile, source, filePath) + runViewRules(ktFile, source, filePath)
     } finally {
         Disposer.dispose(disposable)
     }
@@ -84,6 +84,7 @@ fun scanDirectory(root: File): List<Finding> {
             val source = File(path).readText()
             val ktFile = factory.createFile(path, source)
             out.addAll(runComposeRules(ktFile, source, path))
+            out.addAll(runViewRules(ktFile, source, path))
         }
         return out
     } finally {

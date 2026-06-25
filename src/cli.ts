@@ -53,7 +53,9 @@ export function detailLines(f: EnrichedFinding): string[] {
             ? "  (Android XML static)"
             : f.provenance === "compose"
               ? "  (Compose static)"
-              : "";
+              : f.provenance === "android-view"
+                ? "  (Android View static)"
+                : "";
   const lines = [
     `    rule:   ${f.ruleId}  [${f.enforcement}]${via}`,
     `    wcag:   ${scList}`,

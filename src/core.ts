@@ -67,6 +67,7 @@ export type FindingProvenance =
   | "unity"
   | "android-xml"
   | "compose"
+  | "android-view"
   | "corpus-agent";
 
 /**
