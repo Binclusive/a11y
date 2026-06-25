@@ -7,7 +7,7 @@ import { extractBlock } from "../src/agents-block";
 import { CONTRACT_FILE, init } from "../src/commands";
 import { parseContract } from "../src/contract";
 import type { DomScanResult } from "../src/collect-dom";
-import { checkA11y, checkUrl, getA11yRules, learnA11yRule, reviewTool } from "../src/mcp";
+import { checkA11y, checkUnity, checkUrl, getA11yRules, learnA11yRule, reviewTool } from "../src/mcp";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -87,6 +87,51 @@ describe("check_a11y handler", () => {
       expect(r.filesScanned).toBe(0);
       expect(r.findings).toEqual([]);
       expect(r.coverage.total).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("check_unity handler", () => {
+  const UNITY_PROJECT = join(FIXTURES, "unity-project");
+
+  it("returns enriched Unity findings for a project dir, mirroring check_a11y", async () => {
+    const r = await checkUnity(UNITY_PROJECT);
+
+    // The fixture yields the aggregator's full finding stream (6 findings: 3
+    // color-only, 1 missing-label, 2 project-level baseline) — see unity-findings.test.ts.
+    expect(r.findings.length).toBeGreaterThan(0);
+    expect(r.root).toBe(UNITY_PROJECT);
+
+    // Every finding is a Unity finding, tiered against the same corpus as .tsx.
+    for (const f of r.findings) {
+      expect(f.provenance).toBe("unity");
+    }
+
+    // The missing-accessible-label finding is present and WCAG-bridged.
+    const missing = r.findings.find((f) => f.ruleId === "unity/missing-accessible-label");
+    expect(missing).toBeDefined();
+    expect(missing?.wcag).toEqual(["1.1.1", "4.1.2"]);
+
+    // Paths are relativized to the project root — no absolute leakage (parity with check_a11y).
+    for (const f of r.findings) {
+      expect(f.file.startsWith("/")).toBe(false);
+    }
+    expect(r.findings.some((f) => f.file === "ButtonNoLabel.prefab")).toBe(true);
+  });
+
+  it("does not error on a dir with no .prefab/.unity assets (no per-widget findings)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "a11y-mcp-unity-empty-"));
+    try {
+      const r = await checkUnity(dir);
+      expect(r.root).toBe(resolve(dir));
+      // No assets ⇒ no per-widget findings (color-only / missing-label). The
+      // project-level baseline rules (no-screen-reader-support / no-input-rebinding)
+      // are absence-based, so they still fire — that is the aggregator's contract,
+      // surfaced unchanged through the MCP tool (no Unity-specific filtering here).
+      expect(r.findings.some((f) => f.ruleId === "unity/missing-accessible-label")).toBe(false);
+      expect(r.findings.some((f) => f.ruleId === "unity/color-only-state")).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

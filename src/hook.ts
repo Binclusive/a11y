@@ -8,6 +8,11 @@
  * edit lands. Same wrapping discipline as `mcp.ts`: every handler is a THIN
  * wrapper over `scan` + `enrichAll` — no new a11y logic lives here.
  *
+ * It handles two ecosystems by file extension: a `.tsx` edit runs the React scan
+ * (floor + recall), and a `.prefab`/`.unity` edit runs the Unity finding-emission
+ * aggregator (`collectUnityFindings`) over the enclosing project, scoped to the
+ * edited asset — Unity reaches the editor surface at parity with React (#92).
+ *
  * Contract (verified against https://docs.claude.com/en/docs/claude-code/hooks):
  *   stdin  — the PostToolUse event JSON. Relevant fields:
  *              { tool_name, tool_input: { file_path, ... }, cwd, ... }
@@ -24,12 +29,14 @@
  *     edit. Any problem → emit nothing, exit 0. The edit is advisory-only.
  */
 
-import { isAbsolute, relative, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { scan, type ScanResult } from "./core";
 import { corpusFix, corpusTier, type CorpusTier, type EnrichedFinding, enrichAll } from "./corpus";
 import { collectIntrinsicElements } from "./intrinsic-elements";
 import { CERTIFIED_RECALL_PATTERN_IDS, type RetrievedPattern, retrieveSlice } from "./retrieve";
+import { collectUnityFindings } from "./unity-findings";
 
 /**
  * The slice of the PostToolUse payload we use. The full event carries more
@@ -192,10 +199,64 @@ function recallWhisper(filePath: string, result: ScanResult, root: string): stri
   }
 }
 
+/** Markers of a Unity project root, checked walking up from an edited asset.
+ * `Assets` + `ProjectSettings` are the two canonical top-level dirs Unity creates;
+ * either one present is enough to call a directory the project root. */
+const UNITY_ROOT_MARKERS = ["Assets", "ProjectSettings"] as const;
+
+/**
+ * Locate the enclosing Unity project for an edited `.prefab`/`.unity` asset.
+ * Walks up from the asset's directory looking for a Unity root marker
+ * (`Assets`/`ProjectSettings`); returns the first directory that has one. Falls
+ * back to the asset's own directory when no marker is found (a loose fixture or a
+ * detached asset) so the aggregator still scans something rather than no-op'ing —
+ * `collectUnityFindings` is forgiving, so a directory with no further assets just
+ * yields the findings for this one file's siblings.
+ */
+function findUnityProjectRoot(filePath: string): string {
+  let dir = dirname(filePath);
+  for (;;) {
+    if (UNITY_ROOT_MARKERS.some((m) => existsSync(join(dir, m)))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break; // reached the filesystem root
+    dir = parent;
+  }
+  return dirname(filePath);
+}
+
+/**
+ * The Unity branch of {@link runHook}: an edited `.prefab`/`.unity` asset. Locate
+ * the enclosing project, run the Unity finding-emission aggregator over it
+ * (`collectUnityFindings` — the SAME spine the CLI/MCP use), enrich the findings,
+ * and emit the SAME floor whisper as the `.tsx` path, scoped to the edited asset so
+ * the model fixes the file it just touched (per-file parity with React). No
+ * Unity-specific report path — it reuses `enrichAll` + `formatWhisper` verbatim.
+ *
+ * Fail-safe like the `.tsx` branch: any throw → null (the edit is advisory-only).
+ */
+async function runUnityHook(filePath: string, base: string): Promise<HookOutput | null> {
+  try {
+    const projectRoot = findUnityProjectRoot(filePath);
+    const raw = await collectUnityFindings(projectRoot);
+    // Scope to the asset just edited (the aggregator scans the whole project) so the
+    // whisper speaks only to the file the model touched — per-file parity with .tsx.
+    const forFile = raw.filter((f) => resolve(f.file) === resolve(filePath));
+    const findings = enrichAll(forFile);
+
+    const floor = formatWhisper(filePath, findings, base);
+    if (floor === null) return null;
+    return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: floor } };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Run the checker on ONE edited file and return the `additionalContext`
  * envelope, or null to no-op. Pulls `file_path` from `tool_input`, resolves it
- * against `cwd` if relative, and skips anything that isn't a `.tsx`.
+ * against `cwd` if relative, and dispatches by extension: `.tsx` runs the React
+ * scan (floor + recall), `.prefab`/`.unity` runs the Unity aggregator; anything
+ * else no-ops.
  *
  * Reused by both the CLI entry and the tests — the tests call it directly with
  * a sample payload, the CLI feeds it parsed stdin.
@@ -211,7 +272,12 @@ export async function runHook(raw: unknown): Promise<HookOutput | null> {
   const base = parsed.data.cwd ?? process.cwd();
   const filePath = isAbsolute(filePathRaw) ? filePathRaw : resolve(base, filePathRaw);
 
-  // Only .tsx files are scannable — silently no-op on everything else.
+  // Unity assets take the aggregator path; .tsx takes the React scan below.
+  if (filePath.endsWith(".prefab") || filePath.endsWith(".unity")) {
+    return runUnityHook(filePath, base);
+  }
+
+  // Only .tsx files are scannable on the React path — silently no-op on the rest.
   if (!filePath.endsWith(".tsx")) return null;
 
   // FAIL-SAFE (module contract): from the scan onward, any throw → null. This
