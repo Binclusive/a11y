@@ -1,23 +1,28 @@
 /**
  * A2 — the Android layout structural-absence rules (ADR 0006).
  *
- * The Android counterpart of `liquid-rules.ts` / the SwiftUI engine's rule set:
- * over the flat element list from `android-xml-ast.ts`, emit a {@link Finding} for
- * each view that is STRUCTURALLY missing an accessible name. Three rules, mirroring
- * the SwiftUI pair plus the form-label case:
+ * The Android counterpart of `liquid-rules.ts` / the SwiftUI engine's rule set: walk
+ * the element TREE from `android-xml-ast.ts` and emit a {@link Finding} for each view
+ * that is STRUCTURALLY missing an accessible name. Three rules, mirroring the SwiftUI
+ * pair plus the form-label case:
  *
  *   android-xml/image-no-label   (1.1.1) — an `ImageView`/`ImageButton` with no
- *       `android:contentDescription`, not marked decorative.
+ *       `android:contentDescription`, not decorative, not suppressed.
  *   android-xml/control-no-name  (4.1.2) — an interactive view (`Button`,
- *       `ImageButton`, `android:onClick`, `android:clickable="true"`) with no
- *       text and no contentDescription — TalkBack announces nothing actionable.
+ *       `ImageButton`, `android:onClick`, `android:clickable="true"`) that supplies
+ *       no name ANYWHERE in its subtree — TalkBack announces nothing actionable.
  *   android-xml/editable-no-label (1.3.1) — an `EditText`-family field with neither
  *       `android:hint` nor a sibling `android:labelFor` pointing at it.
  *
- * Conservatism (the precision invariant): a rule fires only on a clear structural
- * absence. A decorative view (`android:importantForAccessibility="no"`) is never
- * flagged; a runtime-set name (a binding expression `@{…}`) counts as present, so a
- * data-bound description is not a false positive.
+ * Conservatism (the precision invariant — validated against a real corpus, NewPipe):
+ *   - `android:importantForAccessibility="no"` (the element) and `"noHideDescendants"`
+ *     (the element + its subtree) are removed from the a11y tree → never flagged.
+ *   - `tools:ignore="ContentDescription"` (and `…="all"`) is an EXPLICIT developer
+ *     suppression of exactly this lint — honored like the React side honors
+ *     `aria-hidden` / eslint-disable. It applies to the element and its subtree.
+ *   - A clickable CONTAINER is named by its descendants, so `control-no-name` looks
+ *     DOWN the subtree for a name before firing (the analog of the SwiftUI climb).
+ *   - A data-bound name (`@{…}`) counts as present — a runtime name is not absence.
  */
 
 import type { XmlElement } from "./android-xml-ast";
@@ -53,7 +58,7 @@ const EDIT_TAGS = new Set([
 ]);
 
 /** The local tag name, dropping any fully-qualified package on a custom view
- * (`com.example.MyImageView` → `MyImageView`). */
+ * (`androidx.appcompat.widget.AppCompatImageButton` → `AppCompatImageButton`). */
 function localTag(tag: string): string {
   const dot = tag.lastIndexOf(".");
   return dot === -1 ? tag : tag.slice(dot + 1);
@@ -61,8 +66,9 @@ function localTag(tag: string): string {
 
 /**
  * The value of an attribute by its LOCAL name, ignoring the namespace prefix —
- * `localAttr(el, "contentDescription")` matches `android:contentDescription` (or any
- * prefix). Prefers the canonical `android:` spelling when both exist.
+ * `localAttr(el, "contentDescription")` matches `android:contentDescription`,
+ * `localAttr(el, "ignore")` matches `tools:ignore`. Prefers the canonical `android:`
+ * spelling when both exist.
  */
 function localAttr(el: XmlElement, local: string): string | undefined {
   const canonical = el.attrs.get(`android:${local}`);
@@ -83,9 +89,30 @@ function hasValue(el: XmlElement, local: string): boolean {
   return v !== undefined && v.trim() !== "";
 }
 
-/** Explicitly removed from the a11y tree → never flag (the Android `decorative`). */
-function isDecorative(el: XmlElement): boolean {
-  return localAttr(el, "importantForAccessibility") === "no";
+/** Does the element (or, for `noHideDescendants`, an ancestor that set the inherited
+ * flag) sit outside the a11y tree? `"no"` hides the element itself; the subtree case
+ * is carried in {@link Inherited.hidden}. */
+function selfHidden(el: XmlElement, inheritedHidden: boolean): boolean {
+  return inheritedHidden || localAttr(el, "importantForAccessibility") === "no";
+}
+
+/** Does `android:importantForAccessibility="noHideDescendants"` here remove the whole
+ * subtree from the a11y tree (inherited downward)? */
+function hidesDescendants(el: XmlElement): boolean {
+  return localAttr(el, "importantForAccessibility") === "noHideDescendants";
+}
+
+/** Does `tools:ignore` on this element suppress the missing-contentDescription lint
+ * (the `ContentDescription` id, or the blanket `all`)? Applies to the subtree. */
+function ignoresContentDescription(el: XmlElement): boolean {
+  return ignoreList(el).some((id) => id === "ContentDescription" || id === "all");
+}
+
+/** The comma-separated `tools:ignore` lint ids on this element (trimmed). */
+function ignoreList(el: XmlElement): string[] {
+  const v = localAttr(el, "ignore");
+  if (v === undefined) return [];
+  return v.split(",").map((s) => s.trim());
 }
 
 /** A view that is operable: a button, or made clickable in the layout. */
@@ -103,20 +130,43 @@ function idTarget(value: string | undefined): string | undefined {
   return slash === -1 ? value : value.slice(slash + 1);
 }
 
+/** Does `el` or ANY descendant carry a non-empty name (text / contentDescription)?
+ * This is what makes a clickable container safe: TalkBack reads the descendants'
+ * text, so the container is not nameless. Stops at a `noHideDescendants` subtree
+ * (those descendants are not announced). */
+function subtreeSuppliesName(el: XmlElement, hidden: boolean): boolean {
+  if (selfHidden(el, hidden)) return false;
+  if (hasValue(el, "text") || hasValue(el, "contentDescription")) return true;
+  const childHidden = hidden || hidesDescendants(el);
+  for (const child of el.children) {
+    if (subtreeSuppliesName(child, childHidden)) return true;
+  }
+  return false;
+}
+
+/** Carried down the tree: whether an ancestor hid the subtree, or suppressed the
+ * contentDescription lint over it. */
+interface Inherited {
+  readonly hidden: boolean;
+  readonly cdSuppressed: boolean;
+}
+
 /**
- * Run the structural-absence rules over one parsed layout's elements. The
+ * Run the structural-absence rules over one parsed layout's element tree. The
  * `labelFor` cross-reference is resolved file-locally first (every id another view
  * labels), so an `EditText` named by a sibling label is not flagged.
  */
 export function runAndroidXmlRules(
-  elements: readonly XmlElement[],
+  roots: readonly XmlElement[],
   ctx: AndroidXmlRuleContext,
 ): Finding[] {
   const labelledIds = new Set<string>();
-  for (const el of elements) {
+  const collectLabels = (el: XmlElement): void => {
     const target = idTarget(localAttr(el, "labelFor"));
     if (target !== undefined) labelledIds.add(target);
-  }
+    for (const child of el.children) collectLabels(child);
+  };
+  for (const root of roots) collectLabels(root);
 
   const make = (ruleId: string, message: string, el: XmlElement): Finding => ({
     file: ctx.file,
@@ -129,31 +179,38 @@ export function runAndroidXmlRules(
   });
 
   const findings: Finding[] = [];
-  for (const el of elements) {
-    if (isDecorative(el)) continue;
+
+  const walk = (el: XmlElement, inh: Inherited): void => {
+    const hidden = selfHidden(el, inh.hidden);
+    const cdSuppressed = inh.cdSuppressed || ignoresContentDescription(el);
     const tag = localTag(el.tag);
 
-    if (IMAGE_TAGS.has(tag) && !hasValue(el, "contentDescription")) {
-      findings.push(
-        make(
-          "android-xml/image-no-label",
-          `<${el.tag}> has no android:contentDescription — TalkBack announces nothing. Add android:contentDescription="…", or mark it decorative with android:importantForAccessibility="no".`,
-          el,
-        ),
-      );
+    // Rules that hinge on contentDescription are skipped when the element is hidden
+    // or the dev suppressed that lint over this subtree.
+    if (!hidden && !cdSuppressed) {
+      if (IMAGE_TAGS.has(tag) && !hasValue(el, "contentDescription")) {
+        findings.push(
+          make(
+            "android-xml/image-no-label",
+            `<${el.tag}> has no android:contentDescription — TalkBack announces nothing. Add android:contentDescription="…", or mark it decorative with android:importantForAccessibility="no".`,
+            el,
+          ),
+        );
+      }
+      // A control with no name ANYWHERE in its subtree. The descendant look is what
+      // stops a clickable row (named by its child TextView) from being a false positive.
+      if (isInteractive(el) && !subtreeSuppliesName(el, inh.hidden)) {
+        findings.push(
+          make(
+            "android-xml/control-no-name",
+            `<${el.tag}> is interactive but supplies no accessible name (nothing in its subtree has text or a contentDescription) — TalkBack reads no actionable label. Add android:contentDescription="…", or a labelled child.`,
+            el,
+          ),
+        );
+      }
     }
 
-    if (isInteractive(el) && !hasValue(el, "text") && !hasValue(el, "contentDescription")) {
-      findings.push(
-        make(
-          "android-xml/control-no-name",
-          `<${el.tag}> is interactive but has no accessible name — TalkBack reads no actionable label. Add android:contentDescription="…" (or android:text="…" for a text control).`,
-          el,
-        ),
-      );
-    }
-
-    if (EDIT_TAGS.has(tag)) {
+    if (!hidden && EDIT_TAGS.has(tag) && !ignoreList(el).some((id) => id === "LabelFor" || id === "all")) {
       const id = idTarget(localAttr(el, "id"));
       const labelled = id !== undefined && labelledIds.has(id);
       if (!hasValue(el, "hint") && !labelled) {
@@ -166,6 +223,11 @@ export function runAndroidXmlRules(
         );
       }
     }
-  }
+
+    const childInh: Inherited = { hidden: inh.hidden || hidesDescendants(el), cdSuppressed };
+    for (const child of el.children) walk(child, childInh);
+  };
+
+  for (const root of roots) walk(root, { hidden: false, cdSuppressed: false });
   return findings;
 }

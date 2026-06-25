@@ -22,8 +22,8 @@ const ruleIdsIn = (file: string, findings: readonly { ruleId: string; file: stri
 describe("collectAndroidXmlFiles: the walk", () => {
   it("collects every .xml under the project, descending into res/ subdirs", async () => {
     const files = await collectAndroidXmlFiles(projectDir);
-    // bad.xml, good.xml, broken.xml, values/strings.xml — AndroidManifest excluded.
-    expect(files).toHaveLength(4);
+    // bad, good, broken, precision (layout) + values/strings — AndroidManifest excluded.
+    expect(files).toHaveLength(5);
     expect(files.every((f) => f.endsWith(".xml"))).toBe(true);
   });
 
@@ -78,10 +78,11 @@ describe("scanAndroidXml: findings", () => {
 });
 
 describe("scanAndroidXml: non-layout XML and parse errors", () => {
-  it("skips non-layout XML (values/strings.xml) — only the two layouts are scanned", async () => {
+  it("skips non-layout XML (values/strings.xml) — only the layout files are scanned", async () => {
     const { files } = await scanAndroidXml(projectDir);
-    expect(files).toHaveLength(2);
-    expect(files.every((f) => f.endsWith("bad.xml") || f.endsWith("good.xml"))).toBe(true);
+    // bad.xml, good.xml, precision.xml — values/strings.xml stays opaque.
+    expect(files).toHaveLength(3);
+    expect(files.some((f) => f.endsWith("strings.xml"))).toBe(false);
   });
 
   it("records the malformed file in parseErrors and keeps scanning the rest", async () => {
@@ -90,6 +91,24 @@ describe("scanAndroidXml: non-layout XML and parse errors", () => {
     expect(parseErrors[0]!.file).toMatch(/broken\.xml$/);
     // The good/bad findings still came through — one bad file didn't abort the scan.
     expect(findings.some((f) => f.file.endsWith("bad.xml"))).toBe(true);
+  });
+});
+
+describe("precision: the false-positive classes the NewPipe corpus exposed", () => {
+  it("does not flag a clickable container named by a descendant, or a tools:ignore'd image/button", async () => {
+    const { findings } = await scanAndroidXml(projectDir);
+    const precision = findings.filter((f) => f.file.endsWith("precision.xml"));
+    // The clickable row (named by its child TextView), the two tools:ignore=
+    // ContentDescription views, and the decorative images all stay clean.
+    // The ONLY survivor is the clickable FrameLayout with no name anywhere in its
+    // subtree → exactly one control-no-name, no image-no-label.
+    expect(precision.map((f) => f.ruleId)).toEqual(["android-xml/control-no-name"]);
+  });
+
+  it("the descendant-name check fires control-no-name on a truly nameless clickable", async () => {
+    const { findings } = await scanAndroidXml(projectDir);
+    const survivor = findings.find((f) => f.file.endsWith("precision.xml"));
+    expect(survivor?.message).toContain("<FrameLayout>");
   });
 });
 
@@ -104,7 +123,7 @@ describe("--json report shape (consistent with check)", () => {
       findings,
     );
     expect(report.tool).toBe("a11y-checker");
-    expect(report.filesScanned).toBe(2);
+    expect(report.filesScanned).toBe(3);
     expect(report.coverage.total).toBe(0);
     expect(report.summary.findings).toBe(findings.length);
     // bad.xml's findings are blocking with no contract present.

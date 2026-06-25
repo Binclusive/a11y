@@ -1,12 +1,18 @@
 /**
  * A1 — the Android layout XML parser (ADR 0006, the in-TS XML lane).
  *
- * The Android equivalent of `liquid-ast.ts`: parse `res/layout/*.xml` into a flat
- * list of view elements with their attributes and source line, so `android-xml-rules.ts`
- * can apply the structural-absence rules in-process (no JVM — that engine is the
- * SEPARATE Kotlin lane). A dependency-free tokenizer rather than a full XML library:
- * the rules only need each element's tag + attributes + line, and a layout is a flat
- * read of named views, so a small scanner is enough and keeps the producer in `src/`.
+ * The Android equivalent of `liquid-ast.ts`: parse `res/layout/*.xml` into a NESTED
+ * element tree (each view + its children) with attributes and source line, so
+ * `android-xml-rules.ts` can apply the structural-absence rules in-process (no JVM —
+ * that engine is the SEPARATE Kotlin lane). A dependency-free tokenizer rather than a
+ * full XML library: the rules need each element's tag + attributes + line + its
+ * descendants, which a small stack-based scanner gives, keeping the producer in `src/`.
+ *
+ * The tree (not a flat list) is load-bearing for precision — the real-corpus test
+ * showed two false-positive classes a flat read can't avoid: a clickable CONTAINER is
+ * named by its descendants (so `control-no-name` must look DOWN before firing), and
+ * both `tools:ignore` and `android:importantForAccessibility` apply to a whole
+ * SUBTREE. Both need parent→child structure.
  *
  * The precision invariant carries over: a file that does not parse, or that is not an
  * Android layout (no android namespace), is reported as such and skipped — never
@@ -19,39 +25,57 @@
 const ANDROID_NS = "schemas.android.com/apk/res/android";
 
 /** One parsed view element: its tag (the verbatim source spelling, incl. any
- * fully-qualified custom-view package), the 1-based line of its `<`, and its
- * attributes keyed by their full source name (e.g. `android:contentDescription`). */
+ * fully-qualified custom-view package), the 1-based line of its `<`, its attributes
+ * keyed by their full source name (e.g. `android:contentDescription`), and its child
+ * elements in source order. */
 export interface XmlElement {
   readonly tag: string;
   readonly line: number;
   readonly attrs: ReadonlyMap<string, string>;
+  readonly children: readonly XmlElement[];
 }
 
-/** Parse outcome: the element list + whether the file is an Android layout, or a
+/** Parse outcome: the root element(s) + whether the file is an Android layout, or a
  * single boundary error (mirrors `parseLiquid`'s `ok`/`error` shape). */
 export type AndroidXmlParseResult =
-  | { readonly ok: true; readonly elements: readonly XmlElement[]; readonly isLayout: boolean }
+  | { readonly ok: true; readonly roots: readonly XmlElement[]; readonly isLayout: boolean }
   | { readonly ok: false; readonly error: { readonly message: string } };
+
+/** Mutable build node — children accrete during the walk, then the tree is handed
+ * out as the `readonly` {@link XmlElement} shape. */
+interface BuildNode {
+  readonly tag: string;
+  readonly line: number;
+  readonly attrs: Map<string, string>;
+  readonly children: BuildNode[];
+}
 
 function isSpace(ch: string): boolean {
   return ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\f";
 }
 
 /**
- * Tokenize `source` into its view elements. Skips comments, the XML declaration,
- * DOCTYPE, CDATA, and end tags; captures every start / self-closing tag. A
- * structurally broken file (unterminated tag, comment, or quoted value) returns
- * `{ ok: false }` so the collector can record-and-skip it.
+ * Tokenize `source` into a nested element tree. Skips comments, the XML declaration,
+ * DOCTYPE, and CDATA; builds nesting with a stack (start tag pushes, self-closing
+ * attaches without pushing, end tag pops). A structurally broken file (unterminated
+ * tag, comment, or quoted value) returns `{ ok: false }` so the collector can
+ * record-and-skip it.
  */
 export function parseAndroidXml(source: string): AndroidXmlParseResult {
-  const elements: XmlElement[] = [];
   const n = source.length;
-
   const lineAt = (offset: number): number => {
     let line = 1;
     const stop = Math.min(offset, n);
     for (let k = 0; k < stop; k++) if (source.charCodeAt(k) === 10 /* \n */) line++;
     return line;
+  };
+
+  const roots: BuildNode[] = [];
+  const stack: BuildNode[] = [];
+  const attach = (node: BuildNode): void => {
+    const parent = stack[stack.length - 1];
+    if (parent === undefined) roots.push(node);
+    else parent.children.push(node);
   };
 
   let i = 0;
@@ -81,6 +105,9 @@ export function parseAndroidXml(source: string): AndroidXmlParseResult {
     if (lead === "/") {
       const end = source.indexOf(">", lt + 1);
       if (end === -1) return { ok: false, error: { message: "unterminated end tag" } };
+      // Lenient close: pop the open element. Android layouts are well-formed, so a
+      // mismatched/extra close simply pops the stack (or no-ops at the root).
+      stack.pop();
       i = end + 1;
       continue;
     }
@@ -92,6 +119,7 @@ export function parseAndroidXml(source: string): AndroidXmlParseResult {
     const tag = source.slice(nameStart, j);
 
     const attrs = new Map<string, string>();
+    let selfClosing = false;
     let closed = false;
     while (j < n) {
       while (j < n && isSpace(source[j]!)) j++;
@@ -106,10 +134,10 @@ export function parseAndroidXml(source: string): AndroidXmlParseResult {
         const gt = source.indexOf(">", j);
         if (gt === -1) return { ok: false, error: { message: "unterminated self-closing tag" } };
         j = gt + 1;
+        selfClosing = true;
         closed = true;
         break;
       }
-      // Attribute name.
       const anStart = j;
       while (j < n && !isSpace(source[j]!) && source[j] !== "=" && source[j] !== ">" && source[j] !== "/")
         j++;
@@ -131,15 +159,16 @@ export function parseAndroidXml(source: string): AndroidXmlParseResult {
           if (aname !== "") attrs.set(aname, source.slice(vStart, j));
         }
       } else if (aname !== "") {
-        // A valueless attribute — keep it as present-but-empty.
         attrs.set(aname, "");
       }
     }
     if (!closed) return { ok: false, error: { message: "unterminated start tag" } };
 
-    elements.push({ tag, line: lineAt(lt), attrs });
+    const node: BuildNode = { tag, line: lineAt(lt), attrs, children: [] };
+    attach(node);
+    if (!selfClosing) stack.push(node);
     i = j;
   }
 
-  return { ok: true, elements, isLayout: source.includes(ANDROID_NS) };
+  return { ok: true, roots: roots as readonly XmlElement[], isLayout: source.includes(ANDROID_NS) };
 }

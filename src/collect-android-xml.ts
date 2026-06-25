@@ -95,7 +95,7 @@ export async function scanAndroidXml(dir: string): Promise<AndroidXmlScanResult>
   const root = resolve(dir);
   const candidates = await collectAndroidXmlFiles(root);
 
-  const parsed: { file: string; elements: readonly XmlElement[] }[] = [];
+  const parsed: { file: string; roots: readonly XmlElement[] }[] = [];
   const parseErrors: AndroidXmlParseError[] = [];
   for (const file of candidates) {
     const source = await readFile(file, "utf8");
@@ -106,15 +106,15 @@ export async function scanAndroidXml(dir: string): Promise<AndroidXmlScanResult>
     }
     // Not an Android layout (no android namespace) → stay opaque, don't scan it.
     if (!result.isLayout) continue;
-    parsed.push({ file, elements: result.elements });
+    parsed.push({ file, roots: result.roots });
   }
 
   const files = parsed.map((p) => p.file);
   const contract = contractForFiles(files);
 
   const findings: Finding[] = [];
-  for (const { file, elements } of parsed) {
-    const raw = runAndroidXmlRules(elements, { file, enforcement: "block" });
+  for (const { file, roots } of parsed) {
+    const raw = runAndroidXmlRules(roots, { file, enforcement: "block" });
     for (const finding of raw) {
       findings.push({ ...finding, enforcement: enforcementFor(finding.wcag, contract) });
     }

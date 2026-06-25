@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- clean: a clickable row named by its child TextView (descendant-name check) -->
+    <LinearLayout
+        android:id="@+id/settings_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clickable="true"
+        android:focusable="true"
+        android:orientation="horizontal">
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_settings" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Open settings" />
+    </LinearLayout>
+
+    <!-- clean: image whose contentDescription lint the dev explicitly suppressed -->
+    <ImageView
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_logo"
+        tools:ignore="ContentDescription" />
+
+    <!-- clean: icon button under an explicit tools:ignore suppression -->
+    <ImageButton
+        android:id="@+id/overflow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@drawable/ic_more"
+        tools:ignore="ContentDescription" />
+
+    <!-- VIOLATION (control-no-name only): a clickable container with no name anywhere
+         in its subtree — its single child image is decorative, so nothing labels it -->
+    <FrameLayout
+        android:id="@+id/blank_tap"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:clickable="true"
+        android:focusable="true">
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_dot" />
+    </FrameLayout>
+</LinearLayout>
