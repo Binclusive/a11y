@@ -1,24 +1,30 @@
 /**
- * run.ts — clone each SHA-pinned Unity repo and scan it with the Unity producer
- * IN-PROCESS, writing one stable result JSON per repo.
+ * run.ts — clone each SHA-pinned Unity repo and scan it with the Unity finding
+ * aggregator IN-PROCESS, writing one stable result JSON per repo.
  *
  * This is the Unity analog of `experiments/shopify-matrix/run.ts` (which is in
  * turn the Liquid analog of the React `experiments/stack-matrix/run.ts`). We
- * import {@link scanUnity} from `src/collect-unity` DIRECTLY — the Unity static
- * analysis is in-process (no subprocess, no network beyond the clone), so calling
- * the function is both faster and more deterministic than shelling a CLI.
+ * import {@link collectUnityFindings} from `src/unity-findings` DIRECTLY — the
+ * Unity analysis is in-process (no subprocess, no network beyond the clone), so
+ * calling the function is both faster and more deterministic than shelling a CLI.
  *
- * The Unity producer emits NO findings yet — the structural-absence rules are
- * later children (#70/#72/#73). So the quantity we snapshot per repo is the
- * per-asset PARSE OUTCOME: how many assets parsed to a node graph, and how many
- * stayed OPAQUE (and why — binary vs parse-error). This is exactly the Force-Text
- * precision seam (ADR 0004): a binary (non-Force-Text) asset is reported opaque,
- * not silently skipped, and the count is committed so a regression that starts
- * silently dropping real UI assets is a visible diff.
+ * What this gate snapshots (#90): the Unity producer now emits real findings
+ * (#88's `collectUnityFindings` runs the three Unity rule sources and reconciles
+ * them onto the shared `Finding` shape). So the PRIMARY gated quantity is the
+ * FINDING stream — count, per-rule counts, and the full sorted finding list —
+ * exactly like `shopify-matrix` (`byRule` + `findings`). This replaces the prior
+ * parse-outcome gate.
+ *
+ * Parse-outcome coverage is kept as a SECONDARY assertion (`scanUnity` is run
+ * alongside): `assetsScanned` / `graphCount` / `opaqueBinary` / `opaqueParseError`
+ * are still snapshotted so the Force-Text precision seam stays visible (ADR 0004:
+ * a binary asset is reported OPAQUE, not silently skipped). The opaque fields are
+ * still diffed by the gate, so a regression that starts silently dropping real UI
+ * assets is still a visible delta — folded into the same snapshot as the findings.
  *
  * Determinism is the whole point: every repo is frozen at its manifest sha and
- * the asset list is sorted before it is written, so the only thing that can move
- * a result is THIS checker's own code. Results land in
+ * every list (findings, opaque assets) is sorted before it is written, so the only
+ * thing that can move a result is THIS checker's own code. Results land in
  * results/<owner>__<name>.json (gitignored — raw, reproducible from the pinned
  * manifest); the committed regression record is the distilled baseline.json.
  */
@@ -28,6 +34,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanUnity } from "../../src/collect-unity.ts";
+import { collectUnityFindings } from "../../src/unity-findings.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MANIFEST_PATH = join(HERE, "manifest.json");
@@ -47,17 +54,34 @@ export interface ManifestEntry {
   readonly caveat?: string;
 }
 
+/** One scan finding, distilled to the stable, serializable triple we snapshot.
+ * `file` is repo-relative so the record is independent of the clone path. */
+export interface ResultFinding {
+  readonly file: string;
+  readonly line: number;
+  readonly ruleId: string;
+}
+
 /** The stable per-repo scan result written to results/<slug>.json.
  *
- * `graphCount` + `opaqueBinary` + `opaqueParseError` always sum to
- * `assetsScanned` — every asset lands in exactly one bucket, so a missing asset
- * (silent skip) would show up as a sum that no longer matches. */
+ * The PRIMARY gated quantity is the finding stream (`findingsCount` / `byRule` /
+ * `findings`). The parse-outcome fields (`assetsScanned` / `graphCount` /
+ * `opaqueBinary` / `opaqueParseError` / `opaqueRate` / `opaqueAssets`) are kept
+ * as a SECONDARY assertion so opaque stays visible (ADR 0004):
+ * `graphCount + opaqueBinary + opaqueParseError == assetsScanned` by construction,
+ * so a silently-dropped asset surfaces as a sum mismatch. */
 export interface UnityResult {
   readonly repo: string;
   readonly sha: string;
   /** Whether the clone is parked at the manifest sha. false ⇒ a delta may be drift. */
   readonly pinned: boolean;
-  /** uGUI prefab/scene YAML assets walked (.prefab + .unity). */
+  /** Total findings the aggregator emitted over the repo. */
+  readonly findingsCount: number;
+  /** ruleId -> count, so a diff can say "unity/missing-accessible-label +3" not just "findings +3". */
+  readonly byRule: Record<string, number>;
+  /** Every finding, sorted by (file, line, ruleId) for a stable, reviewable diff. */
+  readonly findings: readonly ResultFinding[];
+  /** uGUI prefab/scene YAML assets walked (.prefab + .unity) — secondary (ADR 0004). */
   readonly assetsScanned: number;
   /** Assets that parsed to a walkable node graph (Force-Text, parseable). */
   readonly graphCount: number;
@@ -123,6 +147,19 @@ function ensureRepoAt(repo: string, sha: string, branch: string, dir: string): v
   }
 }
 
+const sortFindings = (a: ResultFinding, b: ResultFinding): number =>
+  a.file !== b.file
+    ? a.file < b.file
+      ? -1
+      : 1
+    : a.line !== b.line
+      ? a.line - b.line
+      : a.ruleId < b.ruleId
+        ? -1
+        : a.ruleId > b.ruleId
+          ? 1
+          : 0;
+
 const sortOpaque = (
   a: { file: string; reason: string },
   b: { file: string; reason: string },
@@ -130,8 +167,19 @@ const sortOpaque = (
 
 /** Scan one cloned Unity repo and distill the in-process scan into a stable record. */
 async function scanRepo(dir: string): Promise<Omit<UnityResult, "repo" | "sha" | "pinned" | "error">> {
-  const scan = await scanUnity(dir);
+  // PRIMARY: the finding stream (#88 aggregator), the quantity the gate is built on.
+  const rawFindings = await collectUnityFindings(dir);
+  const findings: ResultFinding[] = rawFindings
+    .map((f) => ({ file: relative(dir, f.file), line: f.line, ruleId: f.ruleId }))
+    .sort(sortFindings);
 
+  const byRule: Record<string, number> = {};
+  for (const f of findings) byRule[f.ruleId] = (byRule[f.ruleId] ?? 0) + 1;
+  const sortedByRule: Record<string, number> = {};
+  for (const id of Object.keys(byRule).sort()) sortedByRule[id] = byRule[id];
+
+  // SECONDARY: parse outcome, so opaque stays visible (ADR 0004).
+  const scan = await scanUnity(dir);
   let graphCount = 0;
   let opaqueBinary = 0;
   let opaqueParseError = 0;
@@ -153,6 +201,9 @@ async function scanRepo(dir: string): Promise<Omit<UnityResult, "repo" | "sha" |
   const opaqueTotal = opaqueBinary + opaqueParseError;
 
   return {
+    findingsCount: findings.length,
+    byRule: sortedByRule,
+    findings,
     assetsScanned,
     graphCount,
     opaqueBinary,
@@ -189,7 +240,8 @@ export async function runAll(): Promise<void> {
       writeFileSync(resultPath, JSON.stringify(result, null, 2) + "\n");
 
       console.log(
-        `${repo.padEnd(34)} assets=${String(scan.assetsScanned).padStart(4)}  ` +
+        `${repo.padEnd(34)} findings=${String(scan.findingsCount).padStart(4)}  ` +
+          `assets=${String(scan.assetsScanned).padStart(4)}  ` +
           `graph=${String(scan.graphCount).padStart(4)}  ` +
           `opaque=${String(scan.opaqueBinary + scan.opaqueParseError).padStart(3)} ` +
           `(bin=${scan.opaqueBinary} parse=${scan.opaqueParseError}, ${(scan.opaqueRate * 100).toFixed(1)}%)`,
@@ -200,6 +252,9 @@ export async function runAll(): Promise<void> {
         repo,
         sha,
         pinned: false,
+        findingsCount: 0,
+        byRule: {},
+        findings: [],
         assetsScanned: 0,
         graphCount: 0,
         opaqueBinary: 0,

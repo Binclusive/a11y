@@ -1,33 +1,46 @@
 # unity-matrix
 
-The **real-world regression gate for the Unity a11y checker** (#66/#69) — the
-Unity analog of `experiments/shopify-matrix/` (Liquid) and
+The **real-world regression gate for the Unity a11y checker** (#66/#69, gated on
+findings in #90) — the Unity analog of `experiments/shopify-matrix/` (Liquid) and
 `experiments/stack-matrix/` (React). A SHA-pinned corpus of real Unity games is
-scanned by `scanUnity` (the in-process Unity producer: L1 `unity-ast.ts` + L3
-`collect-unity.ts` + `unity-guid-registry.ts`), distilled into a committed
+scanned by the in-process Unity finding aggregator
+(`collectUnityFindings`, `src/unity-findings.ts` — #88), distilled into a committed
 `baseline.json`, and a fresh scan is diffed against it. The gate fails on any
 drift, so a future change to the Unity checker that moves its results on a real
 game is impossible to miss in review.
 
-## What is gated (and why it is parse-outcome, not findings)
+## What is gated
 
-The Unity producer **emits no findings yet** — the structural-absence rules are
-later children (#70/#72/#73). So the quantity this corpus gates is the per-asset
-**parse outcome**:
+The Unity producer now **emits real findings** (#88's `collectUnityFindings` runs
+the three Unity rule sources — `unity-rule-color-only.ts`,
+`unity-rule-missing-label.ts`, `unity-rules-baseline.ts` — and reconciles them
+onto the shared `Finding` shape). So the **primary** quantity this corpus gates is
+the **finding stream**, exactly like `shopify-matrix`:
+
+- `findingsCount` — total findings the aggregator emitted over the repo.
+- `byRule` — `ruleId → count`, so a diff reads `unity/missing-accessible-label +3`,
+  not just `findings +3`.
+- `findings` — the full list, sorted by `(file, line, ruleId)`, so a moved / added
+  / removed finding is a line-level, reviewable diff — not just an aggregate count.
+
+### Parse outcome is kept as a secondary assertion (opaque stays visible — ADR 0004)
+
+The per-asset **parse outcome** is folded into the *same* snapshot as a secondary
+assertion and is **still diffed** — opaque must never silently disappear (ADR 0004:
+a binary asset is **reported opaque, not silently skipped**):
 
 - `assetsScanned` — `.prefab` + `.unity` YAML assets walked.
 - `graphCount` — assets that parsed to a walkable node graph.
 - `opaqueBinary` — assets reported **opaque** because they are binary
-  (non-Force-Text). This is the Force-Text precision seam (ADR 0004): a binary
-  asset is **reported opaque, not silently skipped**, and the count is committed
-  so a regression that starts silently dropping real UI assets is a visible diff.
+  (non-Force-Text) — the Force-Text precision seam.
 - `opaqueParseError` — assets that are Force-Text but unparseable (also opaque).
 
 `graphCount + opaqueBinary + opaqueParseError == assetsScanned` by construction —
 every asset lands in exactly one bucket, so a vanished asset surfaces as a sum
-mismatch. When the rule children land and `scanUnity` grows a findings surface,
-extend the result/baseline shape the same way `shopify-matrix` carries `byRule` +
-`findings`.
+mismatch. The gate fires on movement in **either** layer: a findings/per-rule shift
+*or* an opaque-set shift. (The decision recorded by #90: fold parse-outcome into
+the findings snapshot as a kept-visible secondary assertion, rather than dropping it
+when the gate moved to findings.)
 
 ## Corpus (`manifest.json`)
 
@@ -77,22 +90,23 @@ baseline without re-cloning — useful for re-reading a delta.
 
 `manifest.json` and `baseline.json` are **committed** — they are the regression
 record. `results/` and `.cache/` are **gitignored** — raw and reproducible from
-the pinned manifest. Each result is stable by construction: `opaqueAssets` is
-sorted by `(file, reason)`, so a real change shows up as a minimal, reviewable
-diff.
+the pinned manifest. Each result is stable by construction: `findings` is sorted by
+`(file, line, ruleId)` and `opaqueAssets` by `(file, reason)`, so a real change
+shows up as a minimal, reviewable diff.
 
 ## The re-bless flow (mirror of the React/Liquid baselines)
 
-`unity:matrix:check` exits non-zero when the Unity producer's results move on any
+`unity:matrix:check` exits non-zero when the Unity checker's results move on any
 pinned repo. **A delta is not automatically a bug** — read it:
 
-- An asset that newly **parses to a graph** (or an opaque count that legitimately
-  dropped) → intended. Re-bless: `pnpm unity:matrix:baseline`, then commit the
-  updated `baseline.json` **in the same PR** as your code change, so the shift is
-  visible in review.
-- An asset that **newly goes opaque** (a real UI prefab the producer can no
-  longer parse), or `assetsScanned` that **dropped** (files silently no longer
-  walked) → regression. Fix the code before finishing.
+- A finding the producer **now correctly catches** (a real game-UI a11y problem),
+  or an asset that newly **parses to a graph** → intended. Re-bless:
+  `pnpm unity:matrix:baseline`, then commit the updated `baseline.json` **in the
+  same PR** as your code change, so the shift is visible in review.
+- A finding that's a **false positive**, findings that **dropped** (lost coverage),
+  an asset that **newly goes opaque** (a real UI prefab the producer can no longer
+  parse), or `assetsScanned` that **dropped** (files silently no longer walked) →
+  regression. Fix the code before finishing.
 
 Never run `unity:matrix:baseline` to silence a delta you have not understood —
 the committed `baseline.json` is the record that makes real-world Unity drift
@@ -100,15 +114,14 @@ visible in review. Re-blessing blindly defeats the entire mechanism.
 
 ## Baseline snapshot (at corpus seed)
 
-| Repo | Assets | Graph | Opaque (binary / parse) |
-|------|--------|-------|-------------------------|
-| `UnityTechnologies/open-project-1` | 533 | 533 | 0 (0 / 0) |
+| Repo | Findings | By rule | Assets | Graph | Opaque (binary / parse) |
+|------|----------|---------|--------|-------|-------------------------|
+| `UnityTechnologies/open-project-1` | 56 | color-only-state 41, missing-accessible-label 14, no-screen-reader-support 1 | 533 | 533 | 0 (0 / 0) |
 
-**Measured: 0 opaque / 533 assets (0.0%).** Every `.prefab` + `.unity` asset in
-open-project-1 is Force-Text (`%YAML 1.1`) and parses cleanly — confirming it as
-a clean, fully-walkable uGUI anchor. This empirically answers two of the #66
-precision questions on real code: **Force Text is present** (no binary assets to
-report opaque on this repo), and the producer reaches a node graph on 100% of the
-in-game-UI asset surface. The opaque rate is now a gated quantity: if a future
-producer change pushes a real asset into the opaque set, the gate flags it as an
-`opaque(binary)` / `opaque(parse)` delta.
+**Measured (live scan @ `608eac98…`): 56 findings across 3 rules over 533 assets,
+0 opaque (0.0%).** Every `.prefab` + `.unity` asset in open-project-1 is Force-Text
+(`%YAML 1.1`) and parses cleanly — confirming it as a clean, fully-walkable uGUI
+anchor, while the findings layer now grounds the Unity rule set against
+Unity-authored ground truth. The opaque rate remains a gated quantity alongside the
+findings: if a future producer change pushes a real asset into the opaque set, or
+moves a per-rule count, the gate flags it as a delta.

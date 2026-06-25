@@ -5,16 +5,20 @@
  *
  * Unity analog of `experiments/shopify-matrix/baseline.ts`. The corpus
  * (manifest.json) is SHA-pinned, so the only thing that can move these numbers is
- * the Unity producer's own code (L1 `unity-ast.ts` + L3 `collect-unity.ts` +
- * `unity-guid-registry.ts`, via `scanUnity`). We distill each per-repo result into
- * a compact, deterministic record and commit it as `baseline.json`. Every change
- * that shifts real-world Unity behavior must show up as an edit to that file in
- * the PR — silent drift becomes a visible diff in review.
+ * the Unity checker's own code — the producer (`scanUnity`: L1 `unity-ast.ts` + L3
+ * `collect-unity.ts` + `unity-guid-registry.ts`) AND the finding rules the #88
+ * aggregator (`collectUnityFindings`) runs (`unity-rule-color-only.ts`,
+ * `unity-rule-missing-label.ts`, `unity-rules-baseline.ts`). We distill each
+ * per-repo result into a compact, deterministic record and commit it as
+ * `baseline.json`. Every change that shifts real-world Unity behavior must show up
+ * as an edit to that file in the PR — silent drift becomes a visible diff.
  *
- * The producer emits no findings yet (rules are children #70/#72/#73); the gated
- * quantity is per-asset PARSE OUTCOME — graph vs opaque(binary)/opaque(parse) —
- * so Force-Text detection is committed and drift-visible (ADR 0004: opaque is
- * reported, not silently skipped).
+ * The PRIMARY gated quantity is the FINDING stream (`findingsCount` / `byRule` /
+ * `findings`) — mirroring `shopify-matrix`, now that the producer emits findings
+ * (#88/#90). Per-asset PARSE OUTCOME — graph vs opaque(binary)/opaque(parse) — is
+ * kept as a SECONDARY assertion so Force-Text detection stays committed and
+ * drift-visible (ADR 0004: opaque is reported, not silently skipped); the opaque
+ * fields are still diffed.
  *
  *   unity:matrix:baseline   re-bless: read results/ → write baseline.json (sorted)
  *   unity:matrix:check      re-scan + diff current vs baseline (see check.ts)
@@ -30,10 +34,14 @@ const RESULTS_DIR = join(HERE, "results");
 export const BASELINE_PATH = join(HERE, "baseline.json");
 
 /** The compact, committed snapshot of one repo's scan. Deterministic by design.
- * `opaqueAssets` is the sorted full list so a newly-opaque (or newly-parseable)
- * asset is a line-level, reviewable diff — not just an aggregate count change. */
+ * `findings` is the sorted full list so a moved/added/removed finding is a
+ * line-level, reviewable diff — not just an aggregate count change; `opaqueAssets`
+ * keeps the same property for the secondary parse-outcome assertion. */
 export interface RepoBaseline {
   readonly sha: string;
+  readonly findingsCount: number;
+  readonly byRule: Record<string, number>;
+  readonly findings: readonly { file: string; line: number; ruleId: string }[];
   readonly assetsScanned: number;
   readonly graphCount: number;
   readonly opaqueBinary: number;
@@ -58,10 +66,19 @@ export function loadResults(): Record<string, UnityResult> {
   return out;
 }
 
+function sortByRule(byRule: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const id of Object.keys(byRule).sort()) out[id] = byRule[id];
+  return out;
+}
+
 /** Distill one raw result into its committed snapshot. */
 export function toRepoBaseline(r: UnityResult): RepoBaseline {
   return {
     sha: r.sha ?? "",
+    findingsCount: r.findingsCount ?? 0,
+    byRule: sortByRule(r.byRule ?? {}),
+    findings: (r.findings ?? []).map((f) => ({ file: f.file, line: f.line, ruleId: f.ruleId })),
     assetsScanned: r.assetsScanned ?? 0,
     graphCount: r.graphCount ?? 0,
     opaqueBinary: r.opaqueBinary ?? 0,
@@ -90,15 +107,23 @@ export function writeBaseline(b: Baseline): void {
 
 // --- diff -------------------------------------------------------------------
 
+export interface RuleDelta {
+  readonly ruleId: string;
+  readonly before: number;
+  readonly after: number;
+}
+
 /** One repo whose snapshot moved between baseline and current. */
 export interface RepoDelta {
   readonly repo: string;
   readonly kind: "added" | "removed" | "changed";
+  readonly findings?: { before: number; after: number };
   readonly assets?: { before: number; after: number };
   readonly graph?: { before: number; after: number };
   readonly opaqueBinary?: { before: number; after: number };
   readonly opaqueParseError?: { before: number; after: number };
   readonly errorChange?: { before: string | null; after: string | null };
+  readonly rules: readonly RuleDelta[];
 }
 
 export interface DiffResult {
@@ -106,11 +131,23 @@ export interface DiffResult {
   readonly unchanged: number;
 }
 
+function ruleDeltas(before: Record<string, number>, after: Record<string, number>): RuleDelta[] {
+  const ids = new Set([...Object.keys(before), ...Object.keys(after)]);
+  const out: RuleDelta[] = [];
+  for (const ruleId of [...ids].sort()) {
+    const b = before[ruleId] ?? 0;
+    const a = after[ruleId] ?? 0;
+    if (b !== a) out.push({ ruleId, before: b, after: a });
+  }
+  return out;
+}
+
 /**
  * Compare a current snapshot against the committed baseline. Snapshot-equality:
- * ANY movement (assets scanned, graph count, opaque-by-reason counts, error
- * transition) is surfaced. The caller decides intended-vs-regression and
- * re-blesses; the gate's job is only to make movement impossible to miss.
+ * ANY movement — primary (findings count, per-rule counts) or secondary (assets
+ * scanned, graph count, opaque-by-reason counts, error transition) — is surfaced.
+ * The caller decides intended-vs-regression and re-blesses; the gate's job is only
+ * to make movement impossible to miss.
  */
 export function diffBaseline(current: Baseline, baseline: Baseline): DiffResult {
   const repos = new Set([...Object.keys(baseline), ...Object.keys(current)]);
@@ -122,32 +159,36 @@ export function diffBaseline(current: Baseline, baseline: Baseline): DiffResult 
     const cur = current[repo];
 
     if (!base) {
-      deltas.push({ repo, kind: "added", assets: { before: 0, after: cur.assetsScanned } });
+      deltas.push({ repo, kind: "added", findings: { before: 0, after: cur.findingsCount }, rules: [] });
       continue;
     }
     if (!cur) {
-      deltas.push({ repo, kind: "removed", assets: { before: base.assetsScanned, after: 0 } });
+      deltas.push({ repo, kind: "removed", findings: { before: base.findingsCount, after: 0 }, rules: [] });
       continue;
     }
 
+    const rules = ruleDeltas(base.byRule, cur.byRule);
+    const findingsMoved = base.findingsCount !== cur.findingsCount;
     const assetsMoved = base.assetsScanned !== cur.assetsScanned;
     const graphMoved = base.graphCount !== cur.graphCount;
     const binMoved = base.opaqueBinary !== cur.opaqueBinary;
     const parseMoved = base.opaqueParseError !== cur.opaqueParseError;
     const errorMoved = (base.error ?? null) !== (cur.error ?? null);
 
-    if (!assetsMoved && !graphMoved && !binMoved && !parseMoved && !errorMoved) {
+    if (!findingsMoved && !assetsMoved && !graphMoved && !binMoved && !parseMoved && !errorMoved && rules.length === 0) {
       unchanged++;
       continue;
     }
     deltas.push({
       repo,
       kind: "changed",
+      ...(findingsMoved ? { findings: { before: base.findingsCount, after: cur.findingsCount } } : {}),
       ...(assetsMoved ? { assets: { before: base.assetsScanned, after: cur.assetsScanned } } : {}),
       ...(graphMoved ? { graph: { before: base.graphCount, after: cur.graphCount } } : {}),
       ...(binMoved ? { opaqueBinary: { before: base.opaqueBinary, after: cur.opaqueBinary } } : {}),
       ...(parseMoved ? { opaqueParseError: { before: base.opaqueParseError, after: cur.opaqueParseError } } : {}),
       ...(errorMoved ? { errorChange: { before: base.error, after: cur.error } } : {}),
+      rules,
     });
   }
   return { deltas, unchanged };
