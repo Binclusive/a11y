@@ -139,6 +139,39 @@ is empty after the climb.
   matter) become an added JavaParser pass in the same JVM engine — out of scope
   here because the committed scope is Kotlin.
 
+### Validation — the XML lane against two real corpora
+
+The XML producer (`collect-android-xml.ts` + `android-xml-ast.ts` +
+`android-xml-rules.ts`) was built first and pressure-tested against two real,
+hand-written-layout apps before any baseline was blessed — the evidence step this
+ADR prescribes, run in practice:
+
+- **NewPipe** (116 layouts) — the first scan produced 110 findings at a ~70%
+  false-positive rate, which forced two design corrections that turned the flat
+  parser into a **nested tree**: (1) honor `tools:ignore` /
+  `importantForAccessibility` as subtree-inherited suppressors (the dev's explicit
+  signal, respected like the React side honors `aria-hidden`), and (2)
+  `control-no-name` must look DOWN the subtree for a name before firing (a clickable
+  row is named by its child `TextView`). Result: 110 → 27, both FP classes
+  eliminated.
+- **AntennaPod** (117 layouts, forms-heavy) — validated the NewPipe fixes
+  generalize (0 residual FPs of either class) and exposed one class NewPipe lacked:
+  a `TextInputEditText` is labelled by its parent `TextInputLayout` (statically or
+  at runtime), so the field itself must stay opaque. Result: `editable-no-label`
+  8 → 4 (survivors all genuine bare `EditText`).
+
+**Documented limitation — runtime-bound item-template text.** Both apps leave a
+residual gray tier the static layout pass cannot resolve: RecyclerView / dialog
+**item templates** (`*_item`, `*_row`, `list_*`) whose `Button`/`TextView` text or
+thumbnail `contentDescription` is set at runtime in the adapter. Statically these
+look nameless, so `control-no-name` / `image-no-label` fire on some of them. We
+**keep flagging and document the limitation** rather than scope the rule by
+filename (hacky) or by stay-opaque-on-any-text-control (a real recall loss on
+genuinely-empty controls) — the precision/recall call recorded here deliberately.
+This is exactly the runtime-binding signal the **Kotlin lane** (which reads the
+adapter that binds the item) or the corpus/recall layer is positioned to resolve
+later; until then it is honest noise, not a silent miss.
+
 ### Rejected alternative — tree-sitter-kotlin in-process (recorded honestly)
 
 tree-sitter-kotlin is **not a strawman**, and for a narrower scope it would win:
