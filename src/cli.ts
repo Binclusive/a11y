@@ -4,6 +4,7 @@ import { Args, Command, Options } from "@effect/cli";
 import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import { Effect, Option } from "effect";
 import { collectTsx } from "./collect";
+import { scanAndroidXml } from "./collect-android-xml";
 import { scanUrl } from "./collect-dom";
 import { scanLiquid } from "./collect-liquid";
 import { scanSwift } from "./collect-swift";
@@ -47,7 +48,9 @@ export function detailLines(f: EnrichedFinding): string[] {
         ? "  (rendered-DOM / axe)"
         : f.provenance === "swiftui"
           ? "  (SwiftUI static)"
-          : "";
+          : f.provenance === "android-xml"
+            ? "  (Android XML static)"
+            : "";
   const lines = [
     `    rule:   ${f.ruleId}  [${f.enforcement}]${via}`,
     `    wcag:   ${scList}`,
@@ -630,6 +633,51 @@ async function runCheckUnity(dir: string, json = false): Promise<void> {
   });
 }
 
+/**
+ * The Android counterpart of `runCheckShopify`: statically scan a project's layout
+ * XML (`res/layout/*.xml`) via the in-process producer (`scanAndroidXml`), enrich
+ * through the SAME corpus cross-ref, and report findings anchored on `file:line`.
+ * This is the first of ADR 0006's three Android lanes; the Compose + programmatic-
+ * Kotlin lanes (an external Kotlin engine) merge into this same `check-android` verb
+ * later. No resolver, so coverage is zeroed in `--json` — identical structure to
+ * `check-shopify --json`.
+ */
+async function runCheckAndroid(dir: string, json = false): Promise<void> {
+  const { root, files, findings: raw, parseErrors } = await scanAndroidXml(dir);
+  const findings = enrichAll(raw);
+
+  if (json) {
+    const report = buildJsonReport(
+      root,
+      files.length,
+      { total: 0, declared: 0, registry: 0, traced: 0, opaque: 0, trusted: 0, icons: 0, structural: 0, declare: 0 },
+      findings,
+    );
+    console.log(JSON.stringify(report, null, 2));
+    const blocking = findings.filter((f) => f.enforcement === "block").length;
+    process.exitCode = blocking > 0 ? 1 : 0;
+    return;
+  }
+
+  if (files.length === 0) {
+    console.log(`No Android layout XML under ${root}`);
+    return;
+  }
+
+  console.log(`a11y-checker — scanned ${files.length} Android layout file(s) under ${root}`);
+  if (parseErrors.length > 0) {
+    console.log(`  (${parseErrors.length} file(s) skipped — could not parse)`);
+  }
+  console.log("");
+
+  renderReport(findings, {
+    emptyMessage: "No Android XML a11y violations found.",
+    groupKey: (f) => f.file,
+    groupHeader: (file) => relative(root, file),
+    formatItem: (f) => formatFinding(f, root),
+  });
+}
+
 async function runInit(suggest: boolean, dirArg: string): Promise<void> {
   const dir = resolve(dirArg);
   const r = await init(dir, { suggest });
@@ -791,6 +839,16 @@ const checkUnityCommand = Command.make(
   ),
 );
 
+const checkAndroidCommand = Command.make(
+  "check-android",
+  { dir: dirArg, json: Options.boolean("json") },
+  ({ dir, json }) => Effect.promise(() => runCheckAndroid(dir, json)),
+).pipe(
+  Command.withDescription(
+    "scan Android layout XML (res/layout) for structural a11y findings (static, no browser; --json: machine-readable). Compose/Kotlin lanes land next (ADR 0006)",
+  ),
+);
+
 const initCommand = Command.make(
   "init",
   { suggest: Options.boolean("suggest"), dir: optionalDir },
@@ -871,6 +929,7 @@ const rootCommand = Command.make("a11y-checker", { dir: rootDir }, ({ dir }) =>
     checkSwiftCommand,
     checkShopifyCommand,
     checkUnityCommand,
+    checkAndroidCommand,
     initCommand,
     learnCommand,
     genCommand,
