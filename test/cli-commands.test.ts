@@ -121,6 +121,56 @@ describe("@effect/cli dispatch: each subcommand parses + invokes its runner", ()
     },
   );
 
+  it("`check-unity <dir>` routes to runCheckUnity (findings printed)", { timeout: 30_000 }, async () => {
+    // The real unity-project fixture holds prefabs that trigger Unity floor rules:
+    // running the verb over it proves the producer → aggregator → enrich → render path
+    // wired through. ButtonNoLabel fires the missing-accessible-label rule.
+    const fixture = join(__dirname, "fixtures", "unity-project");
+    const { stdout, exit } = await runVerb(["check-unity", fixture]);
+    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(stdout).toContain("scanning Unity Force-Text scenes");
+    expect(stdout).toContain("unity/missing-accessible-label");
+  });
+
+  it(
+    "`check-unity <dir> --json` parses the boolean flag and emits the machine report",
+    { timeout: 30_000 },
+    async () => {
+      // The real fixture yields deterministic Unity findings — the --json branch must
+      // emit the SAME machine schema as check-shopify --json: tool, zeroed coverage
+      // (Unity has no resolver), and canonical Finding rows enriched off the WCAG SC.
+      const fixture = join(__dirname, "fixtures", "unity-project");
+      const { stdout, exit, exitCode } = await runVerb(["check-unity", fixture, "--json"]);
+      expect(Exit.isSuccess(exit)).toBe(true);
+      const report = JSON.parse(stdout);
+      expect(report.tool).toBe("a11y-checker");
+      // Unity carries no component resolver, so coverage is zeroed — identical shape to
+      // check-shopify --json.
+      expect(report.coverage.total).toBe(0);
+      expect(Array.isArray(report.findings)).toBe(true);
+      expect(report.findings.length).toBeGreaterThan(0);
+      // Findings are Unity-provenance and corpus-enriched (the SC-keyed enrichAll pass).
+      expect(report.findings.every((f) => f.provenance === "unity")).toBe(true);
+      expect(report.findings.some((f) => f.ruleId === "unity/missing-accessible-label")).toBe(
+        true,
+      );
+      // Floor findings include blocking ones → exit code 1, the same exit semantics as
+      // the other check verbs.
+      expect(exitCode).toBe(1);
+    },
+  );
+
+  it(
+    "`check-unity` with no dir fails the run (effect/cli missing-argument error)",
+    { timeout: 30_000 },
+    async () => {
+      // The `dir` positional is required (no default), so an arg-less invocation is a
+      // parse failure — exactly like the other check verbs' required positional.
+      const { exit } = await runVerb(["check-unity"]);
+      expect(Exit.isFailure(exit)).toBe(true);
+    },
+  );
+
   it(
     "`init <dir>` then `gen <dir>` route to runInit / runGen (optional dir parsed)",
     { timeout: 30_000 },

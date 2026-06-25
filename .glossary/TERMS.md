@@ -93,6 +93,7 @@ live in `CLAUDE.md` / `.patterns/`; architecture-decision rationale lives in
 
 | Term | Definition | Not |
 |------|------------|-----|
+| **check-unity** | The CLI command that scans Unity Force-Text scenes (`.prefab`/`.unity`) for accessibility findings (static, no browser, provenance `"unity"`). | |
 | **Force-Text serialization** | Unity's YAML 1.1 text format for scenes (`.prefab`, `.unity`) — the precondition for static analysis. Binary-serialized assets are opaque by construction. | Asset Serialization = Force Text; binary scenes are unreadable. |
 | **Unity AST** | The parsed Force-Text graph: GameObjects, components, the `m_Children` transform hierarchy, `m_Script` GUID (identity), and `m_text` static labels (`src/unity-ast.ts`). | |
 | **Built-in-widget GUID registry** | The hardcoded map (`src/unity-guid-registry.ts`, const `UNITY_BUILTIN_GUIDS`) from a stable Unity engine GUID (lowercase 32-hex) to a `UnityWidgetKind` and its accessibility `host`. The Unity analog of the component registry. | Distinct from the resolver's component `registry`. |
@@ -125,7 +126,7 @@ live in `CLAUDE.md` / `.patterns/`; architecture-decision rationale lives in
 
 | Term | Definition | Not |
 |------|------------|-----|
-| **a11y-checker** | The CLI root (Effect CLI, `src/cli.ts`). Subcommands: `check`, `check-url`, `check-swift`, `check-shopify`, `init`, `learn`, `gen`, `mcp`, `hook`. | |
+| **a11y-checker** | The CLI root (Effect CLI, `src/cli.ts`). Subcommands: `check`, `check-url`, `check-swift`, `check-shopify`, `check-unity`, `init`, `learn`, `gen`, `mcp`, `hook`. | |
 | **init** | Scaffold `binclusive.json` from the `detect-stack` result. | |
 | **learn** | Record a `LearnedRule` in `binclusive.json` (a fixable finding + wcag tags + source module). | |
 | **gen** | Generate `baseline.json` from current check results. | |

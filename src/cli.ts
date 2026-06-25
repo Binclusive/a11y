@@ -8,6 +8,7 @@ import { scanUrl } from "./collect-dom";
 import { scanLiquid } from "./collect-liquid";
 import { scanSwift } from "./collect-swift";
 import { gen, init, type LearnInput, learn } from "./commands";
+import { collectUnityFindings } from "./unity-findings";
 import { type FindingProvenance, scan } from "./core";
 import {
   type CorpusEvidence,
@@ -590,6 +591,45 @@ async function runCheckShopify(dir: string, json = false): Promise<void> {
   });
 }
 
+/**
+ * The Unity counterpart to `runCheck`: statically scan a Unity project's Force-Text
+ * scenes (`.prefab`/`.unity`) via the in-process aggregator (`collectUnityFindings`),
+ * enrich through the SAME corpus cross-ref, and report findings anchored on `file:line`
+ * like every other producer. No browser, no network. The aggregator owns the scan and
+ * returns one flat `Finding[]` (all `provenance: "unity"`, `layer: "floor"`); a missing
+ * or unreadable project dir is an empty scan, never a throw. Unity has no component
+ * resolver, so coverage is zeroed in the `--json` shape — identical structure to
+ * `check-shopify --json`.
+ */
+async function runCheckUnity(dir: string, json = false): Promise<void> {
+  const root = resolve(dir);
+  const findings = enrichAll(await collectUnityFindings(root));
+
+  if (json) {
+    // Unity carries no resolver coverage — emit the zeroed coverage literal so the
+    // JSON shape stays identical to `check` / `check-shopify`.
+    const report = buildJsonReport(
+      root,
+      0,
+      { total: 0, declared: 0, registry: 0, traced: 0, opaque: 0, trusted: 0, icons: 0, structural: 0, declare: 0 },
+      findings,
+    );
+    console.log(JSON.stringify(report, null, 2));
+    const blocking = findings.filter((f) => f.enforcement === "block").length;
+    process.exitCode = blocking > 0 ? 1 : 0;
+    return;
+  }
+
+  console.log(`a11y-checker — scanning Unity Force-Text scenes under ${root}\n`);
+
+  renderReport(findings, {
+    emptyMessage: "No Unity a11y violations found.",
+    groupKey: (f) => f.file,
+    groupHeader: (file) => relative(root, file),
+    formatItem: (f) => formatFinding(f, root),
+  });
+}
+
 async function runInit(suggest: boolean, dirArg: string): Promise<void> {
   const dir = resolve(dirArg);
   const r = await init(dir, { suggest });
@@ -741,6 +781,16 @@ const checkShopifyCommand = Command.make(
   ),
 );
 
+const checkUnityCommand = Command.make(
+  "check-unity",
+  { dir: dirArg, json: Options.boolean("json") },
+  ({ dir, json }) => Effect.promise(() => runCheckUnity(dir, json)),
+).pipe(
+  Command.withDescription(
+    "scan Unity Force-Text scenes (.prefab/.unity) for accessibility findings (static, no browser; --json: machine-readable)",
+  ),
+);
+
 const initCommand = Command.make(
   "init",
   { suggest: Options.boolean("suggest"), dir: optionalDir },
@@ -802,7 +852,7 @@ const hookCommand = Command.make("hook", {}, () =>
 // that dir — the shortcut `origin/main`'s `main()` carried explicitly. The root
 // gets an OPTIONAL positional dir + a handler (canon: subcommands.md "the root's
 // own handler still runs when no subcommand is given"; args.md optional-arg). A
-// supplied dir → runCheck; absent → print the root help/usage. All 8 subcommands
+// supplied dir → runCheck; absent → print the root help/usage. All 10 subcommands
 // still bind via withSubcommands and take precedence when a known verb is typed.
 const rootDir = Args.text({ name: "dir" }).pipe(Args.optional);
 
@@ -820,6 +870,7 @@ const rootCommand = Command.make("a11y-checker", { dir: rootDir }, ({ dir }) =>
     checkUrlCommand,
     checkSwiftCommand,
     checkShopifyCommand,
+    checkUnityCommand,
     initCommand,
     learnCommand,
     genCommand,
