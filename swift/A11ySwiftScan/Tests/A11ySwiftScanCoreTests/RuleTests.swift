@@ -15,6 +15,71 @@ final class RuleTests: XCTestCase {
         scanSource(source, filePath: "Test.swift").map(\.ruleId).sorted()
     }
 
+    // MARK: - Class A: a labelled control container the climb must recognise
+
+    /// FALSE-POSITIVE GUARD — an `Image(uiImage:)` inside a `PhotosPicker` that
+    /// carries `.accessibilityLabel` on its chain is named by the picker. Before
+    /// the fix the climb didn't know `PhotosPicker` is an a11y-element container,
+    /// so it flagged the image. Must now be clean.
+    func testLabeledPhotosPickerImageIsNotFlagged() {
+        let src = """
+        struct V: View {
+            var body: some View {
+                PhotosPicker(selection: $item, matching: .images) {
+                    if let img = picked {
+                        Image(uiImage: img)
+                    } else {
+                        Image(systemName: "photo.fill")
+                    }
+                }
+                .accessibilityLabel("Choose photo")
+            }
+        }
+        """
+        XCTAssertEqual(ruleIds(src), [], "labelled PhotosPicker names its image content")
+    }
+
+    /// PRECISION-THE-OTHER-WAY — an UNLABELLED `PhotosPicker` whose only content
+    /// is an unnamed image still has no accessible name, so the image finding must
+    /// survive. Adding the container to the climb must not silence this.
+    func testUnlabeledPhotosPickerImageIsStillFlagged() {
+        let src = """
+        struct V: View {
+            var body: some View {
+                PhotosPicker(selection: $item, matching: .images) {
+                    Image(uiImage: img)
+                }
+            }
+        }
+        """
+        XCTAssertTrue(
+            ruleIds(src).contains("swiftui/image-no-label"),
+            "an unlabelled PhotosPicker with an unnamed image is still a violation"
+        )
+    }
+
+    // MARK: - Class B: an Image used as a share PAYLOAD, not a rendered view
+
+    /// FALSE-POSITIVE GUARD — `ShareLink(item:)` and `SharePreview(image:)` take
+    /// an `Image` as data (the thing shared / its share-sheet thumbnail); neither
+    /// is placed in the view hierarchy, so VoiceOver never reads them. The visible
+    /// control is named by the trailing `Label`. Must be clean.
+    func testShareLinkPayloadImagesAreNotFlagged() {
+        let src = """
+        struct V: View {
+            var body: some View {
+                ShareLink(
+                    item: Image(uiImage: image),
+                    preview: SharePreview("Generated Image", image: Image(uiImage: image))
+                ) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
+        """
+        XCTAssertEqual(ruleIds(src), [], "share-payload Images are not rendered views")
+    }
+
     // MARK: - True positives must still fire
 
     /// A displayed `Image(uiImage:)` made tappable with no `.accessibilityLabel`

@@ -73,6 +73,11 @@ final class A11yVisitor: SyntaxVisitor {
     private func checkImage(_ node: FunctionCallExprSyntax) {
         // Don't-flag: `Image(decorative:)` — explicitly no semantic value.
         if isDecorativeImageInit(node) { return }
+        // Don't-flag: an `Image` passed as DATA to a share API (`ShareLink(item:/
+        // preview:)`, `SharePreview(image:)`) — it is the shared payload / share-
+        // sheet thumbnail, never a view in the hierarchy, so VoiceOver never reads
+        // it. The displayed control is the ShareLink's trailing label closure.
+        if isSharePayloadImage(node) { return }
         // Don't-flag: a name-providing / hidden treatment directly on the Image.
         if chainHasAccessibleTreatment(node) { return }
         // Don't-flag: the icon content of a `Label("text", systemImage:)` — the
@@ -189,6 +194,35 @@ func subtreeContainsImage(_ node: SyntaxProtocol) -> Bool {
             return true
         }
         if subtreeContainsImage(child) { return true }
+    }
+    return false
+}
+
+/// Callees that take an `Image` as DATA (a share payload / its share-sheet
+/// thumbnail) rather than as a rendered view. An `Image` argument to one of these
+/// is never placed in the accessibility tree, so it must not be flagged.
+let sharePayloadCallees: Set<String> = ["ShareLink", "SharePreview"]
+
+/// Is this `Image(...)` a payload ARGUMENT to a share API (not on-screen content)?
+/// Climb the (possibly modifier-chained) expression OUTWARD: if it sits directly
+/// in the argument list of a `ShareLink`/`SharePreview` call, it is payload. A
+/// `ClosureExpr`/`CodeBlockItem` first means we are inside view-builder CONTENT
+/// (e.g. a `ShareLink`'s trailing label) — those images ARE rendered, so we stop
+/// and report `false`. Bounded so a pathological tree can't loop.
+func isSharePayloadImage(_ call: FunctionCallExprSyntax) -> Bool {
+    var current: Syntax? = Syntax(call).parent
+    var depth = 0
+    while let n = current, depth < 8 {
+        // Left the argument-expression context — we're in rendered view content.
+        if n.is(ClosureExprSyntax.self) || n.is(CodeBlockItemSyntax.self) { return false }
+        if let labeled = n.as(LabeledExprSyntax.self),
+           let enclosing = labeled.parent?.as(LabeledExprListSyntax.self)?
+               .parent?.as(FunctionCallExprSyntax.self),
+           let callee = calleeIdentifier(of: enclosing) {
+            return sharePayloadCallees.contains(callee)
+        }
+        current = n.parent
+        depth += 1
     }
     return false
 }

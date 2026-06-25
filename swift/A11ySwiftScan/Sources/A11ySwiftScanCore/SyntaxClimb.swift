@@ -63,6 +63,12 @@ let accessibilityElementContainers: Set<String> = [
     "Label",
     "Stepper",
     "Picker",
+    // `PhotosPicker` / `ShareLink` render as a SINGLE accessibility element (like a
+    // Button); a `.accessibilityLabel` on their chain — or a `ShareLink` title —
+    // names their whole content, so an inner `Image` is not unlabeled. Without
+    // these the climb missed the label and flagged a labelled control's image.
+    "PhotosPicker",
+    "ShareLink",
     "ToolbarItem",
     "ToolbarItemGroup",
 ]
@@ -336,6 +342,7 @@ enum AncestorNameStatus {
 let interactiveContainers: Set<String> = [
     "Button", "NavigationLink", "Link", "Menu", "Toggle",
     "ToolbarItem", "ToolbarItemGroup", "Stepper", "Picker",
+    "PhotosPicker", "ShareLink",
 ]
 
 /// THE single upward climb (collapsed from the former `ancestorNameStatus` +
