@@ -3,8 +3,11 @@
 Cold-scan of `check-android` (ADR 0006, lane 1 — the in-TS XML producer, no JVM)
 across **2** real OSS Android apps, SHA-pinned in `manifest.json`. Out-of-the-box:
 no `init`, no manual declarations. These are the precision-validation runs that
-shaped the XML producer; the SHA-pinned `android:matrix:check` gate harness is not
-built yet (see `manifest.json`).
+shaped the XML producer, now **locked by a live regression gate**:
+`pnpm android:matrix:run` (clone+scan) · `android:matrix:baseline` (re-bless) ·
+`android:matrix:check` (re-scan + diff, non-zero on drift) — the same mechanism as
+`unity-matrix` / `shopify-matrix`. The committed `baseline.json` is the record; any
+change that moves these numbers must show up as an edit to it in the PR.
 
 ## Matrix — one row per repo (final, after the precision fixes)
 

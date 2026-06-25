@@ -46,6 +46,9 @@
     "unity:matrix:run": "tsx experiments/unity-matrix/run.ts",
     "unity:matrix:baseline": "tsx experiments/unity-matrix/baseline.ts",
     "unity:matrix:check": "tsx experiments/unity-matrix/check.ts",
+    "android:matrix:run": "tsx experiments/android-matrix/run.ts",
+    "android:matrix:baseline": "tsx experiments/android-matrix/baseline.ts",
+    "android:matrix:check": "tsx experiments/android-matrix/check.ts",
     "recall:eval": "tsx experiments/corpus-recall/eval.ts"
   },
   "dependencies": {
