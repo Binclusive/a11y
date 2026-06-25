@@ -17,12 +17,25 @@ let package = Package(
         )
     ],
     targets: [
-        .executableTarget(
-            name: "A11ySwiftScan",
+        // The rule engine — file discovery, the visitor, and the ancestor-climb
+        // heuristic. A library so the test target can `@testable import` it and
+        // drive `scanSource` on inline fixtures (an executable can't be imported).
+        .target(
+            name: "A11ySwiftScanCore",
             dependencies: [
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftParser", package: "swift-syntax"),
             ]
-        )
+        ),
+        // The thin CLI shell over `scanDirectory` — prints the findings JSON.
+        .executableTarget(
+            name: "A11ySwiftScan",
+            dependencies: ["A11ySwiftScanCore"]
+        ),
+        // Rule-level coverage: fixtures → expected findings, run with `swift test`.
+        .testTarget(
+            name: "A11ySwiftScanCoreTests",
+            dependencies: ["A11ySwiftScanCore"]
+        ),
     ]
 )

@@ -12,11 +12,11 @@ import Foundation
 /// `Finding.wcag: readonly string[]`. `severity` is "critical" only when the
 /// missing name leaves an interactive element with no accessible name at all
 /// (the element is unusable by VoiceOver), else "serious".
-struct Finding: Encodable {
-    let file: String
-    let line: Int
-    let ruleId: String
-    let message: String
-    let wcag: [String]
-    let severity: String
+public struct Finding: Encodable {
+    public let file: String
+    public let line: Int
+    public let ruleId: String
+    public let message: String
+    public let wcag: [String]
+    public let severity: String
 }

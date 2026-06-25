@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:a11y-checker-plugin}/swift/A11ySwiftScan",
+            "name": "Debug A11ySwiftScan (swift/A11ySwiftScan)",
+            "target": "A11ySwiftScan",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug A11ySwiftScan (swift/A11ySwiftScan)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:a11y-checker-plugin}/swift/A11ySwiftScan",
+            "name": "Release A11ySwiftScan (swift/A11ySwiftScan)",
+            "target": "A11ySwiftScan",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release A11ySwiftScan (swift/A11ySwiftScan)"
+        }
+    ]
+}
