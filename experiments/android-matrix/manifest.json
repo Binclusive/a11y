@@ -1,0 +1,25 @@
+{
+  "//": "SHA-pinned Android corpus for the Android a11y-checker XML lane (ADR 0006, lane 1). Each entry is frozen at an exact commit so the only thing that can move the numbers is THIS checker's own code (the Android XML producer: src/android-xml-ast.ts, src/android-xml-rules.ts, src/collect-android-xml.ts), never upstream repo drift. The gated quantity is the finding stream emitted by `check-android` over each repo's res/layout XML — exactly like shopify-matrix / unity-matrix. NOTE: these two repos were scanned by hand during the lane-1 precision validation (see REPORT.md); the run/baseline/check harness (the android:matrix:* scripts) is not built yet, so there is no committed baseline.json to gate on. To stand up the gate: port experiments/unity-matrix/{run,baseline,check}.ts, then `pnpm android:matrix:baseline`. To extend the corpus: add a public XML-layout-heavy Android app, resolve its sha (`git ls-remote https://github.com/<owner>/<repo> HEAD`), append an entry, re-run.",
+  "repos": [
+    {
+      "repo": "TeamNewPipe/NewPipe",
+      "ref": "HEAD",
+      "sha": "46a59640cdf8a2e75fbd9166c6407405fec49a44",
+      "shaDate": "2026-06-20",
+      "stars": 33000,
+      "uiSystem": "android-views-xml",
+      "source": "Lightweight YouTube/streaming front-end. 116 hand-written res/layout files (301 incl. -land / -v21 / config variants), heavy on icon-only media controls (play/pause/seek/repeat/shuffle) — the canonical TalkBack failure surface. No forms.",
+      "caveat": "Compose-free, classic Android Views — exercises image-no-label + control-no-name but NOT editable-no-label (no EditText forms)."
+    },
+    {
+      "repo": "AntennaPod/AntennaPod",
+      "ref": "HEAD",
+      "sha": "f7f0314888631208fedb26518fd924cb7805062f",
+      "shaDate": "2026-06-17",
+      "stars": 6500,
+      "uiSystem": "android-views-xml",
+      "source": "Podcast manager. 117 hand-written res/layout files (314 incl. variants), forms-heavy — settings, dialogs, search — so it exercises editable-no-label and Material TextInputLayout, which NewPipe does not.",
+      "caveat": "Mix of plain EditText (real findings) and Material TextInputLayout-wrapped fields (label is the parent's job — suppressed)."
+    }
+  ]
+}
