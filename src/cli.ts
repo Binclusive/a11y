@@ -4,13 +4,14 @@ import { Args, Command, Options } from "@effect/cli";
 import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import { Effect, Option } from "effect";
 import { collectTsx } from "./collect";
+import { scanAndroidKotlin } from "./collect-android-kotlin";
 import { scanAndroidXml } from "./collect-android-xml";
 import { scanUrl } from "./collect-dom";
 import { scanLiquid } from "./collect-liquid";
 import { scanSwift } from "./collect-swift";
 import { gen, init, type LearnInput, learn } from "./commands";
 import { collectUnityFindings } from "./unity-findings";
-import { type FindingProvenance, scan } from "./core";
+import { type Finding, type FindingProvenance, scan } from "./core";
 import {
   type CorpusEvidence,
   type CorpusTier,
@@ -50,7 +51,9 @@ export function detailLines(f: EnrichedFinding): string[] {
           ? "  (SwiftUI static)"
           : f.provenance === "android-xml"
             ? "  (Android XML static)"
-            : "";
+            : f.provenance === "compose"
+              ? "  (Compose static)"
+              : "";
   const lines = [
     `    rule:   ${f.ruleId}  [${f.enforcement}]${via}`,
     `    wcag:   ${scList}`,
@@ -634,17 +637,34 @@ async function runCheckUnity(dir: string, json = false): Promise<void> {
 }
 
 /**
- * The Android counterpart of `runCheckShopify`: statically scan a project's layout
- * XML (`res/layout/*.xml`) via the in-process producer (`scanAndroidXml`), enrich
- * through the SAME corpus cross-ref, and report findings anchored on `file:line`.
- * This is the first of ADR 0006's three Android lanes; the Compose + programmatic-
- * Kotlin lanes (an external Kotlin engine) merge into this same `check-android` verb
- * later. No resolver, so coverage is zeroed in `--json` — identical structure to
- * `check-shopify --json`.
+ * The Android front door (ADR 0006): statically scan a project two ways and merge the
+ * findings — the in-process XML layout producer (`scanAndroidXml`, lane 1) and the
+ * external Kotlin/Compose engine (`scanAndroidKotlin`, lane 2). Both feed the SAME
+ * corpus cross-ref and report anchored on `file:line`. The Compose engine is OPTIONAL
+ * and guarded: if it isn't built (or errors for any reason), the scan degrades to
+ * XML-only with a one-line note rather than failing. No resolver,
+ * so coverage is zeroed in `--json` — identical structure to `check-shopify --json`.
  */
 async function runCheckAndroid(dir: string, json = false): Promise<void> {
   const { root, files, findings: raw, parseErrors } = await scanAndroidXml(dir);
-  const findings = enrichAll(raw);
+
+  // Lane 2 — Compose. Guarded so an unbuilt / JDK-incompatible engine never breaks the
+  // XML scan; the note is surfaced in human mode, never silently swallowed.
+  let composeFindings: readonly Finding[] = [];
+  let composeNote: string | null = null;
+  try {
+    const compose = await scanAndroidKotlin(dir);
+    if (compose.engineMissing) {
+      composeNote = "Compose engine not built — XML only (build: kotlin/A11yKotlinScan, ./gradlew installDist).";
+    } else {
+      composeFindings = compose.findings;
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message.split("\n")[0] : String(err);
+    composeNote = `Compose engine unavailable (${detail}) — XML only.`;
+  }
+
+  const findings = enrichAll([...raw, ...composeFindings]);
 
   if (json) {
     const report = buildJsonReport(
@@ -659,19 +679,23 @@ async function runCheckAndroid(dir: string, json = false): Promise<void> {
     return;
   }
 
-  if (files.length === 0) {
+  if (files.length === 0 && composeFindings.length === 0) {
     console.log(`No Android layout XML under ${root}`);
+    if (composeNote !== null) console.log(`  (${composeNote})`);
     return;
   }
 
-  console.log(`a11y-checker — scanned ${files.length} Android layout file(s) under ${root}`);
+  const composeCount = composeFindings.length;
+  const composeScanned = composeNote === null ? ` + Compose (.kt, ${composeCount} finding(s))` : "";
+  console.log(`a11y-checker — scanned ${files.length} Android layout file(s)${composeScanned} under ${root}`);
   if (parseErrors.length > 0) {
     console.log(`  (${parseErrors.length} file(s) skipped — could not parse)`);
   }
+  if (composeNote !== null) console.log(`  (${composeNote})`);
   console.log("");
 
   renderReport(findings, {
-    emptyMessage: "No Android XML a11y violations found.",
+    emptyMessage: "No Android a11y violations found.",
     groupKey: (f) => f.file,
     groupHeader: (file) => relative(root, file),
     formatItem: (f) => formatFinding(f, root),
