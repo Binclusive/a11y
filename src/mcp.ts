@@ -51,6 +51,7 @@ import {
   type Severity,
 } from "./corpus";
 import type { Coverage } from "./resolve-components";
+import { collectUnityFindings } from "./unity-findings";
 import {
   type ReviewCandidate,
   type ReviewInput,
@@ -167,6 +168,33 @@ export async function checkUrl(url: string): Promise<CheckUrlResult> {
   const findings: CheckFinding[] = enriched.map((f) => toCheckFinding(f, f.file));
 
   return { url: result.url, findings };
+}
+
+/** The `check_unity` result: the scanned project root plus its enriched findings. */
+export interface CheckUnityResult {
+  readonly root: string;
+  readonly findings: readonly CheckFinding[];
+}
+
+/**
+ * `check_unity`: run the Unity finding-emission aggregator over a project dir
+ * (`collectUnityFindings` — `scanUnity` → the Unity rules → one canonical
+ * `Finding[]`), then run those findings through `enrichAll` — the SAME corpus-tiering
+ * pass `check_a11y`/`check_url` use. This is the Unity analog of `check_a11y`: the only
+ * difference is the source (serialized `.prefab`/`.unity` assets instead of `.tsx`),
+ * so the returned `findings` carry `provenance: "unity"` and `file` is relativized to
+ * the project root, exactly as `check_a11y` relativizes the `.tsx` paths. No Unity
+ * logic lives here — it is a thin wrapper over the shared aggregator + enrichment, the
+ * same reuse discipline as every other tool (epic #87 / #92).
+ */
+export async function checkUnity(dir: string): Promise<CheckUnityResult> {
+  const root = resolve(dir);
+  const raw = await collectUnityFindings(root);
+  const enriched = enrichAll(raw);
+
+  const findings: CheckFinding[] = enriched.map((f) => toCheckFinding(f, relative(root, f.file)));
+
+  return { root, findings };
 }
 
 /** How many patterns `get_a11y_rules` returns when no filter is given. */
@@ -305,6 +333,13 @@ export function registerTools(server: McpServer): void {
     "Render a live URL in a real browser and run axe-core against the rendered DOM, returning each finding (the URL as file, axe ruleId, WCAG SC, corpus frequency tier, the representative fix, and the CSS selector of the offending node). Unlike check_a11y, this needs no source: it works on non-React, server-rendered, or otherwise source-less pages, while returning the same corpus-tiered findings.",
     { url: z.string().describe("The page URL to render and audit.") },
     async ({ url }) => jsonContent(await checkUrl(url)),
+  );
+
+  server.tool(
+    "check_unity",
+    "Scan a Unity project directory for accessibility violations in its serialized .prefab/.unity assets and return each finding (file, ruleId, WCAG SC, corpus frequency tier, and the representative fix). Mirrors check_a11y for the Unity ecosystem: missing accessible labels, color-only interactive state, and project-level gaps (no screen-reader support, no input rebinding), tiered against the same real-world corpus.",
+    { dir: z.string().describe("Unity project directory to scan recursively for .prefab/.unity assets.") },
+    async ({ dir }) => jsonContent(await checkUnity(dir)),
   );
 
   server.tool(
@@ -451,6 +486,7 @@ export function buildServer(): McpServer {
         "It wraps eslint-plugin-jsx-a11y with a real-world failure corpus (26-org dynamic-audit snapshot).",
         "check_a11y scans a directory and reports WCAG findings with corpus frequency tiers and fixes.",
         "check_url renders a live URL in a real browser and runs axe-core, reporting the same corpus-tiered findings for source-less or server-rendered pages.",
+        "check_unity scans a Unity project's .prefab/.unity assets and reports the same corpus-tiered findings for the Unity ecosystem.",
         "get_a11y_rules returns the rules for a component or WCAG SC so you can apply them before writing code.",
         "learn_a11y_rule records a team rule into binclusive.json and the AGENTS.md/CLAUDE.md block.",
         "review_a11y is a two-step corpus-grounded recall pass: retrieve grounding then verify your nominations through a deterministic gate stack, surfacing advisory findings the static floor missed.",

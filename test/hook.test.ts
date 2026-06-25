@@ -98,13 +98,59 @@ describe("runHook — recall self-check (Phase 1.5)", () => {
   });
 });
 
+describe("runHook — Unity (.prefab/.unity) (#92)", () => {
+  // The real Unity fixture project (shared with unity-findings.test.ts).
+  const UNITY_PROJECT = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "fixtures",
+    "unity-project",
+  );
+  const BUTTON_NO_LABEL = join(UNITY_PROJECT, "ButtonNoLabel.prefab");
+  const BINARY = join(UNITY_PROJECT, "Binary.prefab");
+
+  /** A PostToolUse payload for a Unity asset, cwd at the project root. */
+  function unityPayload(filePath: string, toolName = "Edit"): unknown {
+    return {
+      hook_event_name: "PostToolUse",
+      tool_name: toolName,
+      cwd: UNITY_PROJECT,
+      tool_input: { file_path: filePath },
+    };
+  }
+
+  it("fires on a .prefab edit, emitting the whisper for the edited asset's Unity findings", async () => {
+    const out = await runHook(unityPayload(BUTTON_NO_LABEL));
+
+    expect(out).not.toBeNull();
+    expect(out?.hookSpecificOutput.hookEventName).toBe("PostToolUse");
+    const ctx = out?.hookSpecificOutput.additionalContext ?? "";
+    expect(ctx).toContain("You just edited");
+    expect(ctx).toContain("ButtonNoLabel.prefab");
+    // The missing-accessible-label Unity finding (Absent state) surfaces in the whisper.
+    expect(ctx).toContain("unity/missing-accessible-label");
+  });
+
+  it("works for Write and MultiEdit shapes too (all use tool_input.file_path)", async () => {
+    for (const tool of ["Write", "MultiEdit"]) {
+      const out = await runHook(unityPayload(BUTTON_NO_LABEL, tool));
+      expect(out?.hookSpecificOutput.additionalContext).toContain("ButtonNoLabel.prefab");
+    }
+  });
+
+  it("scopes the whisper to the edited asset (an opaque/clean asset emits nothing)", async () => {
+    // Binary.prefab is opaque → contributes no findings → the per-file whisper no-ops.
+    const out = await runHook(unityPayload(BINARY));
+    expect(out).toBeNull();
+  });
+});
+
 describe("runHook — no-op cases", () => {
   it("no-ops on a clean .tsx (no findings)", async () => {
     const out = await runHook(payload(CLEAN));
     expect(out).toBeNull();
   });
 
-  it("no-ops on a non-tsx file", async () => {
+  it("no-ops on a non-tsx, non-Unity file", async () => {
     const out = await runHook(payload(join(FIXTURES, "violation.ts")));
     expect(out).toBeNull();
   });
