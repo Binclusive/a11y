@@ -18,6 +18,24 @@ pnpm test          # vitest run — the unit + property suite
 
 Do not declare a task done with either red.
 
+## If you touched the Swift collector — run its tests
+
+The Swift collector (`swift/A11ySwiftScan/`, the 4th / SwiftUI-static path) has the
+same precision invariant as the JS resolver: map to the correct host or stay
+opaque, never the wrong host. Its guard is a SwiftPM test target — run it from the
+package before finishing any Swift change:
+
+```
+cd swift/A11ySwiftScan && swift test     # builds A11ySwiftScanCore + runs the fixture suite
+```
+
+The engine lives in the testable `A11ySwiftScanCore` library (the executable is a
+thin shell over it); tests drive the climb against fixture `.swift` files under
+`Tests/A11ySwiftScanCoreTests/Fixtures/` with known expected findings — a positive
+(missing label → finding) and a negative (labeled control → no false positive). Add
+a fixture + assertion alongside any rule change, mirroring `test/fixtures/`. CI runs
+`swift test` on every push/PR touching the package (`.github/workflows/swift.yml`).
+
 ## If you touched the resolver or enforce rules — run the real-world gate
 
 "The resolver" = `src/source-trace.ts`, `src/resolve-components.ts`,
