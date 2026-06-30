@@ -92,13 +92,13 @@ describe("@effect/cli dispatch: each subcommand parses + invokes its runner", ()
     },
   );
 
-  it("`check-swift <dir>` routes to runCheckSwift", { timeout: 30_000 }, async () => {
-    // An empty dir has no .swift files: scanSwift returns zero findings, the
-    // runner prints its empty-state and exits clean — proving the verb dispatched.
-    const { stdout, exit } = await runVerb(["check-swift", emptyDir]);
-    expect(Exit.isSuccess(exit)).toBe(true);
-    expect(stdout).toContain("No SwiftUI a11y violations found.");
-  });
+  // The `check-swift <dir>` route is the ONE verb whose runner spawns the real
+  // Swift engine (`swift run -c release` compiles on a cold machine), so it can
+  // exceed vitest's 30s default and made the default `pnpm test` gate perpetually
+  // one-short on a cold-Swift machine (issue #79). Its real-toolchain coverage now
+  // lives in the slow tier, `test/cli-swift.e2e.test.ts` (run via `pnpm test:e2e`),
+  // excluded from this fast suite; the mocked-engine boundary coverage stays in
+  // `test/collect-swift.test.ts`, which never compiles Swift.
 
   it("`check-shopify <dir>` routes to runCheckShopify", { timeout: 30_000 }, async () => {
     // An empty dir has no .liquid files: scanLiquid returns zero findings, the
