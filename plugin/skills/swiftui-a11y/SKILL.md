@@ -21,6 +21,26 @@ Static is fast and source-grounded. Runtime is where the real coverage lives —
 like render→axe vs. static lint on the web. Run **both** when you're on a Mac with Xcode;
 run Layer 1 alone anywhere else and say so in the report.
 
+> ### Scope and coverage — read this before reporting "clean"
+>
+> **The static SwiftUI scan is currently a 2-rule floor, not a full audit.** Layer 1
+> emits exactly two rules — `swiftui/image-no-label` (WCAG 1.1.1) and
+> `swiftui/control-no-name` (4.1.2). It is **materially thinner than the web/React
+> engine**, which additionally runs a host-element resolver, cross-file wrapper
+> resolution, suppression handling, and a corpus-driven WCAG-enrichment pass. The
+> SwiftUI collector has **none** of those subsystems yet. So a clean static SwiftUI
+> result means **"no issues found by the 2-rule floor (plus whatever runtime you
+> ran),"** never **"fully accessible"** — most failure modes (contrast, Dynamic Type,
+> target size, headings, color-only state, form labels, unresolved custom wrappers) are
+> simply **not yet checked statically**.
+>
+> This asymmetry is **a coverage debt being actively closed, not the intended scope.**
+> Per **ADR `.decisions/0007-swiftui-static-floor-scope.md`**, the 2-rule floor is *not*
+> the end state; the SwiftUI collector is on a stated path to parity with the TS engine,
+> tracked in **epic #111** (the rule-gap inventory + pickable children). Until that work
+> lands, **always state the floor explicitly in your report** (see "Always end with this
+> report" below) so a user never reads a thin static pass as a complete audit.
+
 **Lead with the most impactful failures first.** Across audits, the recurring SwiftUI
 shapes are, roughly in order: unlabeled images/icons (1.1.1), icon-only controls with no
 name (4.1.2), color-contrast (1.4.3), and text that clips under large Dynamic Type (1.4.4).
