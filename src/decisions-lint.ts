@@ -1,5 +1,5 @@
 /**
- * ADR-sequence collision gate for `.decisions/` (issue #77, ADR 0006).
+ * ADR-sequence collision gate for `.decisions/` (issue #77, ADR 0008).
  *
  * The why: `write-code` allocates the next ADR number at *branch-creation* time
  * with no reservation on the monotonic `.decisions/` sequence, so two
@@ -8,7 +8,7 @@
  * and a duplicate row in `.decisions/index.md`. A per-PR review gate cannot see
  * a cross-PR collision on shared global state, so the collision is invisible
  * until both branches merge. This is the *combined-tree* detection/rejection
- * gate ADR 0006 chooses: it runs over the merged `.decisions/` directory and
+ * gate ADR 0008 chooses: it runs over the merged `.decisions/` directory and
  * fails loud on any duplicate sequence number (in the files or the index) and
  * on any file<->index drift, so the collision is rejected instead of shipping.
  *

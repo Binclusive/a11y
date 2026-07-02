@@ -8,6 +8,12 @@ tags: [process, decisions, concurrency, gate, ci]
 
 # 0009 — Reject ADR-Sequence Collisions with a Combined-Tree Gate
 
+> **Numbering note:** this ADR originally claimed `0006`, but that id — and the
+> `0007`/`0008` past it — were already taken by ADRs that merged ahead of it
+> (`0006` reporter-adapter-seam, `0007` swiftui-scope from #120, `0008`
+> android-collector-scope from #121) — exactly the cross-PR collision class this
+> decision gates — so it was renumbered to the next free id, `0009`.
+
 ## Context
 
 `write-code` allocates the next ADR number by reading the current high-water

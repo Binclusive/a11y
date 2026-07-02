@@ -1,5 +1,5 @@
 /**
- * CLI shell for the ADR-sequence collision gate (issue #77, ADR 0006).
+ * CLI shell for the ADR-sequence collision gate (issue #77, ADR 0008).
  *
  * Runs `lintDecisions` over this repo's `.decisions/` and exits non-zero on any
  * collision or index drift, so the gate is runnable locally (`pnpm
