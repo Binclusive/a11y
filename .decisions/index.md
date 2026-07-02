@@ -11,4 +11,4 @@ One row per ADR. Read the file for the why.
 | [0005](0005-unity-first-game-a11y-scope.md) | Unity-First as the Wedge for the Game A11y Checker | accepted | 2026-06-24 |
 | [0006](0006-reporter-adapter-seam.md) | A Per-Platform Reporter-Adapter Seam (Diff-Context Resolver + Findings Reporter) | accepted | 2026-07-05 |
 | [0007](0007-swiftui-static-floor-scope.md) | SwiftUI Collector Scope — Pursue Parity, the 2-Rule Floor Is Not the End State | accepted | 2026-06-30 |
-| [0008](0008-android-collector-compose-scope-engine.md) | Android a11y — Compose-Only Scope, a Clean PSI Engine, and Provenance-Tagged Naming | accepted | 2026-06-30 |
+| [0008](0008-android-collector-compose-scope-engine.md) | Android a11y — Compose + XML Layout Scope, a Clean PSI Engine, and Provenance-Tagged Naming | accepted | 2026-07-02 |
