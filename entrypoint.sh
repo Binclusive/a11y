@@ -14,6 +14,11 @@ WORKSPACE="${GITHUB_WORKSPACE:-$(pwd)}"
 
 log() { echo "a11y-agent: $*" >&2; }
 
+# A Docker action runs as root over a workspace whose .git is owned by the
+# runner user, so git's dubious-ownership guard would make every git call fail
+# (silently falling back to a no-op scan). Trust the mounted workspace.
+git config --global --add safe.directory "$WORKSPACE" 2>/dev/null || true
+
 # The runner passes the GITHUB_* defaults into a Docker action but NOT the PR
 # context — derive PR_NUMBER / BASE_SHA / HEAD_SHA from the event payload at
 # GITHUB_EVENT_PATH. Explicit env still wins, so `docker run -e ...` works too.
