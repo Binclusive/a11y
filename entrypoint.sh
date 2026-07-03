@@ -14,6 +14,16 @@ WORKSPACE="${GITHUB_WORKSPACE:-$(pwd)}"
 
 log() { echo "a11y-agent: $*" >&2; }
 
+# The runner passes the GITHUB_* defaults into a Docker action but NOT the PR
+# context — derive PR_NUMBER / BASE_SHA / HEAD_SHA from the event payload at
+# GITHUB_EVENT_PATH. Explicit env still wins, so `docker run -e ...` works too.
+if [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -f "${GITHUB_EVENT_PATH:-}" ]; then
+  ev() { node -e 'const fs=require("fs");const e=JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH,"utf8"));const g=(o,p)=>p.split(".").reduce((a,k)=>a&&a[k],o);process.stdout.write(String(g(e,process.argv[1])??""))' "$1" 2>/dev/null; }
+  export PR_NUMBER="${PR_NUMBER:-$(ev number)}"
+  export BASE_SHA="${BASE_SHA:-$(ev pull_request.base.sha)}"
+  export HEAD_SHA="${HEAD_SHA:-$(ev pull_request.head.sha)}"
+fi
+
 # ---- 1. Resolve the set of changed .tsx files -----------------------------
 # Three sources, in priority order: an explicit CHANGED_FILES list, a
 # BASE..HEAD git diff, or (fallback) a wholesale scan of a mounted tree.
