@@ -1,0 +1,15 @@
+# node_modules is reinstalled inside the image (--prod, frozen lockfile).
+node_modules
+**/node_modules
+
+# History + local tooling — never needed at runtime.
+.git
+.github
+
+# Heavy, runtime-irrelevant trees.
+docs
+experiments
+demo
+test
+**/*.pdf
+**/*.pptx
