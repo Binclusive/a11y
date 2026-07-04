@@ -62,4 +62,23 @@ describe("formatSarif over the local finding", () => {
     expect(sarif.runs[0].tool.driver.rules).toHaveLength(1);
     expect(sarif.runs[0].results).toHaveLength(2);
   });
+
+  it("tags each result with its provenance so deterministic vs agent stays distinguishable", () => {
+    const floor = JSON.parse(formatSarif([enrich(raw())], "r"));
+    expect(floor.runs[0].results[0].properties.provenance).toBe("deterministic");
+    const agent = JSON.parse(formatSarif([enrich(raw({ provenance: "corpus-agent" }))], "r"));
+    expect(agent.runs[0].results[0].properties.provenance).toBe("agent");
+  });
+
+  it("relativizes a source-file uri against the scanned root (repo-relative for code-scanning)", () => {
+    const f = enrich(raw({ file: "/work/stage/src/Nav.tsx", line: 5 }));
+    const sarif = JSON.parse(formatSarif([f], "r", { root: "/work/stage" }));
+    expect(sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri).toBe("src/Nav.tsx");
+  });
+
+  it("leaves a rendered-DOM URL uri untouched even when a root is given", () => {
+    const f = enrich(raw({ provenance: "axe", file: "https://x.com/page", line: 0, severity: "serious" }));
+    const sarif = JSON.parse(formatSarif([f], "r", { root: "/work/stage" }));
+    expect(sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri).toBe("https://x.com/page");
+  });
 });
