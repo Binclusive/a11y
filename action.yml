@@ -26,6 +26,31 @@ inputs:
       to `llm-api-key`.
     required: false
     default: ""
+  b8e-org-id:
+    description: >
+      OPTIONAL. The Binclusive organization id the dashboard findings belong to.
+      Required alongside `b8e-token` + `b8e-project-id` for phone-home; if any is
+      absent the run stays fully local (never an error).
+    required: false
+    default: ""
+  b8e-project-id:
+    description: >
+      OPTIONAL. The Binclusive project id the dashboard findings belong to. See
+      `b8e-org-id`.
+    required: false
+    default: ""
+  b8e-audit-id:
+    description: >
+      OPTIONAL. The audit run these findings attach to on the dashboard. Absent →
+      the workflow run id (`GITHUB_RUN_ID`) is used.
+    required: false
+    default: ""
+  b8e-ingest-url:
+    description: >
+      OPTIONAL. Override the Kontrol GraphQL ingest endpoint (defaults to
+      https://kontrol.binclusive.io/graphql). For staging/self-host only.
+    required: false
+    default: ""
 
 outputs:
   sarif-file:
@@ -56,3 +81,9 @@ runs:
     # for the token everywhere.
     LLM_API_KEY: ${{ inputs.llm-api-key }}
     B8E_TOKEN: ${{ inputs.b8e-token }}
+    # Phone-home targeting (all OPTIONAL, local-first). Absent org/project/audit
+    # → the runner skips phone-home; a run never fails for a missing dashboard id.
+    B8E_ORG_ID: ${{ inputs.b8e-org-id }}
+    B8E_PROJECT_ID: ${{ inputs.b8e-project-id }}
+    B8E_AUDIT_ID: ${{ inputs.b8e-audit-id }}
+    B8E_INGEST_URL: ${{ inputs.b8e-ingest-url }}
