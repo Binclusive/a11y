@@ -11,16 +11,18 @@
   "files": [
     "bin",
     "src",
-    "data/corpus-snapshot.json",
-    "data/corpus/patterns-*.json",
     "data/baseline-rules.json"
+  ],
+  "workspaces": [
+    "packages/*"
   ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Binclusive/a11y-checker-plugin.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "engines": {
     "node": ">=20.18.1"
@@ -60,6 +62,9 @@
     "tsx": "^4.21.0",
     "typescript": "5.8.3",
     "zod": "4.0.0"
+  },
+  "optionalDependencies": {
+    "@binclusive/a11y-corpus": "*"
   },
   "devDependencies": {
     "@types/node": "22.13.5",

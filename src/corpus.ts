@@ -1,22 +1,41 @@
-import patterns111 from "../data/corpus/patterns-1.1.1.json" with { type: "json" };
-import patterns131 from "../data/corpus/patterns-1.3.1.json" with { type: "json" };
-import patterns135 from "../data/corpus/patterns-1.3.5.json" with { type: "json" };
-import patterns143 from "../data/corpus/patterns-1.4.3.json" with { type: "json" };
-import patterns211 from "../data/corpus/patterns-2.1.1.json" with { type: "json" };
-import patterns241 from "../data/corpus/patterns-2.4.1.json" with { type: "json" };
-import patterns243 from "../data/corpus/patterns-2.4.3.json" with { type: "json" };
-import patterns244 from "../data/corpus/patterns-2.4.4.json" with { type: "json" };
-import patterns246 from "../data/corpus/patterns-2.4.6.json" with { type: "json" };
-import patterns247 from "../data/corpus/patterns-2.4.7.json" with { type: "json" };
-import patterns325 from "../data/corpus/patterns-3.2.5.json" with { type: "json" };
-import patterns331 from "../data/corpus/patterns-3.3.1.json" with { type: "json" };
-import patterns332 from "../data/corpus/patterns-3.3.2.json" with { type: "json" };
-import patterns412 from "../data/corpus/patterns-4.1.2.json" with { type: "json" };
-import patterns413 from "../data/corpus/patterns-4.1.3.json" with { type: "json" };
+import { createRequire } from "node:module";
 import baselineCatalog from "../data/baseline-rules.json" with { type: "json" };
-import snapshot from "../data/corpus-snapshot.json" with { type: "json" };
-import { tierForOrgs } from "./distill/distill";
+import { tierForOrgs } from "./frequency-tier";
 import type { Finding } from "./core";
+
+/**
+ * The 15 WCAG SCs the corpus distills, canonical order. The private
+ * `@binclusive/a11y-corpus` ships one `patterns-<SC>.json` per entry.
+ */
+const CORPUS_SCS = [
+  "1.1.1", "1.3.1", "1.3.5", "1.4.3", "2.1.1", "2.4.1", "2.4.3", "2.4.4",
+  "2.4.6", "2.4.7", "3.2.5", "3.3.1", "3.3.2", "4.1.2", "4.1.3",
+] as const;
+
+/**
+ * Load the proprietary corpus (the moat) from the OPTIONAL private package
+ * `@binclusive/a11y-corpus`. SYNC, resolve-or-empty: `require` of JSON is
+ * synchronous — so no `await` ripples through this module's synchronous
+ * consumers (commands/cli/core/mcp) — and any resolution failure (the package
+ * is simply not installed: the OSS case) drops to the degraded floor (empty
+ * snapshot + no patterns). Downstream that yields `source:"baseline"` /
+ * `tier:"unknown"` for every finding: the axe-derived baseline catalog floor
+ * still runs; only the audit-frequency layer is absent. Never throws.
+ */
+function loadCorpus(): { snapshot: unknown; patterns: unknown[] } {
+  try {
+    const require = createRequire(import.meta.url);
+    const snapshot = require("@binclusive/a11y-corpus/data/corpus-snapshot.json");
+    const patterns = CORPUS_SCS.map((sc) =>
+      require(`@binclusive/a11y-corpus/data/corpus/patterns-${sc}.json`),
+    );
+    return { snapshot, patterns };
+  } catch {
+    return { snapshot: { criteria: {} }, patterns: [] };
+  }
+}
+
+const CORPUS = loadCorpus();
 
 /** Severity levels, ordered least → most severe. axe's runtime impact vocabulary. */
 export type Severity = "minor" | "moderate" | "serious" | "critical";
@@ -154,7 +173,7 @@ function readCriteria(raw: unknown): ReadonlyMap<string, CriterionEntry> {
   return map;
 }
 
-const CRITERIA = readCriteria(snapshot);
+const CRITERIA = readCriteria(CORPUS.snapshot);
 
 /**
  * A baseline-catalog rule, narrowed from `data/baseline-rules.json`. Mirrors the
@@ -267,23 +286,7 @@ function readDistilled(...files: unknown[]): ReadonlyMap<string, DistilledPatter
   return map;
 }
 
-const DISTILLED = readDistilled(
-  patterns111,
-  patterns131,
-  patterns135,
-  patterns143,
-  patterns211,
-  patterns241,
-  patterns243,
-  patterns244,
-  patterns246,
-  patterns247,
-  patterns325,
-  patterns331,
-  patterns332,
-  patterns412,
-  patterns413,
-);
+const DISTILLED = readDistilled(...CORPUS.patterns);
 
 /** Tier strength ranking — lower rank = stronger (more widespread). */
 const TIER_RANK: Record<CorpusTier, number> = {

@@ -23,6 +23,12 @@ import type { ClusterDef, ParsedClusters } from "./cluster-assignments";
 import { categorizeJourney, type JourneyCategory } from "./journey-category";
 import { normalizeCriterion } from "./normalize-sc";
 
+// The frequency-tier contract is DELIBERATELY duplicated here and in the OSS
+// engine (`@binclusive/a11y/src/frequency-tier`). Both are pinned to the same
+// public thresholds (also documented in `data/baseline-rules.json` _meta). The
+// copy keeps this private moat package independently extractable — no build-time
+// edge to the engine — which is the whole point of the public/private split.
+
 /** k>=3 distinct orgs to keep a pattern. */
 export const MIN_ORGS = 3;
 
