@@ -29,6 +29,14 @@ if [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -f "${GITHUB_EVENT_PATH:-}" ]; then
   export HEAD_SHA="${HEAD_SHA:-$(ev pull_request.head.sha)}"
 fi
 
+# Both credentials are OPTIONAL and independent — the deterministic floor runs
+# without either. LLM_API_KEY (BYOK, the customer's own model key) gates the AI
+# lane; B8E_TOKEN (a `b8e_` apiKey) gates phone-home ingestion. Absent key -> no
+# AI lane; absent token -> no phone-home; neither is an error. Both reach the
+# runner as inherited container env; log presence only, never the secret value.
+[ -n "${LLM_API_KEY:-}" ] && log "AI lane: LLM key present" || log "AI lane: no LLM key — deterministic floor only"
+[ -n "${B8E_TOKEN:-}" ]   && log "phone-home: b8e_ token present" || log "phone-home: no token — local-only"
+
 # ---- 1. Resolve the set of changed .tsx files -----------------------------
 # Delegated to the engine's ONE diff-scoping module (src/diff-scope.ts) via
 # bin/diff-scope.mjs, so the Action and the engine share a single scoper instead

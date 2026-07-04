@@ -147,6 +147,30 @@ provenance (`deterministic` vs `agent`) in the SARIF property bag. The SARIF
 file exists only to render on **your** GitHub — it carries file/line for local
 annotation and is never sent to the Binclusive dashboard.
 
+### Optional secrets — AI lane & dashboard
+
+The deterministic floor above needs **no account and no secret**. Two optional,
+independent inputs unlock the extra lanes — supply neither, one, or both. Absent
+means "lane off", never an error; the scan still exits 0.
+
+| Input | Secret it carries | Absent → | Notes |
+|---|---|---|---|
+| `llm-api-key` | Your **own** LLM provider key (BYOK) | AI enrichment lane skipped; deterministic floor still runs | Provider-agnostic — no provider is baked into the Action or image. Your credential; it never leaves the runner for the dashboard. |
+| `b8e-token` | A Binclusive `b8e_` apiKey | No phone-home; scan stays fully local | Mint it in the Binclusive dashboard. Metadata-only ingestion bearer. Unrelated to the LLM key. |
+
+```yaml
+      - id: a11y
+        uses: Binclusive/a11y-checker-plugin@main
+        with:
+          llm-api-key: ${{ secrets.LLM_API_KEY }}   # optional — your BYOK model key
+          b8e-token:   ${{ secrets.B8E_TOKEN }}     # optional — dashboard ingestion
+```
+
+Store both as encrypted repo (or org) secrets. The `b8e-token` authenticates the
+phone-home to Binclusive; the `llm-api-key` never touches Binclusive auth — the
+two are orthogonal. No Binclusive LLM credential ships in the image or the
+Action defaults.
+
 ---
 
 ## Dig deeper
