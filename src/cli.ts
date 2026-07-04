@@ -19,6 +19,7 @@ import {
 } from "./corpus";
 import { runHookCli } from "./hook";
 import { startStdioServer } from "./mcp";
+import { phoneHome } from "./phone-home";
 import { formatSarif } from "./sarif";
 import type { ComponentResolution, Coverage } from "./resolve-components";
 import type { SuggestResult } from "./suggest";
@@ -449,6 +450,11 @@ async function runCheck(dir: string, json = false, sarif = false, runId = "local
     const findings = enrichAll(result.findings);
     const report = buildJsonReport(root, files.length, result.coverage, findings);
     console.log(JSON.stringify(report, null, 2));
+    // OPTIONAL, non-blocking phone-home (#2108): file metadata-only findings to
+    // the dashboard when the CI env carries a `b8e_` token + org/project. Fully
+    // env-gated, so a local `check --json` (no such env) silently skips; a
+    // failure here is swallowed inside `phoneHome` and never changes exit code.
+    await phoneHome(findings, root, process.env);
     const blocking = findings.filter((f) => f.enforcement === "block").length;
     process.exitCode = blocking > 0 ? 1 : 0;
     return;
