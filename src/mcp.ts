@@ -478,7 +478,7 @@ async function runReviewTool(
 /** Build the configured server (no transport attached). */
 export function buildServer(): McpServer {
   const server = new McpServer(
-    { name: "binclusive-a11y", version: "0.0.0" },
+    { name: "binclusive-a11y", version: "0.1.0" },
     {
       capabilities: { tools: {} },
       instructions: [
