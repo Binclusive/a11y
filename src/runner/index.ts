@@ -4,11 +4,12 @@
  * The harness that sits on top of the deterministic engine: a BYO-provider
  * abstraction + a capped, non-blocking pull loop that consumes the engine's
  * deterministic findings and emits agent-provenance findings through the SAME
- * metadata-only contract projection. The code-graph lookups (#2097) and the
- * enrich/discover deepening (#2098) still live behind the `LookupTool` seam and
- * the reasoner's response parse. The reasoning CORE (#2096) — the ported
- * per-framework checklists + pattern catalog and the concrete `AgentReasoner`
- * that consults them — now fills the reasoning seam (`./reasoning`).
+ * metadata-only contract projection. The code-graph lookups (#2097) live behind
+ * the `LookupTool` seam. The reasoning CORE (#2096) — the ported per-framework
+ * checklists + pattern catalog and the concrete `AgentReasoner` — fills the
+ * reasoning seam (`./reasoning`). The enrich/discover deepening (#2098) is now
+ * FILLED: the reasoner returns a `ReasonResult` (in-place enrichment + discovered
+ * findings), parsed at a tolerant zod boundary and deduped against the floor.
  */
 export {
   type BudgetSnapshot,
@@ -40,7 +41,9 @@ export {
 export {
   type AgentFinding,
   type AgentReasoner,
+  EMPTY_RESULT,
   type ReasonContext,
+  type ReasonResult,
 } from "./reasoner";
 export {
   DEFAULT_RUNNER_CONFIG,
@@ -53,6 +56,7 @@ export {
 } from "./runner";
 export {
   type ChecklistArea,
+  type Discovery,
   type FixSeverity,
   type FixSuggestion,
   type FixType,
@@ -69,6 +73,7 @@ export {
 export {
   buildSystemPrompt,
   buildUserPrompt,
-  parseSuggestions,
+  type ParsedReasonResponse,
+  parseReasonResponse,
   suggestionMessage,
 } from "./reasoning/prompt";

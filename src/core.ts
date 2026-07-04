@@ -77,6 +77,15 @@ export type FindingProvenance =
 export type FindingLayer = "floor" | "recall";
 
 /**
+ * How sure the agent lane is about a DISCOVERED finding — the recall layer's
+ * self-reported judgement strength. Set only on `corpus-agent` discoveries (never
+ * on a deterministic floor finding, which is reproducible, not a judgement). It is
+ * advisory metadata for local rendering; it never reaches the CLI exit code and,
+ * like every agent field, has no home on the metadata-only wire contract.
+ */
+export type AgentConfidence = "low" | "medium" | "high";
+
+/**
  * A single accessibility finding. A jsx-a11y finding is normalized off an
  * ESLint message; an enforce finding is produced by the call-site content check
  * (see `enforce.ts`). Both carry the same shape so the report and enforcement
@@ -134,6 +143,22 @@ export interface Finding {
    * findings via the SC lookup.
    */
   readonly helpUrl?: string;
+  /**
+   * The agent lane's IN-PLACE enrichment of a DETERMINISTIC finding — a prose
+   * note / fix suggestion the agent attached without changing what the finding
+   * IS. The finding stays `provenance: deterministic` (an automated rule still
+   * surfaced it); this only adds AI judgement on top. Prose, never a patch —
+   * suggestions-not-patches is structural (this is a string, not an edit). Local
+   * only: the wire contract's deterministic arm has no field for it, so an
+   * enrichment never crosses the metadata-only boundary.
+   */
+  readonly agentNote?: string;
+  /**
+   * The agent lane's confidence in a DISCOVERED finding (see {@link AgentConfidence}).
+   * Set only on `corpus-agent` findings the agent surfaced that no deterministic
+   * pass caught — never on a floor finding.
+   */
+  readonly confidence?: AgentConfidence;
 }
 
 /**

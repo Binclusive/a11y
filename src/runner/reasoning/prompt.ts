@@ -19,8 +19,16 @@
  * dedup are the enrich+discover surface of issue #2098; this leaves that seam
  * clean rather than pre-empting it.
  */
+import { z } from "zod";
 import type { Finding } from "../../core";
-import { FIX_TYPES, type FixSuggestion, type FixType, type FrameworkGuidance, type PatternCatalogEntry } from "./types";
+import {
+  type Discovery,
+  FIX_TYPES,
+  type FixSuggestion,
+  type FixType,
+  type FrameworkGuidance,
+  type PatternCatalogEntry,
+} from "./types";
 
 /** Render one pattern-catalog entry as the model sees it. */
 function renderPattern(p: PatternCatalogEntry): string {
@@ -64,12 +72,24 @@ export function buildSystemPrompt(guidance: FrameworkGuidance): string {
     patterns,
     "",
     "# Output contract",
-    "You SUGGEST fixes; you never apply them. Return ONLY a JSON array (no prose",
-    "outside it) of suggestion objects with this shape:",
-    '  { "observation": string, "suggestedFix": string, "wcag": string[],',
-    `    "fixType": one of ${FIX_TYPES.map((t) => `"${t}"`).join(" | ")}, "patternId"?: string }`,
-    "Return [] when there is nothing to add. Never emit a diff, patch, or file edit —",
-    "only a described fix. Set patternId to the matching catalog id when one applies.",
+    "You SUGGEST fixes; you never apply them. Do TWO things for the finding below and",
+    "return ONLY a JSON object (no prose outside it) with this exact shape:",
+    "  {",
+    '    "enrichment": { "observation": string, "suggestedFix": string, "wcag": string[],',
+    `      "fixType": one of ${FIX_TYPES.map((t) => `"${t}"`).join(" | ")}, "patternId"?: string } | null,`,
+    '    "discoveries": [ { "observation": string, "suggestedFix": string, "rationale": string,',
+    '      "confidence": "low" | "medium" | "high", "wcag": string[],',
+    `      "fixType": one of ${FIX_TYPES.map((t) => `"${t}"`).join(" | ")}, "element"?: string, "patternId"?: string } ]`,
+    "  }",
+    "",
+    "ENRICHMENT enriches the GIVEN deterministic finding in place — a note/fix for",
+    "THAT exact issue. Use null when you have nothing to add to it.",
+    "DISCOVERIES are NEW accessibility problems the rule engine MISSED — compositional",
+    "or contextual issues (e.g. a broken focus order across components, a duplicated",
+    "landmark, a heading-level skip) that no single-element rule would catch. Use [] when",
+    "you find nothing new; do NOT restate the given finding as a discovery.",
+    "Never emit a diff, patch, or file edit — only described fixes. Set patternId to the",
+    "matching catalog id when one applies.",
   ].join("\n");
 }
 
@@ -91,57 +111,91 @@ export function suggestionMessage(s: FixSuggestion): string {
   return `${s.observation} Suggested fix (${s.fixType}): ${s.suggestedFix}`;
 }
 
-function isFixType(value: unknown): value is FixType {
-  return typeof value === "string" && (FIX_TYPES as readonly string[]).includes(value);
-}
-
-function asStringArray(value: unknown): readonly string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
-}
-
-/** Narrow one parsed JSON value into a {@link FixSuggestion}, or `null` if malformed. */
-function toSuggestion(value: unknown): FixSuggestion | null {
-  if (typeof value !== "object" || value === null) return null;
-  const record: Record<string, unknown> = value as Record<string, unknown>;
-  const observation = record.observation;
-  const suggestedFix = record.suggestedFix;
-  if (typeof observation !== "string" || observation.length === 0) return null;
-  if (typeof suggestedFix !== "string" || suggestedFix.length === 0) return null;
-  // An unknown/absent fixType defaults to the most conservative label — a fix we
-  // can't classify is one the developer must verify, never a silent "SAFE".
-  const fixType = isFixType(record.fixType) ? record.fixType : "RUNTIME-CHECK";
-  const patternId = typeof record.patternId === "string" ? record.patternId : undefined;
-  return { observation, suggestedFix, wcag: asStringArray(record.wcag), fixType, patternId };
-}
-
-/** Pull the first JSON array out of a model reply (fenced ```json block or bare). */
-function extractJsonArray(text: string): string | null {
-  const fenced = text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
-  if (fenced) return fenced[1];
-  const start = text.indexOf("[");
-  const end = text.lastIndexOf("]");
-  return start !== -1 && end > start ? text.slice(start, end + 1) : null;
+/**
+ * Coerce a model-supplied `fixType` to a known label. An unknown/absent value
+ * defaults to the most conservative label — a fix we can't classify is one the
+ * developer must verify, never a silent "SAFE". Reuses {@link FIX_TYPES} as the
+ * single source of valid labels (no duplicated literal list to drift).
+ */
+function coerceFixType(value: unknown): FixType {
+  for (const t of FIX_TYPES) if (t === value) return t;
+  return "RUNTIME-CHECK";
 }
 
 /**
- * Read a model reply into typed suggestions. Tolerant on purpose: a reply that
- * isn't parseable JSON, or whose entries are malformed, yields the valid subset
- * (possibly `[]`) — it never throws, because the AI lane must never fail the run.
+ * The zod boundary for one suggestion. `.min(1)` rejects empty prose; `fixType`
+ * is coerced not rejected (a bad label degrades to RUNTIME-CHECK); `wcag` that
+ * isn't a clean string array degrades to `[]`. This is the structured-output
+ * parse the AC demands — malformed entries are rejected at `safeParse`, never
+ * trusted.
  */
-export function parseSuggestions(text: string): readonly FixSuggestion[] {
-  const json = extractJsonArray(text);
-  if (json === null) return [];
-  let parsed: unknown;
+const fixSuggestionSchema = z.object({
+  observation: z.string().min(1),
+  suggestedFix: z.string().min(1),
+  wcag: z.array(z.string()).catch([]),
+  fixType: z.unknown().transform(coerceFixType),
+  patternId: z.string().optional(),
+});
+
+/** A discovery is a suggestion plus the standalone-judgement fields (rationale + confidence). */
+const discoverySchema = fixSuggestionSchema.extend({
+  rationale: z.string().min(1),
+  confidence: z.enum(["low", "medium", "high"]),
+  element: z.string().optional(),
+});
+
+/**
+ * The top-level envelope. Deliberately PERMISSIVE — every field is `unknown` and
+ * the whole thing `.catch`es to empty — so a malformed enrichment can never sink
+ * an otherwise-good discoveries array (and vice versa). Each field is re-parsed
+ * INDEPENDENTLY below, so tolerance is per-entry, not all-or-nothing.
+ */
+const envelopeSchema = z
+  .object({ enrichment: z.unknown().optional(), discoveries: z.unknown().optional() })
+  .catch({ enrichment: undefined, discoveries: undefined });
+
+/** The parsed two-behavior response — an in-place enrichment (or none) plus discoveries. */
+export interface ParsedReasonResponse {
+  readonly enrichment: FixSuggestion | null;
+  readonly discoveries: readonly Discovery[];
+}
+
+/** Pull the first JSON object out of a model reply (fenced ```json block or bare). */
+function extractJsonObject(text: string): string | null {
+  const fenced = text.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+  if (fenced) return fenced[1];
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  return start !== -1 && end > start ? text.slice(start, end + 1) : null;
+}
+
+function parseOne<T>(schema: z.ZodType<T>, value: unknown): T | null {
+  const parsed = schema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Read a model reply into a typed {@link ParsedReasonResponse}. Tolerant on
+ * purpose and at every layer: an unparseable reply, a malformed envelope, a bad
+ * enrichment, or bad discovery entries all degrade to the valid subset — it never
+ * throws, because the AI lane must never fail the non-blocking run.
+ */
+export function parseReasonResponse(text: string): ParsedReasonResponse {
+  const json = extractJsonObject(text);
+  if (json === null) return { enrichment: null, discoveries: [] };
+  let root: unknown;
   try {
-    parsed = JSON.parse(json);
+    root = JSON.parse(json);
   } catch {
-    return [];
+    return { enrichment: null, discoveries: [] };
   }
-  if (!Array.isArray(parsed)) return [];
-  const out: FixSuggestion[] = [];
-  for (const entry of parsed) {
-    const suggestion = toSuggestion(entry);
-    if (suggestion !== null) out.push(suggestion);
+  const envelope = envelopeSchema.parse(root);
+  const enrichment = parseOne(fixSuggestionSchema, envelope.enrichment);
+  const rawDiscoveries = Array.isArray(envelope.discoveries) ? envelope.discoveries : [];
+  const discoveries: Discovery[] = [];
+  for (const entry of rawDiscoveries) {
+    const discovery = parseOne(discoverySchema, entry);
+    if (discovery !== null) discoveries.push(discovery);
   }
-  return out;
+  return { enrichment, discoveries };
 }

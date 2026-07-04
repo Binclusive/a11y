@@ -39,12 +39,35 @@ export interface ReasonContext {
   readonly scope: string;
 }
 
+/**
+ * What ONE pass produces — the two agent behaviors, kept structurally distinct so
+ * "enrich" and "discover" can never be confused (issue #2098):
+ *
+ *   - {@link enrichment} ENRICHES the source deterministic finding IN PLACE: a
+ *     prose note the harness folds onto that finding, which stays
+ *     `provenance: deterministic`. `null` means "nothing to add to this one".
+ *   - {@link discoveries} DISCOVERS new issues the deterministic engine missed —
+ *     standalone `corpus-agent` findings. `[]` means "found nothing new".
+ *
+ * Both come out of the SAME single model call, so a pass still costs one provider
+ * turn (the low-cap "one pass/finding" discipline the harness meters).
+ */
+export interface ReasonResult {
+  /** An in-place note for the SOURCE deterministic finding, or `null`. Prose, never a patch. */
+  readonly enrichment: string | null;
+  /** New `corpus-agent` findings the deterministic pass missed. `[]` is a normal empty pass. */
+  readonly discoveries: readonly AgentFinding[];
+}
+
+/** The empty pass — nothing to enrich, nothing discovered. */
+export const EMPTY_RESULT: ReasonResult = { enrichment: null, discoveries: [] };
+
 export interface AgentReasoner {
   /**
-   * Produce zero or more agent findings for one deterministic finding. Returning
-   * `[]` is a normal "nothing to add" pass. Rejecting is allowed — the harness
-   * records the pass as a non-fatal error and continues; a reasoner failure never
-   * fails the run.
+   * Reason about one deterministic finding, producing a {@link ReasonResult}.
+   * Returning {@link EMPTY_RESULT} is a normal "nothing to add" pass. Rejecting is
+   * allowed — the harness records the pass as a non-fatal error and continues; a
+   * reasoner failure never fails the run.
    */
-  readonly reason: (ctx: ReasonContext) => Promise<readonly AgentFinding[]>;
+  readonly reason: (ctx: ReasonContext) => Promise<ReasonResult>;
 }

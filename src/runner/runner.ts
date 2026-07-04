@@ -11,13 +11,16 @@
  * The three seams the harness leaves clean:
  *   - #2096 reasoning skills   → the `AgentReasoner` (the prompt/system content).
  *   - #2097 code-graph lookups → the `LookupTool` the harness caps per finding.
- *   - #2098 enrich/discover    → what the reasoner returns from a model response.
+ *   - #2098 enrich/discover    → the reasoner returns a `ReasonResult` (in-place
+ *     enrichment + discoveries); the harness folds notes onto the source findings
+ *     and dedups the discoveries against the deterministic floor.
  *
  * The emit boundary is the canonical contract: agent findings project through the
  * SAME `emit-contract` projection the deterministic engine uses (#2093), so no
  * file/line ever reaches the wire and there is one wire schema, not two. The
  * lenient variant drops a single malformed finding rather than failing the run.
  */
+import { dedupeRecall } from "../core";
 import type { EnrichedFinding } from "../corpus";
 import { toFindingPayloadLenient } from "../emit-contract";
 import type { FindingPayload } from "@binclusive/a11y-contract";
@@ -39,9 +42,14 @@ export const DEFAULT_RUNNER_CONFIG: RunnerConfig = {
   lookupsPerFinding: 5,
 };
 
-/** Why one pass ended. A pass is atomic: it produces, is empty, errors, or never ran. */
+/**
+ * Why one pass ended. A pass is atomic: it produces, is empty, errors, or never
+ * ran. `produced` carries BOTH agent behaviors — how many findings it DISCOVERED
+ * and whether it ENRICHED the source finding in place — so a note-only pass still
+ * reads as productive, not empty.
+ */
 export type PassOutcome =
-  | { readonly kind: "produced"; readonly count: number }
+  | { readonly kind: "produced"; readonly discovered: number; readonly enriched: boolean }
   | { readonly kind: "empty" }
   | { readonly kind: "errored"; readonly reason: string }
   | { readonly kind: "skipped"; readonly reason: "token-ceiling" };
@@ -69,12 +77,18 @@ export interface RunInput {
  * The total outcome. Both arms carry a contract-validated {@link FindingPayload}
  * (possibly partial) AND the rich local findings (for local SARIF / PR comments).
  * There is no `failed` arm — the loop is non-blocking.
+ *
+ * `findings` are the DISCOVERED agent findings (deduped). `enrichedFindings` are
+ * the input deterministic findings, in order, some now carrying an `agentNote`
+ * from an in-place enrichment — they stay `provenance: deterministic` and feed the
+ * deterministic (strict) emit + local render, never the agent payload.
  */
 export type RunOutcome =
   | {
       readonly status: "complete";
       readonly payload: FindingPayload;
       readonly findings: readonly AgentFinding[];
+      readonly enrichedFindings: readonly EnrichedFinding[];
       readonly passes: readonly PassReport[];
       readonly usage: BudgetSnapshot;
       /** Findings dropped at the emit boundary for failing the contract re-parse. */
@@ -85,6 +99,7 @@ export type RunOutcome =
       readonly cappedBy: "token-ceiling";
       readonly payload: FindingPayload;
       readonly findings: readonly AgentFinding[];
+      readonly enrichedFindings: readonly EnrichedFinding[];
       readonly passes: readonly PassReport[];
       readonly usage: BudgetSnapshot;
       /** Deterministic findings whose pass completed before the ceiling. */
@@ -103,7 +118,10 @@ export async function runAgentLane(input: RunInput): Promise<RunOutcome> {
   const ledger = new TokenLedger(config.tokenCeiling);
   const provider = meterProvider(input.provider, ledger);
 
-  const agentFindings: AgentFinding[] = [];
+  const discoveries: AgentFinding[] = [];
+  // Parallel to `input.findings`, in order: each finding as-is, or with an
+  // `agentNote` folded on when its pass enriched it in place.
+  const enrichedFindings: EnrichedFinding[] = [];
   const passes: PassReport[] = [];
   let processed = 0;
   let capped = false;
@@ -111,9 +129,11 @@ export async function runAgentLane(input: RunInput): Promise<RunOutcome> {
   for (let i = 0; i < input.findings.length; i += 1) {
     const finding = input.findings[i];
 
-    // Pass boundary: a prior pass may have emptied the wallet. Skip the rest.
+    // Pass boundary: a prior pass may have emptied the wallet. Skip the rest —
+    // an unprocessed finding keeps its shape (no note), never fails.
     if (capped || ledger.exhausted()) {
       capped = true;
+      enrichedFindings.push(finding);
       passes.push({ ruleId: finding.ruleId, lookupsUsed: 0, outcome: { kind: "skipped", reason: "token-ceiling" } });
       continue;
     }
@@ -122,15 +142,23 @@ export async function runAgentLane(input: RunInput): Promise<RunOutcome> {
     const lookup = meterLookup(input.lookup, counter);
 
     try {
-      const produced = await input.reasoner.reason({ finding, provider, lookup, scope: input.scope });
-      agentFindings.push(...produced);
+      const result = await input.reasoner.reason({ finding, provider, lookup, scope: input.scope });
+      // ENRICH in place: fold the note onto THIS deterministic finding (it stays
+      // deterministic). DISCOVER: collect the new agent findings for later dedup.
+      enrichedFindings.push(result.enrichment !== null ? { ...finding, agentNote: result.enrichment } : finding);
+      discoveries.push(...result.discoveries);
       processed += 1;
+      const produced = result.enrichment !== null || result.discoveries.length > 0;
       passes.push({
         ruleId: finding.ruleId,
         lookupsUsed: counter.used,
-        outcome: produced.length > 0 ? { kind: "produced", count: produced.length } : { kind: "empty" },
+        outcome: produced
+          ? { kind: "produced", discovered: result.discoveries.length, enriched: result.enrichment !== null }
+          : { kind: "empty" },
       });
     } catch (error) {
+      // Every non-cap failure leaves the finding un-enriched but present.
+      enrichedFindings.push(finding);
       if (error instanceof TokenCeilingExceeded) {
         // The ceiling blew mid-pass. Discard this pass's partial work and stop
         // pulling new findings — the remaining ones are skipped, not failed.
@@ -143,6 +171,13 @@ export async function runAgentLane(input: RunInput): Promise<RunOutcome> {
     }
   }
 
+  // DEDUP (issue #2098): drop any discovery the deterministic floor already caught
+  // (cross-dedup by file:line:sc) or that duplicates another discovery (self-dedup
+  // by file:line:patternId). Reuse the engine's `dedupeRecall` verbatim — one dedup
+  // discipline, not a second one. Survivors keep identity, so re-narrow to agent.
+  const survivors = new Set(dedupeRecall(discoveries, input.findings));
+  const agentFindings = discoveries.filter((d) => survivors.has(d));
+
   const { payload, dropped } = toFindingPayloadLenient(agentFindings, input.scope);
   const usage = ledger.snapshot();
 
@@ -152,6 +187,7 @@ export async function runAgentLane(input: RunInput): Promise<RunOutcome> {
       cappedBy: "token-ceiling",
       payload,
       findings: agentFindings,
+      enrichedFindings,
       passes,
       usage,
       processed,
@@ -159,7 +195,7 @@ export async function runAgentLane(input: RunInput): Promise<RunOutcome> {
       dropped,
     };
   }
-  return { status: "complete", payload, findings: agentFindings, passes, usage, dropped };
+  return { status: "complete", payload, findings: agentFindings, enrichedFindings, passes, usage, dropped };
 }
 
 function reasonOf(error: unknown): string {

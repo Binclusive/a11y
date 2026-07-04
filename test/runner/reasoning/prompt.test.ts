@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSystemPrompt, buildUserPrompt, parseSuggestions, REACT_GUIDANCE, suggestionMessage } from "../../../src/runner";
+import { buildSystemPrompt, buildUserPrompt, parseReasonResponse, REACT_GUIDANCE, suggestionMessage } from "../../../src/runner";
 
 describe("buildSystemPrompt — the reshaped skill reaches the model", () => {
   const system = buildSystemPrompt(REACT_GUIDANCE);
@@ -14,6 +14,13 @@ describe("buildSystemPrompt — the reshaped skill reaches the model", () => {
     expect(system).toContain("You SUGGEST fixes; you never apply them");
     expect(system).toContain("Never emit a diff, patch, or file edit");
   });
+
+  it("asks for BOTH behaviors — an in-place enrichment and new discoveries", () => {
+    expect(system).toContain('"enrichment"');
+    expect(system).toContain('"discoveries"');
+    expect(system).toContain('"confidence"');
+    expect(system).toContain("NEW accessibility problems the rule engine MISSED");
+  });
 });
 
 describe("buildUserPrompt", () => {
@@ -26,42 +33,68 @@ describe("buildUserPrompt", () => {
   });
 });
 
-describe("parseSuggestions — tolerant, patch-free, never throws", () => {
-  it("parses a bare JSON array into typed suggestions", () => {
-    const out = parseSuggestions(
-      '[{"observation":"div has onClick","suggestedFix":"use a button","wcag":["4.1.2"],"fixType":"FUNCTIONAL-RISK","patternId":"PATTERN-REACT-001"}]',
+describe("parseReasonResponse — zod boundary, tolerant, patch-free, never throws", () => {
+  it("parses an object into a typed enrichment + discoveries", () => {
+    const out = parseReasonResponse(
+      JSON.stringify({
+        enrichment: { observation: "div has onClick", suggestedFix: "use a button", wcag: ["4.1.2"], fixType: "FUNCTIONAL-RISK", patternId: "PATTERN-REACT-001" },
+        discoveries: [
+          { observation: "focus escapes", suggestedFix: "trap focus", rationale: "tab leaves the dialog", confidence: "high", wcag: ["2.4.3"], fixType: "SAFE" },
+        ],
+      }),
     );
-    expect(out).toHaveLength(1);
-    expect(out[0]).toEqual({
+    expect(out.enrichment).toEqual({
       observation: "div has onClick",
       suggestedFix: "use a button",
       wcag: ["4.1.2"],
       fixType: "FUNCTIONAL-RISK",
       patternId: "PATTERN-REACT-001",
     });
+    expect(out.discoveries).toHaveLength(1);
+    expect(out.discoveries[0]?.confidence).toBe("high");
+    expect(out.discoveries[0]?.rationale).toBe("tab leaves the dialog");
   });
 
   it("parses a fenced ```json block", () => {
-    const out = parseSuggestions('```json\n[{"observation":"o","suggestedFix":"f"}]\n```');
-    expect(out).toHaveLength(1);
-    expect(out[0]?.observation).toBe("o");
+    const out = parseReasonResponse('```json\n{"enrichment":{"observation":"o","suggestedFix":"f"},"discoveries":[]}\n```');
+    expect(out.enrichment?.observation).toBe("o");
+    expect(out.discoveries).toEqual([]);
   });
 
   it("defaults an unknown/absent fixType to the conservative RUNTIME-CHECK", () => {
-    const out = parseSuggestions('[{"observation":"o","suggestedFix":"f","fixType":"WHATEVER"}]');
-    expect(out[0]?.fixType).toBe("RUNTIME-CHECK");
+    const out = parseReasonResponse('{"enrichment":{"observation":"o","suggestedFix":"f","fixType":"WHATEVER"},"discoveries":[]}');
+    expect(out.enrichment?.fixType).toBe("RUNTIME-CHECK");
   });
 
-  it("drops malformed entries, keeps the valid subset", () => {
-    const out = parseSuggestions('[{"observation":"ok","suggestedFix":"f"},{"observation":""},{"nope":1}]');
-    expect(out).toHaveLength(1);
-    expect(out[0]?.observation).toBe("ok");
+  it("rejects a discovery missing its required rationale/confidence, keeps the valid one", () => {
+    const out = parseReasonResponse(
+      JSON.stringify({
+        enrichment: null,
+        discoveries: [
+          { observation: "no rationale", suggestedFix: "f", wcag: [], fixType: "SAFE" },
+          { observation: "ok", suggestedFix: "f", rationale: "why", confidence: "low", wcag: [], fixType: "SAFE" },
+        ],
+      }),
+    );
+    expect(out.discoveries).toHaveLength(1);
+    expect(out.discoveries[0]?.observation).toBe("ok");
   });
 
-  it("returns [] for non-JSON or a non-array reply, never throwing", () => {
-    expect(parseSuggestions("I could not find anything.")).toEqual([]);
-    expect(parseSuggestions("{not json")).toEqual([]);
-    expect(parseSuggestions('{"observation":"o","suggestedFix":"f"}')).toEqual([]);
+  it("a malformed enrichment does not sink an otherwise-good discoveries array", () => {
+    const out = parseReasonResponse(
+      JSON.stringify({
+        enrichment: { observation: "" },
+        discoveries: [{ observation: "ok", suggestedFix: "f", rationale: "why", confidence: "medium", wcag: [], fixType: "SAFE" }],
+      }),
+    );
+    expect(out.enrichment).toBeNull();
+    expect(out.discoveries).toHaveLength(1);
+  });
+
+  it("returns an empty result for non-JSON or a non-object reply, never throwing", () => {
+    expect(parseReasonResponse("I could not find anything.")).toEqual({ enrichment: null, discoveries: [] });
+    expect(parseReasonResponse("{not json")).toEqual({ enrichment: null, discoveries: [] });
+    expect(parseReasonResponse("[1, 2, 3]")).toEqual({ enrichment: null, discoveries: [] });
   });
 });
 

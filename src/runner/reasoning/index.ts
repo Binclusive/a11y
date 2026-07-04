@@ -13,7 +13,7 @@ import type { Finding } from "../../core";
 import { REACT_GUIDANCE } from "./react";
 import type { FrameworkGuidance } from "./types";
 
-export type { ChecklistArea, FixSeverity, FixSuggestion, FixType, FrameworkGuidance, PatternCatalogEntry } from "./types";
+export type { ChecklistArea, Discovery, FixSeverity, FixSuggestion, FixType, FrameworkGuidance, PatternCatalogEntry } from "./types";
 export { FIX_TYPES } from "./types";
 export { REACT_GUIDANCE } from "./react";
 
