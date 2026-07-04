@@ -9,6 +9,7 @@ import {
   type Provider,
   type ProviderResponse,
   type ReasonContext,
+  type ReasonResult,
   runAgentLane,
 } from "../../src/runner";
 
@@ -34,10 +35,22 @@ const raw = (over: Partial<Finding> = {}): Finding => ({
 /** A deterministic finding the runner consumes as loop input. */
 const deterministic = (ruleId: string): EnrichedFinding => enrich(raw({ ruleId }));
 
-/** A well-formed agent finding on the corpus-agent arm (what a reasoner returns). */
-function agentFinding(message: string): AgentFinding {
-  const base = enrich(raw({ provenance: "corpus-agent", layer: "recall", patternId: "p1", message, wcag: ["1.1.1"] }));
+/**
+ * A DISCOVERED agent finding — a NEW issue with locators DISTINCT from the
+ * deterministic floor (line 99 / SC 2.4.3, unique patternId), so it survives the
+ * runner's dedup against the floor. `key` keys the patternId, so two discoveries
+ * with different keys survive self-dedup too.
+ */
+function discovery(key: string, message: string): AgentFinding {
+  const base = enrich(
+    raw({ provenance: "corpus-agent", layer: "recall", patternId: `p-${key}`, line: 99, message, wcag: ["2.4.3"], confidence: "medium" }),
+  );
   return { ...base, provenance: "corpus-agent" };
+}
+
+/** Wrap discoveries (and an optional in-place enrichment note) into a ReasonResult. */
+function result(discoveries: readonly AgentFinding[], enrichment: string | null = null): ReasonResult {
+  return { enrichment, discoveries };
 }
 
 /** A provider that spends a fixed number of tokens per call and echoes a canned text. */
@@ -48,12 +61,12 @@ function fakeProvider(perCall: ProviderResponse["usage"], text = "ok"): Provider
 /** A lookup tool that always answers — the harness caps how many times it is reached. */
 const okLookup: LookupTool = { lookup: async () => ({ status: "ok", data: {} }) };
 
-/** A reasoner that makes one provider call, then emits one agent finding. */
+/** A reasoner that makes one provider call, then discovers one new finding. */
 function onePassReasoner(): AgentReasoner {
   return {
     reason: async (ctx: ReasonContext) => {
       await ctx.provider.complete({ messages: [{ role: "user", content: ctx.finding.ruleId }] });
-      return [agentFinding(`enriched ${ctx.finding.ruleId}`)];
+      return result([discovery(ctx.finding.ruleId, `found near ${ctx.finding.ruleId}`)]);
     },
   };
 }
@@ -98,7 +111,7 @@ describe("runAgentLane — non-blocking", () => {
       reason: async (ctx) => {
         call += 1;
         if (call === 1) throw new Error("bad model output");
-        return [agentFinding(`ok ${ctx.finding.ruleId}`)];
+        return result([discovery(ctx.finding.ruleId, `ok ${ctx.finding.ruleId}`)]);
       },
     };
     const out = await runAgentLane({
@@ -148,7 +161,7 @@ describe("runAgentLane — the hard per-PR token ceiling", () => {
         for (let i = 0; i < 100; i += 1) {
           await ctx.provider.complete({ messages: [{ role: "user", content: `${i}` }] });
         }
-        return [agentFinding("never reached")];
+        return result([discovery("x", "never reached")]);
       },
     };
     const out = await runAgentLane({
@@ -191,7 +204,7 @@ describe("runAgentLane — the soft per-finding lookup cap", () => {
           const r = await ctx.lookup.lookup({ kind: "renders", target: `${i}` });
           seen.push(r.status);
         }
-        return [agentFinding("used what lookups it got")];
+        return result([discovery("greedy", "used what lookups it got")]);
       },
     };
     const out = await runAgentLane({
@@ -220,7 +233,7 @@ describe("runAgentLane — the soft per-finding lookup cap", () => {
           if (r.status === "ok") ok += 1;
         }
         perFinding.push(ok);
-        return [];
+        return result([]);
       },
     };
     await runAgentLane({
@@ -232,6 +245,67 @@ describe("runAgentLane — the soft per-finding lookup cap", () => {
       config: { tokenCeiling: 10_000, lookupsPerFinding: 2 },
     });
     expect(perFinding).toEqual([2, 2]);
+  });
+});
+
+describe("runAgentLane — enrich in place (#2098)", () => {
+  it("folds an agentNote onto the source finding, which stays deterministic and off the agent payload", async () => {
+    const enricher: AgentReasoner = { reason: async () => result([], "Add an alt describing the product.") };
+    const out = await runAgentLane({
+      findings: [deterministic("r1")],
+      reasoner: enricher,
+      provider: fakeProvider({ inputTokens: 1, outputTokens: 1 }),
+      lookup: okLookup,
+      scope: "pr-1",
+    });
+    expect(out.status).toBe("complete");
+    // The source finding gained the note but is still a deterministic finding.
+    expect(out.enrichedFindings).toHaveLength(1);
+    expect(out.enrichedFindings[0].agentNote).toBe("Add an alt describing the product.");
+    expect(out.enrichedFindings[0].provenance).toBe("jsx-a11y");
+    // Enrichment is NOT a discovery: nothing on the agent lane / wire payload.
+    expect(out.findings).toEqual([]);
+    expect(out.payload.findings).toEqual([]);
+    // The pass reads as productive (enriched), not empty.
+    expect(out.passes[0].outcome).toEqual({ kind: "produced", discovered: 0, enriched: true });
+  });
+});
+
+describe("runAgentLane — dedup discoveries (#2098)", () => {
+  it("drops a discovery that duplicates a deterministic finding (same file:line:SC)", async () => {
+    // A discovery colliding with the floor's file:line:SC — the floor already caught it.
+    const colliding = (): AgentFinding => {
+      const base = enrich(raw({ provenance: "corpus-agent", layer: "recall", patternId: "pc", message: "dup of floor", wcag: ["1.1.1"] }));
+      return { ...base, provenance: "corpus-agent" };
+    };
+    const out = await runAgentLane({
+      findings: [deterministic("r1")],
+      reasoner: { reason: async () => result([colliding()]) },
+      provider: fakeProvider({ inputTokens: 1, outputTokens: 1 }),
+      lookup: okLookup,
+      scope: "pr-1",
+    });
+    expect(out.status).toBe("complete");
+    expect(out.findings).toEqual([]);
+    expect(out.payload.findings).toEqual([]);
+  });
+
+  it("collapses two discoveries that duplicate each other (same file:line:patternId)", async () => {
+    // Both passes surface the SAME pattern on the same anchor — one finding, not two.
+    const twin = (): AgentFinding => {
+      const base = enrich(raw({ provenance: "corpus-agent", layer: "recall", line: 99, patternId: "same", message: "same issue", wcag: ["2.4.3"] }));
+      return { ...base, provenance: "corpus-agent" };
+    };
+    const out = await runAgentLane({
+      findings: [deterministic("r1"), deterministic("r2")],
+      reasoner: { reason: async () => result([twin()]) },
+      provider: fakeProvider({ inputTokens: 1, outputTokens: 1 }),
+      lookup: okLookup,
+      scope: "pr-1",
+    });
+    expect(out.status).toBe("complete");
+    expect(out.findings).toHaveLength(1);
+    expect(out.payload.findings).toHaveLength(1);
   });
 });
 

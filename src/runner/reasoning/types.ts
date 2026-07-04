@@ -14,6 +14,8 @@
  *     holds by construction, not by policy.
  */
 
+import type { AgentConfidence } from "../../core";
+
 /** How safe applying a fix is — the trust label from the pattern catalog. */
 export type FixType = "SAFE" | "VISUAL-IMPACT" | "FUNCTIONAL-RISK" | "RUNTIME-CHECK";
 
@@ -78,4 +80,20 @@ export interface FixSuggestion {
   readonly fixType: FixType;
   /** The catalog pattern this matched, if any — provenance back to the corpus slice. */
   readonly patternId?: string;
+}
+
+/**
+ * A NEW accessibility issue the deterministic engine missed — the agent lane's
+ * DISCOVER output (issue #2098). A {@link FixSuggestion} enriched with the two
+ * fields a standalone judgement needs: a `rationale` for why it is a real problem
+ * and the agent's `confidence` in that call. Still patch-free — a discovery is a
+ * described problem + described fix, never an edit.
+ */
+export interface Discovery extends FixSuggestion {
+  /** Why this is a genuine issue — the judgement the deterministic floor can't make. */
+  readonly rationale: string;
+  /** How sure the agent is (see {@link AgentConfidence}). */
+  readonly confidence: AgentConfidence;
+  /** The element the discovery is about, when the agent can name one (a CSS-ish locator). */
+  readonly element?: string;
 }

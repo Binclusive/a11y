@@ -9,7 +9,8 @@
  *   1. Select the framework guidance for the finding; `null` ⇒ nothing to add.
  *   2. Optionally ask ONE structural lookup (the #2097 seam) for context.
  *   3. Consult the model with the guidance as `system` framing.
- *   4. Parse the reply into patch-free suggestions and fold each onto a
+ *   4. Parse the reply (zod boundary, issue #2098) into a patch-free enrichment of
+ *      the SOURCE finding plus zero+ DISCOVERIES, each folded onto a new
  *      `corpus-agent` finding.
  *
  * Suggestions-not-patches is structural, not enforced here: this reasoner holds
@@ -20,10 +21,10 @@
 import type { Finding } from "../../core";
 import { corpusFix, type EnrichedFinding, enrich } from "../../corpus";
 import type { LookupTool } from "../lookup";
-import type { AgentFinding, AgentReasoner, ReasonContext } from "../reasoner";
+import { type AgentFinding, type AgentReasoner, EMPTY_RESULT, type ReasonContext, type ReasonResult } from "../reasoner";
 import { frameworkGuidanceFor } from "./index";
-import { buildSystemPrompt, buildUserPrompt, parseSuggestions, suggestionMessage } from "./prompt";
-import type { FixSuggestion } from "./types";
+import { buildSystemPrompt, buildUserPrompt, parseReasonResponse, suggestionMessage } from "./prompt";
+import type { Discovery } from "./types";
 
 /** Tuning for the reasoner. All bounded — the harness meters spend underneath. */
 export interface SkillsReasonerOptions {
@@ -49,21 +50,35 @@ async function structuralContext(lookup: LookupTool, finding: EnrichedFinding): 
   }
 }
 
-/** Fold one suggestion onto a `corpus-agent` finding, reusing the input's read-side locators. */
-function toAgentFinding(source: EnrichedFinding, suggestion: FixSuggestion): AgentFinding {
+/** The prose a discovered finding carries — observation + rationale + fix in one message. */
+function discoveryMessage(d: Discovery): string {
+  return `${d.observation} Rationale: ${d.rationale} Suggested fix (${d.fixType}): ${d.suggestedFix}`;
+}
+
+/**
+ * Fold one DISCOVERY onto a new `corpus-agent` finding. It anchors on the source
+ * finding's read-side locators (file/line, or the discovery's named element), and
+ * carries the two discovery fields the floor can't: `confidence` and the rationale
+ * (folded into the message). Advisory by construction — `enforcement: "warn"`,
+ * never inherited `block`, so it can never gate the exit code.
+ */
+function toAgentFinding(source: EnrichedFinding, d: Discovery): AgentFinding {
   const base: Finding = {
     file: source.file,
     line: source.line,
     ruleId: source.ruleId,
-    message: suggestionMessage(suggestion),
-    wcag: suggestion.wcag.length > 0 ? suggestion.wcag : source.wcag,
-    // Advisory by construction: a recall/agent finding is always `warn`, never
-    // inherits `block` from its source — `warn` can never gate the exit code.
+    message: discoveryMessage(d),
+    wcag: d.wcag.length > 0 ? d.wcag : source.wcag,
     enforcement: "warn",
     provenance: "corpus-agent",
     layer: "recall",
-    ...(suggestion.patternId !== undefined ? { patternId: suggestion.patternId } : {}),
-    ...(source.selector !== undefined ? { selector: source.selector } : {}),
+    confidence: d.confidence,
+    ...(d.patternId !== undefined ? { patternId: d.patternId } : {}),
+    ...(d.element !== undefined
+      ? { selector: d.element }
+      : source.selector !== undefined
+        ? { selector: source.selector }
+        : {}),
     ...(source.severity !== undefined ? { severity: source.severity } : {}),
   };
   return { ...enrich(base), provenance: "corpus-agent" };
@@ -77,9 +92,9 @@ function toAgentFinding(source: EnrichedFinding, suggestion: FixSuggestion): Age
 export function createSkillsReasoner(options: SkillsReasonerOptions = {}): AgentReasoner {
   const config = { ...DEFAULT_OPTIONS, ...options };
 
-  const reason = async (ctx: ReasonContext): Promise<readonly AgentFinding[]> => {
+  const reason = async (ctx: ReasonContext): Promise<ReasonResult> => {
     const guidance = frameworkGuidanceFor(ctx.finding);
-    if (guidance === null) return [];
+    if (guidance === null) return EMPTY_RESULT;
 
     const structural = config.useLookup ? await structuralContext(ctx.lookup, ctx.finding) : null;
     const system = buildSystemPrompt(guidance);
@@ -91,7 +106,11 @@ export function createSkillsReasoner(options: SkillsReasonerOptions = {}): Agent
       maxOutputTokens: config.maxOutputTokens,
     });
 
-    return parseSuggestions(response.text).map((suggestion) => toAgentFinding(ctx.finding, suggestion));
+    const parsed = parseReasonResponse(response.text);
+    // Enrich the SOURCE finding in place (prose note); discover NEW findings around it.
+    const enrichment = parsed.enrichment !== null ? suggestionMessage(parsed.enrichment) : null;
+    const discoveries = parsed.discoveries.map((d) => toAgentFinding(ctx.finding, d));
+    return { enrichment, discoveries };
   };
 
   return { reason };
