@@ -39,6 +39,11 @@ export {
   usageTotal,
 } from "./provider";
 export {
+  type AnthropicProviderConfig,
+  createAnthropicProvider,
+  DEFAULT_ANTHROPIC_MODEL,
+} from "./providers/anthropic";
+export {
   type AgentFinding,
   type AgentReasoner,
   EMPTY_RESULT,
