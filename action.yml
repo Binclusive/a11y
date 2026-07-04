@@ -1,0 +1,20 @@
+name: "Binclusive a11y-checker (tracer bullet)"
+description: "Scan changed .tsx files with the Binclusive accessibility engine and comment on the PR. Static path, non-blocking."
+author: "Binclusive"
+
+inputs:
+  github-token:
+    description: "Token used to post inline review comments on the PR."
+    required: true
+    default: ${{ github.token }}
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
+  # Only `inputs` is available in an action's metadata env — the `github`
+  # context is not. GITHUB_REPOSITORY / GITHUB_API_URL / GITHUB_EVENT_PATH /
+  # GITHUB_WORKSPACE are auto-injected into Docker actions; the entrypoint reads
+  # the PR number + base/head SHAs from the event payload at GITHUB_EVENT_PATH.
+  # The token is the one value the runner does not pass by default.
+  env:
+    GITHUB_TOKEN: ${{ inputs.github-token }}
