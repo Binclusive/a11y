@@ -13,7 +13,7 @@
  * So text, ticket, and SARIF all narrow through the same severity mapping.
  */
 import type { Severity as ContractSeverity } from "@binclusive/a11y-contract";
-import { contractSeverity, impactToSeverity } from "./emit-contract";
+import { contractSeverity, hasSelector, impactToSeverity } from "./emit-contract";
 import { corpusHelpUrl, type EnrichedFinding } from "./corpus";
 
 // Re-export the severity mapping so a consumer wiring SARIF has the whole
@@ -52,7 +52,7 @@ function findingLocations(f: EnrichedFinding): SarifLocation[] {
       ...(f.line > 0 ? { region: { startLine: f.line } } : {}),
     },
   };
-  if (f.selector !== undefined && f.selector !== "") {
+  if (hasSelector(f.selector)) {
     location.logicalLocations = [{ fullyQualifiedName: f.selector, kind: "element" }];
   }
   return [location];

@@ -74,6 +74,17 @@ export function toContractProvenance(p: FindingProvenance): ContractProvenance {
 }
 
 /**
+ * A selector locates a live rendered element. Empty or whitespace-only is NOT a
+ * selector — a source-static pass has no live DOM node, and `??` would let `""`
+ * through as if it were present. The single predicate both the SARIF
+ * logicalLocation and the contract `element` fallback read, so the two can never
+ * disagree on "present vs absent".
+ */
+export function hasSelector(selector: string | undefined): selector is string {
+  return selector !== undefined && selector.trim() !== "";
+}
+
+/**
  * Project one enriched local finding onto the contract DTO, dropping every
  * source locator. `element` falls back to the rule id when there is no rendered
  * DOM selector — a source-static pass has no live element, and the rule id is
@@ -83,7 +94,7 @@ export function toContractFinding(f: EnrichedFinding, scope: string): ContractFi
   const base = {
     criterion: f.wcag[0] ?? "",
     severity: contractSeverity(f),
-    element: f.selector ?? f.ruleId,
+    element: hasSelector(f.selector) ? f.selector : f.ruleId,
     evidence: f.message,
     scope,
   } as const;

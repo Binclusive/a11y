@@ -77,6 +77,15 @@ describe("toContractFinding narrows onto the metadata-only DTO", () => {
     expect(projected.element).toBe("jsx-a11y/alt-text");
   });
 
+  it("element falls back to the rule id for an empty or whitespace-only selector", () => {
+    for (const selector of ["", "   "]) {
+      const f = enrich(raw({ provenance: "axe", file: "https://x", line: 0, selector }));
+      const projected = toContractFinding(f, "s");
+      expect(projected.element).toBe("jsx-a11y/alt-text");
+      expect(projected.element).not.toBe("");
+    }
+  });
+
   it("element uses the axe selector when present", () => {
     const f = enrich(raw({ provenance: "axe", file: "https://x", line: 0, selector: "main > div.hero" }));
     const projected = toContractFinding(f, "s");
