@@ -19,7 +19,7 @@
  * arm of `RunOutcome`. The runner's public surface never throws.
  */
 import type { Provider, TokenUsage } from "./provider";
-import { usageTotal } from "./provider";
+import { isMeterableUsage, usageTotal } from "./provider";
 
 /** A read-only view of the ledger, safe to hand out in a `RunOutcome`. */
 export interface BudgetSnapshot {
@@ -59,7 +59,13 @@ export class TokenLedger {
   }
 
   record(usage: TokenUsage): void {
-    this.#used += usageTotal(usage);
+    // Fail closed on an unmeterable usage report (NaN / ±Infinity / negative): the
+    // ceiling check `used >= ceiling` silently passes on a NaN, so a malformed
+    // provider response would run past the cap. Treat it as fully draining the
+    // wallet — unknown spend is AT-OR-OVER the ceiling, so the next call is refused.
+    this.#used = isMeterableUsage(usage)
+      ? this.#used + usageTotal(usage)
+      : Number.POSITIVE_INFINITY;
   }
 
   snapshot(): BudgetSnapshot {

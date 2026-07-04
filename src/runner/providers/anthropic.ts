@@ -17,7 +17,7 @@
  * that throws degrades the run to "no agent findings for that pass", never a
  * crash — the AI lane stays non-blocking.
  */
-import type { Provider, ProviderRequest, ProviderResponse } from "../provider";
+import type { Provider, ProviderRequest, ProviderResponse, TokenUsage } from "../provider";
 
 /**
  * The default model for the low-cap advisory CI lane: a fast, cost-appropriate
@@ -59,15 +59,27 @@ function textOf(body: AnthropicResponseBody): string {
 }
 
 /**
- * The token usage the runner meters against the per-PR ceiling. Anthropic always
- * reports both counts; a body that somehow omits one is charged 0 for it (an
- * under-count that can only ADMIT one extra bounded call, never overshoot the
- * ceiling silently — the meter re-checks before every call).
+ * A single reported token count, or `+Infinity` when the body reports it absent,
+ * non-numeric, `NaN`, or negative. Anthropic always reports both counts; a body
+ * that doesn't is malformed, so we parse-don't-validate at the boundary and map
+ * the bad count to a fail-closed sentinel rather than silently charging 0. The
+ * ledger meters `+Infinity` as at-or-over the ceiling, stopping the lane instead
+ * of letting a malformed response run past the cap (issue #2169).
  */
-function usageOf(body: AnthropicResponseBody): { inputTokens: number; outputTokens: number } {
+function meterableCount(raw: number | undefined): number {
+  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0 ? raw : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * The token usage the runner meters against the per-PR ceiling — parsed from the
+ * untrusted body, never read raw. A missing or malformed count maps to `+Infinity`
+ * (see {@link meterableCount}) so the ceiling fails closed on a bad provider
+ * response rather than under-counting toward a silent overspend.
+ */
+function usageOf(body: AnthropicResponseBody): TokenUsage {
   return {
-    inputTokens: body.usage?.input_tokens ?? 0,
-    outputTokens: body.usage?.output_tokens ?? 0,
+    inputTokens: meterableCount(body.usage?.input_tokens),
+    outputTokens: meterableCount(body.usage?.output_tokens),
   };
 }
 

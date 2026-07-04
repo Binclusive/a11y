@@ -31,6 +31,7 @@ export {
   createCodeGraphLookup,
 } from "./codegraph-lookup";
 export {
+  isMeterableUsage,
   type Provider,
   type ProviderMessage,
   type ProviderRequest,
