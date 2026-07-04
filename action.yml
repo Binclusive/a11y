@@ -7,6 +7,25 @@ inputs:
     description: "Token used to post inline review comments on the PR."
     required: true
     default: ${{ github.token }}
+  llm-api-key:
+    description: >
+      OPTIONAL. The customer's OWN LLM provider key (BYOK), for the AI enrichment
+      lane. Provider-agnostic: no provider is baked into this Action or the image.
+      Pass your model key here from a repo secret. Absent → the AI lane is skipped
+      and only the deterministic floor runs (never an error). This key is the
+      customer's own credential — it is orthogonal to `b8e-token` and never leaves
+      the runner for the Binclusive dashboard.
+    required: false
+    default: ""
+  b8e-token:
+    description: >
+      OPTIONAL. A Binclusive `b8e_` apiKey (the ingestion bearer) for phoning
+      metadata-only findings home to the dashboard. Mint it in the Binclusive
+      dashboard and store it as a repo secret. Absent → no phone-home; the scan
+      stays fully local (never an error). This is NOT an LLM key and is unrelated
+      to `llm-api-key`.
+    required: false
+    default: ""
 
 outputs:
   sarif-file:
@@ -29,3 +48,11 @@ runs:
   # The token is the one value the runner does not pass by default.
   env:
     GITHUB_TOKEN: ${{ inputs.github-token }}
+    # Both are OPTIONAL and independent (local-first). LLM_API_KEY drives the
+    # provider-agnostic AI lane; B8E_TOKEN is the phone-home ingestion bearer.
+    # No Binclusive credential is baked in — an unset input passes an empty string
+    # through, which the runner reads as "lane off". B8E_TOKEN is the name the CLI
+    # already expects for a `b8e_` apiKey; keeping it identical means one env var
+    # for the token everywhere.
+    LLM_API_KEY: ${{ inputs.llm-api-key }}
+    B8E_TOKEN: ${{ inputs.b8e-token }}
