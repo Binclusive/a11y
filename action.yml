@@ -17,6 +17,21 @@ inputs:
       the runner for the Binclusive dashboard.
     required: false
     default: ""
+  llm-model:
+    description: >
+      OPTIONAL. Override the model the AI enrichment lane uses. Absent (empty) →
+      the engine's provider default (Anthropic `claude-haiku-4-5-20251001`).
+      Only meaningful alongside `llm-api-key`; ignored when the AI lane is off.
+    required: false
+    default: ""
+  llm-provider:
+    description: >
+      OPTIONAL. Select the LLM provider the AI enrichment lane uses. Absent
+      (empty) → the engine default (`anthropic`). Only meaningful alongside
+      `llm-api-key`; an unrecognized value degrades to the deterministic floor
+      (never an error).
+    required: false
+    default: ""
   b8e-token:
     description: >
       OPTIONAL. A Binclusive `b8e_` apiKey (the ingestion bearer) for phoning
@@ -80,6 +95,12 @@ runs:
     # already expects for a `b8e_` apiKey; keeping it identical means one env var
     # for the token everywhere.
     LLM_API_KEY: ${{ inputs.llm-api-key }}
+    # AI-lane model/provider overrides (both OPTIONAL, empty = engine default).
+    # The runner reads an empty string as "use the default", so an unset input
+    # passes "" through and falls back to Anthropic / claude-haiku-4-5-20251001 —
+    # they only matter when LLM_API_KEY is also set (the AI lane is otherwise off).
+    LLM_MODEL: ${{ inputs.llm-model }}
+    LLM_PROVIDER: ${{ inputs.llm-provider }}
     B8E_TOKEN: ${{ inputs.b8e-token }}
     # Phone-home targeting (all OPTIONAL, local-first). Absent org/project/audit
     # → the runner skips phone-home; a run never fails for a missing dashboard id.

@@ -156,14 +156,18 @@ means "lane off", never an error; the scan still exits 0.
 | Input | Secret it carries | Absent → | Notes |
 |---|---|---|---|
 | `llm-api-key` | Your **own** LLM provider key (BYOK) | AI enrichment lane skipped; deterministic floor still runs | Provider-agnostic — no provider is baked into the Action or image. Your credential; it never leaves the runner for the dashboard. |
+| `llm-model` | — (a model id, not a secret) | Engine default — Anthropic `claude-haiku-4-5-20251001` | Overrides the model the AI lane uses. Only meaningful with `llm-api-key`. |
+| `llm-provider` | — (a provider id, not a secret) | Engine default — `anthropic` | Selects the AI-lane provider. Only meaningful with `llm-api-key`; an unrecognized value degrades to the deterministic floor. |
 | `b8e-token` | A Binclusive `b8e_` apiKey | No phone-home; scan stays fully local | Mint it in the Binclusive dashboard. Metadata-only ingestion bearer. Unrelated to the LLM key. |
 
 ```yaml
       - id: a11y
         uses: Binclusive/a11y-checker-plugin@main
         with:
-          llm-api-key: ${{ secrets.LLM_API_KEY }}   # optional — your BYOK model key
-          b8e-token:   ${{ secrets.B8E_TOKEN }}     # optional — dashboard ingestion
+          llm-api-key:  ${{ secrets.LLM_API_KEY }}  # optional — your BYOK model key
+          llm-model:    ""                          # optional — override the model
+          llm-provider: ""                          # optional — override the provider
+          b8e-token:    ${{ secrets.B8E_TOKEN }}    # optional — dashboard ingestion
 ```
 
 Store both as encrypted repo (or org) secrets. The `b8e-token` authenticates the

@@ -47,7 +47,10 @@ export function resolveProvider(env: NodeJS.ProcessEnv): Provider | null {
   const apiKey = env.LLM_API_KEY;
   if (apiKey === undefined || apiKey.trim() === "") return null;
 
-  const providerId = (env.LLM_PROVIDER ?? "anthropic").trim().toLowerCase();
+  // Empty is treated as absent (→ default `anthropic`), same as LLM_MODEL below.
+  // The GitHub Action plumbs LLM_PROVIDER with a `default: ""`, so a bare BYOK key
+  // arrives with LLM_PROVIDER="" — an empty string that must not select "no provider".
+  const providerId = ((env.LLM_PROVIDER ?? "").trim() || "anthropic").toLowerCase();
   if (!SHIPPED_PROVIDERS.has(providerId)) return null;
 
   const model = env.LLM_MODEL !== undefined && env.LLM_MODEL.trim() !== "" ? env.LLM_MODEL.trim() : undefined;
