@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { Args, Command, Options } from "@effect/cli";
 import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import { Effect, Option } from "effect";
+import { type AgentLaneOverrides, augmentWithAgentLane } from "./agent-lane";
 import { collectTsx } from "./collect";
 import { scanUrl } from "./collect-dom";
 import { scanLiquid } from "./collect-liquid";
@@ -426,7 +427,19 @@ function renderReport(
   process.exitCode = totals.blocking > 0 ? 1 : 0;
 }
 
-async function runCheck(dir: string, json = false, sarif = false, runId = "local"): Promise<void> {
+/**
+ * The `check` command's runner. The optional {@link AgentLaneOverrides} is the AI
+ * lane's ONLY injection seam: the CLI handler never passes it (the lane resolves
+ * its provider from `LLM_API_KEY`), but the tracer test drives this same function
+ * with a stub provider to prove an agent finding reaches rendered output.
+ */
+export async function runCheck(
+  dir: string,
+  json = false,
+  sarif = false,
+  runId = "local",
+  agentOverrides: AgentLaneOverrides = {},
+): Promise<void> {
   const root = resolve(dir);
   const files = await collectTsx(root);
 
@@ -434,7 +447,11 @@ async function runCheck(dir: string, json = false, sarif = false, runId = "local
   // (uris relativized against `root`, provenance-tagged). It takes precedence
   // over --json when both are set; the CI Action asks for one format per run.
   if (sarif) {
-    const findings = files.length === 0 ? [] : enrichAll((await scan(files)).findings);
+    const deterministic = files.length === 0 ? [] : enrichAll((await scan(files)).findings);
+    // AI lane (issue #2182): fold in agent findings when LLM_API_KEY is present.
+    // Non-blocking — agent findings are warn-only, so the block-gated exit is
+    // computed on the augmented list and can only reflect the deterministic floor.
+    const findings = await augmentWithAgentLane(deterministic, root, process.env, agentOverrides);
     console.log(formatSarif(findings, runId, { root }));
     process.exitCode = findings.filter((f) => f.enforcement === "block").length > 0 ? 1 : 0;
     return;
@@ -447,7 +464,11 @@ async function runCheck(dir: string, json = false, sarif = false, runId = "local
       return;
     }
     const result = await scan(files);
-    const findings = enrichAll(result.findings);
+    const deterministic = enrichAll(result.findings);
+    // AI lane (issue #2182): agent findings flow through the SAME JSON report and
+    // phone-home envelope as the deterministic floor. When no key is present this
+    // returns `deterministic` unchanged.
+    const findings = await augmentWithAgentLane(deterministic, root, process.env, agentOverrides);
     const report = buildJsonReport(root, files.length, result.coverage, findings);
     console.log(JSON.stringify(report, null, 2));
     // OPTIONAL, non-blocking phone-home (#2108): file metadata-only findings to
@@ -466,7 +487,8 @@ async function runCheck(dir: string, json = false, sarif = false, runId = "local
   }
 
   const result = await scan(files);
-  const findings = enrichAll(result.findings);
+  const deterministic = enrichAll(result.findings);
+  const findings = await augmentWithAgentLane(deterministic, root, process.env, agentOverrides);
 
   console.log(`a11y-checker — scanned ${files.length} .tsx file(s) under ${root}\n`);
 
