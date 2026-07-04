@@ -1,5 +1,5 @@
 name: "Binclusive a11y-checker (tracer bullet)"
-description: "Scan changed .tsx files with the Binclusive accessibility engine and comment on the PR. Static path, non-blocking."
+description: "Scan changed .tsx files with the Binclusive accessibility engine, comment on the PR, and emit SARIF for native code-scanning annotations. Static path, non-blocking."
 author: "Binclusive"
 
 inputs:
@@ -7,6 +7,17 @@ inputs:
     description: "Token used to post inline review comments on the PR."
     required: true
     default: ${{ github.token }}
+
+outputs:
+  sarif-file:
+    description: >
+      Path (relative to the workspace) of the SARIF 2.1.0 file the engine writes.
+      Feed it to a `github/codeql-action/upload-sarif@v3` step so findings render
+      as native inline code-scanning annotations on the PR diff. That step
+      requires `permissions: security-events: write` on the job; the scan itself
+      stays non-blocking (this action always exits 0). SARIF carries file/line
+      only for LOCAL rendering on the customer's GitHub — it is never sent to the
+      Binclusive dashboard.
 
 runs:
   using: "docker"
