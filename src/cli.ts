@@ -19,6 +19,7 @@ import {
 } from "./corpus";
 import { runHookCli } from "./hook";
 import { startStdioServer } from "./mcp";
+import { formatSarif } from "./sarif";
 import type { ComponentResolution, Coverage } from "./resolve-components";
 import type { SuggestResult } from "./suggest";
 
@@ -424,9 +425,19 @@ function renderReport(
   process.exitCode = totals.blocking > 0 ? 1 : 0;
 }
 
-async function runCheck(dir: string, json = false): Promise<void> {
+async function runCheck(dir: string, json = false, sarif = false, runId = "local"): Promise<void> {
   const root = resolve(dir);
   const files = await collectTsx(root);
+
+  // SARIF is a machine format like --json, but rendered for GitHub code-scanning
+  // (uris relativized against `root`, provenance-tagged). It takes precedence
+  // over --json when both are set; the CI Action asks for one format per run.
+  if (sarif) {
+    const findings = files.length === 0 ? [] : enrichAll((await scan(files)).findings);
+    console.log(formatSarif(findings, runId, { root }));
+    process.exitCode = findings.filter((f) => f.enforcement === "block").length > 0 ? 1 : 0;
+    return;
+  }
 
   if (json) {
     if (files.length === 0) {
@@ -751,9 +762,18 @@ const optionalDir = Args.text({ name: "dir" }).pipe(Args.withDefault("."));
 
 const checkCommand = Command.make(
   "check",
-  { dir: dirArg, json: Options.boolean("json") },
-  ({ dir, json }) => Effect.promise(() => runCheck(dir, json)),
-).pipe(Command.withDescription("scan .tsx for a11y findings (--json: machine-readable output)"));
+  {
+    dir: dirArg,
+    json: Options.boolean("json"),
+    sarif: Options.boolean("sarif"),
+    runId: Options.text("run-id").pipe(Options.withDefault("local")),
+  },
+  ({ dir, json, sarif, runId }) => Effect.promise(() => runCheck(dir, json, sarif, runId)),
+).pipe(
+  Command.withDescription(
+    "scan .tsx for a11y findings (--json / --sarif: machine-readable output; --run-id names the SARIF run)",
+  ),
+);
 
 const checkUrlCommand = Command.make(
   "check-url",

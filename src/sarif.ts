@@ -12,8 +12,9 @@
  * `contractSeverity` supplies that enum from the finding's resolved axe impact.
  * So text, ticket, and SARIF all narrow through the same severity mapping.
  */
+import { relative } from "node:path";
 import type { Severity as ContractSeverity } from "@binclusive/a11y-contract";
-import { contractSeverity, hasSelector, impactToSeverity } from "./emit-contract";
+import { contractSeverity, hasSelector, impactToSeverity, toContractProvenance } from "./emit-contract";
 import { corpusHelpUrl, type EnrichedFinding } from "./corpus";
 
 // Re-export the severity mapping so a consumer wiring SARIF has the whole
@@ -45,10 +46,20 @@ interface SarifLocation {
   logicalLocations?: Array<{ fullyQualifiedName: string; kind: "element" }>;
 }
 
-function findingLocations(f: EnrichedFinding): SarifLocation[] {
+// GitHub code-scanning resolves a SARIF `uri` relative to the repo root, so when
+// a workspace `root` is given the source-file uri is relativized against it — a
+// scan of a staged mirror dir then still yields repo-relative `src/Foo.tsx`
+// paths that annotate the right line of the PR diff. A rendered-DOM (axe)
+// finding's `file` is the page URL, not a workspace path, so it is left as-is.
+function locationUri(file: string, root: string | undefined): string {
+  if (root === undefined || /^https?:\/\//i.test(file)) return file;
+  return relative(root, file);
+}
+
+function findingLocations(f: EnrichedFinding, root: string | undefined): SarifLocation[] {
   const location: SarifLocation = {
     physicalLocation: {
-      artifactLocation: { uri: f.file },
+      artifactLocation: { uri: locationUri(f.file, root) },
       ...(f.line > 0 ? { region: { startLine: f.line } } : {}),
     },
   };
@@ -61,9 +72,17 @@ function findingLocations(f: EnrichedFinding): SarifLocation[] {
 /**
  * Render a SARIF 2.1.0 log over the LOCAL findings. `runId` names the run in
  * `automationDetails` (e.g. a PR number or scan id). Rules are the deduped set
- * of fired rule ids; each result carries its severity level and source location.
+ * of fired rule ids; each result carries its severity level, source location,
+ * and a `properties.provenance` tag (`deterministic` | `agent`) so the two
+ * checker lanes stay distinguishable once both feed SARIF. `opts.root`, when
+ * given, relativizes source-file uris against the scanned root — the form
+ * GitHub code-scanning needs to anchor annotations on the PR diff.
  */
-export function formatSarif(findings: readonly EnrichedFinding[], runId: string): string {
+export function formatSarif(
+  findings: readonly EnrichedFinding[],
+  runId: string,
+  opts: { readonly root?: string } = {},
+): string {
   const ruleIds = [...new Set(findings.map((f) => f.ruleId))];
   const ruleById = new Map(findings.map((f) => [f.ruleId, f]));
 
@@ -92,7 +111,8 @@ export function formatSarif(findings: readonly EnrichedFinding[], runId: string)
           ruleId: f.ruleId,
           level: severityToLevel(contractSeverity(f)),
           message: { text: f.message },
-          locations: findingLocations(f),
+          locations: findingLocations(f, opts.root),
+          properties: { provenance: toContractProvenance(f.provenance) },
         })),
         automationDetails: {
           id: `binclusive-a11y/${runId}`,

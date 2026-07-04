@@ -57,15 +57,18 @@ if [ -n "$FILES" ]; then
     n=$((n + 1))
   done
   log "scanning $n changed .tsx file(s)"
+  SCAN_TARGET="$STAGE"
   node "$ENGINE_DIR/bin/a11y.mjs" check "$STAGE" --json > "$REPORT" 2>/dev/null || true
 else
   # Fallback: no diff context — scan a mounted tree wholesale (default /src).
   SCAN_DIR="${SCAN_DIR:-/src}"
   if [ -d "$SCAN_DIR" ]; then
     log "no changed-file context; scanning $SCAN_DIR"
+    SCAN_TARGET="$SCAN_DIR"
     node "$ENGINE_DIR/bin/a11y.mjs" check "$SCAN_DIR" --json > "$REPORT" 2>/dev/null || true
   else
     log "nothing to scan (no changed files and no $SCAN_DIR)"
+    SCAN_TARGET=""
     printf '%s\n' '{"tool":"a11y-checker","findings":[],"summary":{"findings":0,"blocking":0,"warning":0}}' > "$REPORT"
   fi
 fi
@@ -80,6 +83,32 @@ if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] \
   node "$ENGINE_DIR/pr-comment.mjs" "$REPORT" || log "comment step failed (ignored)"
 else
   log "no PR context/token — skipping inline comments"
+fi
+
+# ---- 4. Emit SARIF for GitHub code-scanning native annotations ------------
+# Render the SAME findings as SARIF 2.1.0 into the workspace. This Action only
+# EMITS the file (a Docker action cannot invoke another action); the consumer's
+# workflow uploads it with a `github/codeql-action/upload-sarif` step, which
+# needs `permissions: security-events: write`. That step turns the findings into
+# native inline annotations on the PR diff — the reference code-scanning UX,
+# distinct from and additive to the inline PR comments above. The file path is
+# exposed as the `sarif-file` output so the upload step can point at it. Always
+# written (even with zero findings) so an empty SARIF clears previously-fixed
+# alerts rather than leaving stale annotations.
+SARIF_OUT="${SARIF_OUTPUT:-$WORKSPACE/a11y.sarif}"
+RUN_ID="${GITHUB_RUN_ID:-${HEAD_SHA:-local}}"
+if [ -n "$SCAN_TARGET" ]; then
+  node "$ENGINE_DIR/bin/a11y.mjs" check "$SCAN_TARGET" --sarif --run-id "$RUN_ID" > "$SARIF_OUT" 2>/dev/null || true
+fi
+# Safety net: if there was no scan target (no diff + no /src) or the render came
+# back empty, still write a valid empty SARIF run so the upload step succeeds.
+if [ ! -s "$SARIF_OUT" ]; then
+  printf '%s\n' '{"$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"Binclusive","informationUri":"https://binclusive.io","rules":[]}},"results":[],"automationDetails":{"id":"binclusive-a11y/'"$RUN_ID"'"}}]}' > "$SARIF_OUT"
+fi
+log "wrote SARIF -> $SARIF_OUT"
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  # Path relative to the workspace — the upload step's default working directory.
+  echo "sarif-file=$(basename "$SARIF_OUT")" >> "$GITHUB_OUTPUT"
 fi
 
 # Advisory gate: never fail the workflow.

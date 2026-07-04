@@ -112,6 +112,43 @@ The full walkthrough — install once, read the output, the `(rendered-DOM / axe
 
 ---
 
+## Use it in CI (GitHub Action)
+
+Drop the Action into a pull-request workflow. On every PR it scans the changed
+`.tsx` files, posts inline review comments, and writes a SARIF file. Feed that
+file to GitHub's own `upload-sarif` step and the findings also render as
+**native code-scanning annotations** on the PR diff — the reference UX, à la
+CodeQL. The scan is **advisory: it always exits 0** and never blocks a merge.
+
+```yaml
+name: a11y
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write   # inline review comments
+  security-events: write # upload SARIF as code-scanning annotations
+
+jobs:
+  a11y:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: a11y
+        uses: Binclusive/a11y-checker-plugin@main
+      - if: always()  # advisory gate exits 0; upload regardless of findings
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.a11y.outputs.sarif-file }}
+```
+
+Annotations land on the exact changed file + line, and each carries its
+provenance (`deterministic` vs `agent`) in the SARIF property bag. The SARIF
+file exists only to render on **your** GitHub — it carries file/line for local
+annotation and is never sent to the Binclusive dashboard.
+
+---
+
 ## Dig deeper
 
 | If you want… | Open / read |
