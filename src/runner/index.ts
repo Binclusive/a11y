@@ -22,6 +22,12 @@ export {
   meterLookup,
 } from "./lookup";
 export {
+  type CodeGraphLookupConfig,
+  type CodeGraphLookupData,
+  type CodeGraphQueryKind,
+  createCodeGraphLookup,
+} from "./codegraph-lookup";
+export {
   type Provider,
   type ProviderMessage,
   type ProviderRequest,
