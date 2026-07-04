@@ -11,6 +11,9 @@ importers:
       '@axe-core/playwright':
         specifier: ^4.10.2
         version: 4.11.3(playwright-core@1.60.0)
+      '@binclusive/a11y-contract':
+        specifier: ^0.1.1
+        version: 0.1.1
       '@effect/cli':
         specifier: 0.75.2
         version: 0.75.2(@effect/platform@0.96.1(effect@3.21.3))(@effect/printer-ansi@0.49.0(@effect/typeclass@0.40.0(effect@3.21.3))(effect@3.21.3))(@effect/printer@0.49.0(@effect/typeclass@0.40.0(effect@3.21.3))(effect@3.21.3))(effect@3.21.3)
@@ -67,6 +70,10 @@ packages:
     resolution: {integrity: sha512-h/kfksv4F0cVIDlKpT4700OehdRgpvuVskuQ2nb7/JmtWUXpe9ftHAPtwyXGvVSsa6SJ64A9ER7Zrzc/sIvC4w==}
     peerDependencies:
       playwright-core: '>= 1.0.0'
+
+  '@binclusive/a11y-contract@0.1.1':
+    resolution: {integrity: sha512-yYOsuK0z1yXtXjWgolLr2Wo0BkIznGUnd6gLlE9UoXZ9/Tc/ZX/7jfLm3zIw8J0sgGRlLxoNt+KARgNRiq2Tpw==}
+    engines: {node: '>=20'}
 
   '@effect/cli@0.75.2':
     resolution: {integrity: sha512-+cMn/ZtFB+jEvgB6phrTT6XyPkIUnmX4G0nUSln7yj3lwyiHQ578Iwr8nHeU1CKEtlh4Xt+mYc0yiT912xu7YA==}
@@ -2165,6 +2172,10 @@ snapshots:
     dependencies:
       axe-core: 4.11.4
       playwright-core: 1.60.0
+
+  '@binclusive/a11y-contract@0.1.1':
+    dependencies:
+      zod: 4.0.0
 
   '@effect/cli@0.75.2(@effect/platform@0.96.1(effect@3.21.3))(@effect/printer-ansi@0.49.0(@effect/typeclass@0.40.0(effect@3.21.3))(effect@3.21.3))(@effect/printer@0.49.0(@effect/typeclass@0.40.0(effect@3.21.3))(effect@3.21.3))(effect@3.21.3)':
     dependencies:

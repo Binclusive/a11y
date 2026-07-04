@@ -30,18 +30,15 @@ if [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -f "${GITHUB_EVENT_PATH:-}" ]; then
 fi
 
 # ---- 1. Resolve the set of changed .tsx files -----------------------------
-# Three sources, in priority order: an explicit CHANGED_FILES list, a
-# BASE..HEAD git diff, or (fallback) a wholesale scan of a mounted tree.
-FILES=""
-if [ -n "${CHANGED_FILES:-}" ]; then
-  # Space- or newline-separated; unquoted expansion does the splitting.
-  FILES=$(printf '%s\n' $CHANGED_FILES | grep -E '\.tsx$' || true)
-  log "using CHANGED_FILES"
-elif [ -n "${BASE_SHA:-}" ] && [ -n "${HEAD_SHA:-}" ] \
-     && git -C "$WORKSPACE" rev-parse --git-dir >/dev/null 2>&1; then
-  FILES=$(git -C "$WORKSPACE" diff --name-only "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null \
-            | grep -E '\.tsx$' || true)
-  log "diffed ${BASE_SHA}...${HEAD_SHA}"
+# Delegated to the engine's ONE diff-scoping module (src/diff-scope.ts) via
+# bin/diff-scope.mjs, so the Action and the engine share a single scoper instead
+# of a second copy of the priority logic in shell. It reads CHANGED_FILES /
+# BASE_SHA / HEAD_SHA / GITHUB_WORKSPACE (explicit list first, then a BASE..HEAD
+# git diff) and prints the changed .tsx paths — empty output means no diff
+# context, so the wholesale-scan fallback below takes over.
+FILES=$(GITHUB_WORKSPACE="$WORKSPACE" node "$ENGINE_DIR/bin/diff-scope.mjs" 2>/dev/null || true)
+if [ -n "$FILES" ]; then
+  log "scoped changed .tsx via diff-scope"
 fi
 
 REPORT=$(mktemp)

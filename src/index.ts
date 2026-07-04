@@ -14,6 +14,12 @@
 // ── 1 · Scan & enrich — the read path ────────────────────────────────────────
 export { collectTsx } from "./collect";
 export {
+  type DiffScopeInput,
+  parseChangedFiles,
+  scopeChangedTsx,
+  scopeChangedTsxFromEnv,
+} from "./diff-scope";
+export {
   checkFiles,
   dedupeRecall,
   type Finding,
@@ -81,6 +87,17 @@ export {
   type Stack,
 } from "./contract";
 export { detectStack } from "./detect-stack";
+// Emit path — the metadata-only wire projection (local finding -> contract) and
+// the LOCAL SARIF renderer that reads the rich model directly. One severity
+// mapping (`impactToSeverity` -> contract enum -> `severityToLevel`) threads both.
+export {
+  contractSeverity,
+  impactToSeverity,
+  toContractFinding,
+  toContractProvenance,
+  toFindingPayload,
+} from "./emit-contract";
+export { formatSarif, severityToLevel } from "./sarif";
 export {
   type ComponentSuggestion,
   type SuggestConfidence,
