@@ -1,6 +1,6 @@
 # a11y-checker — reference decks
 
-Two sibling presentation decks for `@b8e/a11y-checker`. Reference / north-star
+Two sibling presentation decks for `@binclusive/a11y`. Reference / north-star
 material, not tied to a launch date.
 
 | Deck | File | Audience | Theme |

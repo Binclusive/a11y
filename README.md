@@ -132,7 +132,7 @@ The decks are self-contained HTML — open in a browser, arrow keys to navigate,
 ## Kick the tires
 
 ```bash
-pnpm test        # 224 tests, all green
+pnpm test        # all green
 pnpm typecheck   # clean
 ```
 

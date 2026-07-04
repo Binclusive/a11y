@@ -5,6 +5,17 @@ dist/
 .turbo/
 coverage/
 
+# Third-party repo clones pulled by the stack-matrix / recall experiments. These are
+# vendored working copies of other people's code — never part of the OSS package.
+.cache/
+**/.cache/
+
+# Compiled Swift build objects (SwiftPM). Package.swift + Package.resolved ARE tracked;
+# the build tree is not.
+.build/
+**/.build/
+.swiftpm/
+
 # python bytecode (demo cast generators)
 __pycache__/
 *.pyc
