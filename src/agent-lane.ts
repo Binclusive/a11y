@@ -54,7 +54,21 @@ export function resolveProvider(env: NodeJS.ProcessEnv): Provider | null {
   if (!SHIPPED_PROVIDERS.has(providerId)) return null;
 
   const model = env.LLM_MODEL !== undefined && env.LLM_MODEL.trim() !== "" ? env.LLM_MODEL.trim() : undefined;
-  return createAnthropicProvider({ apiKey, ...(model !== undefined ? { model } : {}) });
+  // `LLM_TIMEOUT_MS` overrides the per-request abort bound (#2192); a bad value
+  // stays `undefined` so the provider keeps its safe default — can't disable it.
+  const timeoutMs = parseTimeoutMs(env.LLM_TIMEOUT_MS);
+  return createAnthropicProvider({
+    apiKey,
+    ...(model !== undefined ? { model } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  });
+}
+
+/** Parse `LLM_TIMEOUT_MS` to a positive number of milliseconds, else `undefined` (use the provider default). */
+function parseTimeoutMs(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 /** Seams the caller may override — the provider is injected in the tracer test. */

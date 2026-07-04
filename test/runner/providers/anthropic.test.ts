@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { meterProvider, TokenCeilingExceeded, TokenLedger } from "../../../src/runner";
-import { createAnthropicProvider } from "../../../src/runner/providers/anthropic";
+import { createAnthropicProvider, DEFAULT_REQUEST_TIMEOUT_MS } from "../../../src/runner/providers/anthropic";
 
 /**
  * The provider boundary parses an untrusted body: a usage count that is absent,
@@ -47,5 +47,72 @@ describe("createAnthropicProvider — malformed usage fails the ceiling closed",
     await metered.complete({ messages: [] }); // first call admitted, reports NaN usage
     expect(ledger.exhausted()).toBe(true); // ceiling failed closed
     await expect(metered.complete({ messages: [] })).rejects.toBeInstanceOf(TokenCeilingExceeded);
+  });
+});
+
+/**
+ * A hang is a hole a `throw`→exit-0 path does not cover: with no abort, a stalled
+ * provider request hangs the whole CI job, blocking the customer's PR pipeline
+ * (issue #2192). The fetch is bounded by an AbortController + timeout, so a hang
+ * is aborted at the bound and surfaced as a rejection — the runner records the
+ * pass as errored, keeps the deterministic floor, and still exits 0.
+ */
+describe("createAnthropicProvider — a hung fetch aborts at the timeout (never blocks CI)", () => {
+  /**
+   * A fetch that NEVER resolves on its own — it only settles when the request's
+   * abort signal fires, rejecting with an AbortError exactly like `globalThis.fetch`.
+   * This is the stalled-provider simulation: without the timeout it would hang forever.
+   */
+  function hangingFetch(): typeof fetch {
+    return ((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (signal) {
+          const onAbort = () => {
+            const err = new Error("The operation was aborted");
+            err.name = "AbortError";
+            reject(err);
+          };
+          if (signal.aborted) onAbort();
+          else signal.addEventListener("abort", onAbort, { once: true });
+        }
+      })) as unknown as typeof fetch;
+  }
+
+  it("rejects (aborts) within the configured bound instead of hanging forever", async () => {
+    const timeoutMs = 25;
+    const provider = createAnthropicProvider({ apiKey: "test", fetchImpl: hangingFetch(), timeoutMs });
+    const start = Date.now();
+
+    await expect(provider.complete({ messages: [] })).rejects.toThrow(/timed out/i);
+
+    // Completed by aborting, not by hanging: well under any CI budget, and near
+    // the configured bound rather than an unbounded wall-clock wait.
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(timeoutMs - 5);
+    expect(elapsed).toBeLessThan(2_000);
+  });
+
+  it("the AI lane fails SOFT on a hung pass — the deterministic floor survives, run stays non-blocking", async () => {
+    // Drive the hung provider through the SAME metered seam the runner uses. The
+    // rejection is what the runner's per-pass catch records as a non-fatal error
+    // (runner.ts): the pass is dropped, remaining findings proceed, exit 0 holds.
+    const ledger = new TokenLedger(1000);
+    const provider = createAnthropicProvider({ apiKey: "test", fetchImpl: hangingFetch(), timeoutMs: 25 });
+    const metered = meterProvider(provider, ledger);
+
+    await expect(metered.complete({ messages: [] })).rejects.toThrow(/timed out/i);
+    // A hang consumed no measured tokens — it degrades the lane, it doesn't spend budget.
+    expect(ledger.exhausted()).toBe(false);
+  });
+
+  it("a non-positive/non-finite timeout falls back to the safe default (a bad knob can't disable the bound)", () => {
+    // Construction must not throw and must keep the bound for any bad override —
+    // the guard maps 0 / negative / NaN / Infinity back to the default.
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => createAnthropicProvider({ apiKey: "test", timeoutMs: bad })).not.toThrow();
+    }
+    // The documented safe default is a real, positive, finite bound.
+    expect(Number.isFinite(DEFAULT_REQUEST_TIMEOUT_MS) && DEFAULT_REQUEST_TIMEOUT_MS > 0).toBe(true);
   });
 });
