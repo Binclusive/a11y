@@ -21,6 +21,7 @@
  * this narrowing — only the emit path does.
  */
 import {
+  Finding as ContractFindingSchema,
   type Finding as ContractFinding,
   type FindingPayload,
   parseFindingPayload,
@@ -113,4 +114,46 @@ export function toContractFinding(f: EnrichedFinding, scope: string): ContractFi
  */
 export function toFindingPayload(findings: readonly EnrichedFinding[], scope: string): FindingPayload {
   return parseFindingPayload({ findings: findings.map((f) => toContractFinding(f, scope)) });
+}
+
+/** A lenient emit that projects each finding independently, keeping the valid ones. */
+export interface LenientPayload {
+  readonly payload: FindingPayload;
+  /** How many findings failed the contract re-parse and were dropped. */
+  readonly dropped: number;
+}
+
+/**
+ * The NON-BLOCKING emit path — same projection as {@link toFindingPayload}, but a
+ * single finding that fails the contract re-parse is DROPPED, not thrown.
+ *
+ * Two emit disciplines, one projection: the deterministic engine emits with the
+ * strict {@link toFindingPayload} (its output is reproducible — drift is a bug that
+ * must fail loud). The AI lane emits with THIS — one malformed model output must
+ * never fail the whole run (the runner always exits 0). Both reuse
+ * {@link toContractFinding} + the contract's own `Finding` schema, so there is no
+ * second projection and no second wire schema.
+ */
+export function toFindingPayloadLenient(findings: readonly EnrichedFinding[], scope: string): LenientPayload {
+  const projected: ContractFinding[] = [];
+  let dropped = 0;
+  for (const f of findings) {
+    // Guard the WHOLE projection, not just the parse: a malformed finding can
+    // throw inside toContractFinding (a bad wcag/corpus shape) as easily as it
+    // can fail the schema. Either way the one finding is dropped, never the run.
+    const contract = tryProject(f, scope);
+    if (contract === null) dropped += 1;
+    else projected.push(contract);
+  }
+  return { payload: parseFindingPayload({ findings: projected }), dropped };
+}
+
+/** Project one finding, returning `null` if it throws or fails the contract. */
+function tryProject(f: EnrichedFinding, scope: string): ContractFinding | null {
+  try {
+    const parsed = ContractFindingSchema.safeParse(toContractFinding(f, scope));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }

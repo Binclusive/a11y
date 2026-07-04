@@ -93,9 +93,11 @@ export { detectStack } from "./detect-stack";
 export {
   contractSeverity,
   impactToSeverity,
+  type LenientPayload,
   toContractFinding,
   toContractProvenance,
   toFindingPayload,
+  toFindingPayloadLenient,
 } from "./emit-contract";
 export { formatSarif, severityToLevel } from "./sarif";
 export {
@@ -105,6 +107,37 @@ export {
   type SuggestResult,
   suggestComponentMap,
 } from "./suggest";
+
+// Provider-agnostic AI-lane runner (#2095): BYO provider + the capped,
+// non-blocking pull loop. Reasoning content (skills/lookups/finding logic) is
+// injected through the AgentReasoner + LookupTool seams (#2096/#2097/#2098).
+export {
+  type AgentFinding,
+  type AgentReasoner,
+  type BudgetSnapshot,
+  DEFAULT_RUNNER_CONFIG,
+  LookupCounter,
+  type LookupQuery,
+  type LookupResult,
+  type LookupTool,
+  meterLookup,
+  meterProvider,
+  type PassOutcome,
+  type PassReport,
+  type Provider,
+  type ProviderMessage,
+  type ProviderRequest,
+  type ProviderResponse,
+  type ReasonContext,
+  type RunInput,
+  runAgentLane,
+  type RunnerConfig,
+  type RunOutcome,
+  TokenCeilingExceeded,
+  TokenLedger,
+  type TokenUsage,
+  usageTotal,
+} from "./runner";
 
 // ── 3 · Agent integration — hook + MCP ──────────────────────────────────────
 export { type HookOutput, runHook } from "./hook";
