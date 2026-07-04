@@ -123,6 +123,7 @@ export {
   LookupCounter,
   type LookupQuery,
   type LookupResult,
+  isMeterableUsage,
   type LookupTool,
   meterLookup,
   meterProvider,

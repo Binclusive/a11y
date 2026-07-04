@@ -53,7 +53,20 @@ export interface Provider {
   readonly complete: (request: ProviderRequest) => Promise<ProviderResponse>;
 }
 
-/** The total tokens one usage record spends. */
+/** The total tokens one usage record spends — meaningful only for a {@link isMeterableUsage | meterable} record. */
 export function usageTotal(usage: TokenUsage): number {
   return usage.inputTokens + usage.outputTokens;
+}
+
+/**
+ * Whether a usage record can be trusted against the ceiling: BOTH counts finite
+ * and non-negative. A malformed provider response — `NaN`, `±Infinity`, or a
+ * negative count — makes the ceiling comparison silently mis-evaluate
+ * (`NaN >= ceiling` is always `false`), disabling the cap and letting the run
+ * spend past budget. The ledger gates on this and treats an unmeterable usage as
+ * AT-OR-OVER the ceiling, never under it (issue #2169).
+ */
+export function isMeterableUsage(usage: TokenUsage): boolean {
+  const ok = (n: number): boolean => Number.isFinite(n) && n >= 0;
+  return ok(usage.inputTokens) && ok(usage.outputTokens);
 }
