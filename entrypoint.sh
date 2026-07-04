@@ -35,6 +35,10 @@ fi
 # AI lane; absent token -> no phone-home; neither is an error. Both reach the
 # runner as inherited container env; log presence only, never the secret value.
 [ -n "${LLM_API_KEY:-}" ] && log "AI lane: LLM key present" || log "AI lane: no LLM key — deterministic floor only"
+# Surface any model/provider override so a customer who sets one sees it took
+# (the #2188 complaint was a silently-ignored override). Empty → engine default.
+[ -n "${LLM_PROVIDER:-}" ] && log "AI lane: provider override -> $LLM_PROVIDER"
+[ -n "${LLM_MODEL:-}" ]    && log "AI lane: model override -> $LLM_MODEL"
 [ -n "${B8E_TOKEN:-}" ]   && log "phone-home: b8e_ token present" || log "phone-home: no token — local-only"
 
 # ---- 1. Resolve the set of changed .tsx files -----------------------------
