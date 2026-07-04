@@ -64,6 +64,14 @@ describe("createSkillsReasoner — the reasoning core wired to the seam", () => 
     expect(finding?.message).toContain("Render a native <button");
   });
 
+  it("emits an advisory `warn` finding even when the source enforcement is `block`", async () => {
+    const { provider } = recordingProvider(SUGGESTION_JSON);
+    // The default source is `enforcement: "block"`; the agent finding must NOT inherit it.
+    const out = await createSkillsReasoner().reason(ctx(enriched({ enforcement: "block" }), provider));
+    expect(out).toHaveLength(1);
+    expect(out[0]?.enforcement).toBe("warn");
+  });
+
   it("returns [] for a parked (non-React) finding without calling the model", async () => {
     const { provider, seen } = recordingProvider(SUGGESTION_JSON);
     const swift = enriched({ provenance: "swiftui", file: "Sources/View.swift", ruleId: "swiftui/label" });

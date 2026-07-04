@@ -57,7 +57,9 @@ function toAgentFinding(source: EnrichedFinding, suggestion: FixSuggestion): Age
     ruleId: source.ruleId,
     message: suggestionMessage(suggestion),
     wcag: suggestion.wcag.length > 0 ? suggestion.wcag : source.wcag,
-    enforcement: source.enforcement,
+    // Advisory by construction: a recall/agent finding is always `warn`, never
+    // inherits `block` from its source — `warn` can never gate the exit code.
+    enforcement: "warn",
     provenance: "corpus-agent",
     layer: "recall",
     ...(suggestion.patternId !== undefined ? { patternId: suggestion.patternId } : {}),
