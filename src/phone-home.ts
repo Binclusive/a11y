@@ -173,14 +173,18 @@ export function resolveConfig(env: NodeJS.ProcessEnv): ConfigResolution {
   return {
     kind: "ready",
     config: {
-      endpoint,
-      token,
-      orgID,
-      projectID,
-      auditID,
+      // Presence is checked on the trimmed value, so the STORED value must be
+      // trimmed too — a credential with incidental surrounding whitespace passes
+      // the presence gate but would be sent verbatim, causing avoidable auth /
+      // validation failures downstream.
+      endpoint: endpoint.trim(),
+      token: token.trim(),
+      orgID: orgID.trim(),
+      projectID: projectID.trim(),
+      auditID: auditID.trim(),
       // Free-form scan-scope label stamped on every finding. Not load-bearing for
       // reconcile (that keys on url + scannedTargets); a human breadcrumb.
-      scope: nonEmpty(env.B8E_SCOPE) ? env.B8E_SCOPE : "ci-diff",
+      scope: nonEmpty(env.B8E_SCOPE) ? env.B8E_SCOPE.trim() : "ci-diff",
       timeoutMs: DEFAULT_TIMEOUT_MS,
     },
   };
@@ -199,7 +203,10 @@ export function resolveConfig(env: NodeJS.ProcessEnv): ConfigResolution {
 export function toCiFinding(f: EnrichedFinding, root: string, seenAt: string): CiFinding {
   const band = contractSeverity(f);
   return {
-    url: relative(root, f.file),
+    // `path.relative` emits platform separators (`\` on Windows); force `/` so the
+    // wire `url` stays the same git-style vocabulary as `scannedTargets` and the
+    // `finding.url ∈ scannedTargets` reconcile invariant holds on every OS (#2180).
+    url: relative(root, f.file).replaceAll("\\", "/"),
     criterion: f.wcag[0] ?? "",
     element: hasSelector(f.selector) ? f.selector : f.ruleId,
     severity: band,
