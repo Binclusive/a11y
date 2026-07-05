@@ -7,6 +7,32 @@ inputs:
     description: "Token used to post inline review comments on the PR."
     required: true
     default: ${{ github.token }}
+  binclusive-app-id:
+    description: >
+      OPTIONAL. The Binclusive GitHub App id. Set it (with
+      `binclusive-app-private-key`) to attribute the PR comments to the branded
+      Binclusive App — name + avatar — instead of `github-actions[bot]`. Absent →
+      comments post under `github-token` exactly as before (no behavior change).
+      The App needs only `pull requests: write` (least privilege) to post inline
+      review comments and the single rollup comment. Store the id as a repo
+      variable or secret.
+    required: false
+    default: ""
+  binclusive-app-private-key:
+    description: >
+      OPTIONAL. The Binclusive GitHub App's PEM private key, paired with
+      `binclusive-app-id`. Store it as a repo secret. When either this or the id
+      is absent — or a token mint fails — the Action falls back to `github-token`
+      and still exits 0 (a failed brand is never a failed check).
+    required: false
+    default: ""
+  binclusive-app-installation-id:
+    description: >
+      OPTIONAL. The App's installation id on this repo. Absent → it is discovered
+      automatically from the repository, so a customer normally only installs the
+      App and sets the id + key.
+    required: false
+    default: ""
   llm-api-key:
     description: >
       OPTIONAL. The customer's OWN LLM provider key (BYOK), for the AI enrichment
@@ -88,6 +114,13 @@ runs:
   # The token is the one value the runner does not pass by default.
   env:
     GITHUB_TOKEN: ${{ inputs.github-token }}
+    # Branded-bot identity (#2130), all OPTIONAL. When the App id + private key are
+    # set the comment step mints a short-lived installation token and posts under
+    # the Binclusive App; any of them absent (or a mint failure) falls back to
+    # GITHUB_TOKEN — so an unset input passes "" through and keeps today's behavior.
+    BINCLUSIVE_APP_ID: ${{ inputs.binclusive-app-id }}
+    BINCLUSIVE_APP_PRIVATE_KEY: ${{ inputs.binclusive-app-private-key }}
+    BINCLUSIVE_APP_INSTALLATION_ID: ${{ inputs.binclusive-app-installation-id }}
     # Both are OPTIONAL and independent (local-first). LLM_API_KEY drives the
     # provider-agnostic AI lane; B8E_TOKEN is the phone-home ingestion bearer.
     # No Binclusive credential is baked in — an unset input passes an empty string

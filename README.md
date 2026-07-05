@@ -175,6 +175,35 @@ phone-home to Binclusive; the `llm-api-key` never touches Binclusive auth — th
 two are orthogonal. No Binclusive LLM credential ships in the image or the
 Action defaults.
 
+### Optional — post comments as the branded Binclusive bot
+
+By default the PR comments (both the inline per-finding comments and the single
+rollup comment) post under the workflow's `github-token`, which GitHub attributes
+to **`github-actions[bot]`**. Install the **Binclusive GitHub App** and supply its
+id + private key to have the comments post under the branded App identity — name +
+avatar — instead. This is a pure identity swap: *who* posts changes, *what* posts
+does not, and nothing new crosses the wire.
+
+| Input | Carries | Absent → |
+|---|---|---|
+| `binclusive-app-id` | The Binclusive GitHub App id | Comments post under `github-token` as `github-actions[bot]` (no change) |
+| `binclusive-app-private-key` | The App's PEM private key (a secret) | Same fallback |
+| `binclusive-app-installation-id` | The App's installation id (optional) | Discovered automatically from the repo |
+
+```yaml
+      - id: a11y
+        uses: Binclusive/a11y-checker-plugin@main
+        with:
+          binclusive-app-id:          ${{ vars.BINCLUSIVE_APP_ID }}
+          binclusive-app-private-key: ${{ secrets.BINCLUSIVE_APP_PRIVATE_KEY }}
+```
+
+**Least privilege:** the App needs only **`Pull requests: write`** — enough to
+post inline review comments and the rollup comment, nothing more. If the App is
+unconfigured, the id/key is wrong, or the token mint fails for any reason, the
+Action **falls back to `github-token` and still exits 0** — a failed brand is
+never a failed check.
+
 ---
 
 ## Dig deeper

@@ -4,7 +4,9 @@
  *
  * Best-effort by design: any missing context, failed read, or failed API call is
  * logged to stderr and skipped — never thrown — so the calling entrypoint still
- * exits 0. Authenticates to the GitHub REST API with the Action's `GITHUB_TOKEN`.
+ * exits 0. Authenticates to the GitHub REST API through the shared identity
+ * resolver (issue #2130): the Binclusive GitHub App when configured, else the
+ * Action's `GITHUB_TOKEN` — the same identity the rollup comment posts under.
  *
  * De-duplicating (issue #2131): instead of POSTing every finding on every push,
  * it reconciles against the comments already on the PR — updating a finding's
@@ -13,9 +15,12 @@
  * per finding rather than accumulating duplicates.
  *
  * Env: GITHUB_TOKEN, GITHUB_REPOSITORY ("owner/name"), PR_NUMBER, HEAD_SHA,
- *      GITHUB_API_URL (optional, defaults to the public API).
+ *      GITHUB_API_URL (optional, defaults to the public API);
+ *      BINCLUSIVE_APP_ID / BINCLUSIVE_APP_PRIVATE_KEY (optional, opt into the
+ *      branded App identity).
  */
 import { readFileSync } from "node:fs";
+import { resolvePostingToken } from "./github-identity";
 import {
   type Finding,
   parseFindings,
@@ -26,7 +31,6 @@ import {
 } from "./pr-comment";
 
 const reportPath = process.argv[2];
-const token = process.env.GITHUB_TOKEN;
 const repo = process.env.GITHUB_REPOSITORY;
 const pr = process.env.PR_NUMBER;
 const commitId = process.env.HEAD_SHA;
@@ -39,7 +43,16 @@ const bail = (msg: string): never => {
 };
 
 if (!reportPath) bail("no report path argument; skipping");
-if (!token || !repo || !pr || !commitId) bail("missing PR context; skipping");
+if (!repo || !pr || !commitId) {
+  log("missing PR context; skipping");
+  process.exit(0); // narrows repo/pr/commitId to string below; never fatal — advisory
+}
+
+// Resolve WHO posts once: branded App identity when configured, else GITHUB_TOKEN
+// (unchanged behavior). Never throws — a mint failure degrades to the default token.
+const { token, identity } = await resolvePostingToken(process.env, { repo, api }, log);
+if (!token) bail("no posting token (no GitHub App configured and no GITHUB_TOKEN); skipping");
+log(`posting inline comments as ${identity}`);
 
 const loadFindings = (path: string): Finding[] => {
   try {
