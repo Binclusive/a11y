@@ -5,7 +5,10 @@ import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import { Effect, Option } from "effect";
 import { type AgentLaneOverrides, augmentWithAgentLane } from "./agent-lane";
 import { collectTsx } from "./collect";
-import { scanUrl } from "./collect-dom";
+// Type-only: the rendered-DOM lane (playwright/@axe-core) is loaded lazily inside
+// `runCheckUrl` so the static `check` path carries no eager browser-stack import
+// and the CI image can ship without it (issue #2133).
+import type { DomScanResult } from "./collect-dom";
 import { scanLiquid } from "./collect-liquid";
 import { scanSwift } from "./collect-swift";
 import { gen, init, type LearnInput, learn } from "./commands";
@@ -19,7 +22,6 @@ import {
   resolveDisplay,
 } from "./corpus";
 import { runHookCli } from "./hook";
-import { startStdioServer } from "./mcp";
 import { phoneHome } from "./phone-home";
 import { formatSarif } from "./sarif";
 import type { ComponentResolution, Coverage } from "./resolve-components";
@@ -526,8 +528,10 @@ async function runCheckUrl(url: string): Promise<void> {
   const target = normalizeTarget(url);
   console.log(`a11y-checker — rendering ${target} and running axe-core\n`);
 
-  let result: Awaited<ReturnType<typeof scanUrl>>;
+  let result: DomScanResult;
   try {
+    // Load the browser lane on demand so `check` never pulls playwright/@axe-core.
+    const { scanUrl } = await import("./collect-dom");
     result = await scanUrl(target);
   } catch (err) {
     // scanUrl re-throws a load/launch failure as an actionable one-line Error;
@@ -883,7 +887,8 @@ const genCommand = Command.make(
 ).pipe(Command.withDescription("regenerate the block (--check exits non-zero on drift)"));
 
 const mcpCommand = Command.make("mcp", {}, () =>
-  Effect.promise(() => startStdioServer()),
+  // Lazy so the MCP SDK stays off the static `check` path (issue #2133).
+  Effect.promise(() => import("./mcp").then((m) => m.startStdioServer())),
 ).pipe(
   Command.withDescription("start a local stdio MCP server exposing the checker to MCP clients"),
 );

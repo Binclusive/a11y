@@ -64,7 +64,7 @@
     "zod": "4.0.0"
   },
   "optionalDependencies": {
-    "@binclusive/a11y-corpus": "*"
+    "@binclusive/a11y-corpus": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "22.13.5",

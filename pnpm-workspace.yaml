@@ -1,0 +1,8 @@
+packages:
+  - "packages/*"
+
+# Resolve @binclusive/a11y-corpus (a local, never-published workspace package) by
+# linking the on-disk package for a plain semver range, not a registry fetch — pnpm 9+
+# defaults this off, so the optionalDependency would otherwise 404 and get silently
+# excluded, reopening the package.json↔lockfile drift this PR closes (#2133).
+linkWorkspacePackages: true
