@@ -463,8 +463,11 @@ function dedupeEnforce(
  *      redundant. (A missing floor finding is NOT permission to flag — that is
  *      G4's abstention veto, not this dedup; this only removes "floor already
  *      caught it.")
- *   2. SELF-dedup — collapse candidates by `(file, line, patternId)`, keeping the
- *      first. The same pattern matched twice on one element is one finding.
+ *   2. SELF-dedup — collapse PATTERNED candidates by `(file, line, patternId)`,
+ *      keeping the first (the same pattern matched twice on one element is one
+ *      finding). A patternless candidate (no `patternId`) is EXEMPT: two distinct
+ *      patternless discoveries at one `file:line` are genuinely different findings,
+ *      so each is kept rather than collapsed onto the shared `file:line:` key (#2180).
  *
  * Pure and model-free: a deterministic filter the recall layer applies AFTER the
  * agent returns and BEFORE quarantining the survivors into `recall`. Order is
@@ -477,13 +480,19 @@ export function dedupeRecall(
   // 1 — CROSS-dedup against the static floor: identical `file:line:sc` covered-set
   // discipline as the enforce pass, so reuse it verbatim rather than re-derive it.
   const crossDeduped = dedupeEnforce(candidates, staticFindings);
-  // 2 — SELF-dedup by `(file, line, patternId)`, keeping the first survivor.
+  // 2 — SELF-dedup by `(file, line, patternId)`, keeping the first survivor. Only
+  // PATTERNED candidates dedup: a patternless discovery has no identity to key on,
+  // so two distinct ones at one `file:line` must not collapse onto `file:line:` and
+  // silently drop a real finding (#2180) — each patternless candidate is kept.
   const seen = new Set<string>();
   const out: Finding[] = [];
   for (const f of crossDeduped) {
-    const key = `${f.file}:${f.line}:${f.patternId ?? ""}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const patternId = f.patternId ?? "";
+    if (patternId !== "") {
+      const key = `${f.file}:${f.line}:${patternId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
     out.push(f);
   }
   return out;

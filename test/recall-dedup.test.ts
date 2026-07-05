@@ -74,6 +74,19 @@ describe("dedupeRecall — self-dedup by file+line+patternId", () => {
     expect(out[0]?.message).toBe("");
   });
 
+  it("keeps two DISTINCT patternless discoveries at the same file:line (#2180)", () => {
+    // A patternless candidate has no identity to self-dedup on; two different ones
+    // at one location are genuinely different findings and must both survive rather
+    // than collapse onto the shared `file:line:` key.
+    const candidates = [
+      recall({ file: "/a.tsx", line: 5, wcag: ["2.4.4"], patternId: undefined, message: "first" }),
+      recall({ file: "/a.tsx", line: 5, wcag: ["2.4.4"], patternId: undefined, message: "second" }),
+    ];
+    const out = dedupeRecall(candidates, []);
+    expect(out).toHaveLength(2);
+    expect(out.map((f) => f.message)).toEqual(["first", "second"]);
+  });
+
   it("keeps two DIFFERENT patternIds on the same element", () => {
     const candidates = [
       recall({ file: "/a.tsx", line: 5, wcag: ["2.4.4"], patternId: "p1" }),

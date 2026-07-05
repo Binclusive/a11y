@@ -6,18 +6,17 @@
  *     pattern catalog) into the `system` framing — this is where the ported
  *     skills prose actually reaches the model.
  *   - {@link buildUserPrompt} states the one deterministic finding to reason about.
- *   - {@link parseSuggestions} reads the model's reply into typed, patch-free
- *     {@link FixSuggestion}s — tolerant by design (a malformed reply yields `[]`,
- *     never a throw, so a bad model output can't fail the non-blocking run).
+ *   - {@link parseReasonResponse} reads the model's reply into a typed, patch-free
+ *     {@link ParsedReasonResponse} — an in-place {@link FixSuggestion} enrichment
+ *     (or none) plus a {@link Discovery} array — over a tolerant zod boundary
+ *     (issue #2098). Every layer degrades to the valid subset: an unparseable
+ *     reply, a malformed envelope, a bad enrichment, or bad discovery entries each
+ *     yield the empty/partial result, never a throw, so bad model output can't fail
+ *     the non-blocking run.
  *
  * The response contract asked of the model is SUGGESTION-ONLY: it returns prose
- * fixes, never edits. {@link parseSuggestions} has no path to a patch — it only
+ * fixes, never edits. {@link parseReasonResponse} has no path to a patch — it only
  * ever produces prose, so "fix = suggestions only" survives the parse boundary.
- *
- * NOTE — the parse here is the minimal enrich (one finding in → suggestions on
- * that finding). Robust structured-output parsing, multi-finding DISCOVERY, and
- * dedup are the enrich+discover surface of issue #2098; this leaves that seam
- * clean rather than pre-empting it.
  */
 import { z } from "zod";
 import type { Finding } from "../../core";

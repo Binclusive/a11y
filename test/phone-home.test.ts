@@ -226,6 +226,16 @@ describe("wire is metadata-only and reconcile-keyed", () => {
     expect(ci).not.toHaveProperty("source");
   });
 
+  it("normalizes path separators to `/` on the wire url (#2180 — Windows edge)", () => {
+    // On POSIX `path.relative` never emits `\`, so force the separator into the
+    // input filename: whatever separators the relative result carries, the wire
+    // url must come out git-style `/` so `finding.url ∈ scannedTargets` holds on
+    // every OS (on Windows the same code path is what `relative` would emit).
+    const ci = toCiFinding(finding({ file: "/root/src\\a11y\\Button.tsx" }), "/root", "2026-07-04T00:00:00.000Z");
+    expect(ci.url).toBe("src/a11y/Button.tsx");
+    expect(ci.url).not.toContain("\\");
+  });
+
   it("finding.url ∈ scannedTargets: the run stamps both from the same path vocabulary (#2166)", () => {
     const scanned = ["src/Button.tsx", "src/Nav.tsx"];
     const envelopes = assembleEnvelopes([finding({ file: "/root/src/Button.tsx" })], "/root", CONFIG, scanned, "2026-07-04T00:00:00.000Z");
@@ -266,5 +276,21 @@ describe("resolveConfig", () => {
 
   it("treats whitespace-only credentials as absent", () => {
     expect(resolveConfig({ B8E_TOKEN: "   " })).toEqual({ kind: "skip", reason: "no-token" });
+  });
+
+  it("trims incidental surrounding whitespace off stored credentials (#2180)", () => {
+    // Presence is tested on the trimmed value; the STORED value must be trimmed too
+    // so a padded credential isn't sent verbatim and rejected downstream.
+    const r = resolveConfig({
+      B8E_TOKEN: "  b8e_x  ",
+      B8E_ORG_ID: " o\n",
+      B8E_PROJECT_ID: "\tp ",
+      B8E_AUDIT_ID: " a ",
+      B8E_SCOPE: "  pr-42  ",
+    });
+    expect(r).toMatchObject({
+      kind: "ready",
+      config: { token: "b8e_x", orgID: "o", projectID: "p", auditID: "a", scope: "pr-42" },
+    });
   });
 });
