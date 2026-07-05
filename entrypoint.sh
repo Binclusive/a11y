@@ -5,8 +5,11 @@
 # them, prints the findings JSON to stdout, and — when a PR context + token are
 # present — posts each finding as an inline PR review comment.
 #
-# ALWAYS exits 0: this gate is advisory. A blocking finding sets the engine's
-# own exit code to 1; we deliberately swallow it so the workflow never fails.
+# Exits 0 BY DEFAULT: this gate is advisory. A blocking finding sets the engine's
+# own exit code to 1; we deliberately swallow it so the workflow never fails —
+# UNLESS a customer opts into the severity/volume gate via the FAIL_ON /
+# MAX_VIOLATIONS inputs (#2134), in which case the engine's non-zero exit is
+# propagated (see GATE_EXIT below) so the check fails. Default stays non-blocking.
 set -u
 
 ENGINE_DIR="${ENGINE_DIR:-/engine}"
@@ -41,6 +44,18 @@ fi
 [ -n "${LLM_MODEL:-}" ]    && log "AI lane: model override -> $LLM_MODEL"
 [ -n "${B8E_TOKEN:-}" ]   && log "phone-home: b8e_ token present" || log "phone-home: no token — local-only"
 
+# ---- Opt-in blocking gate (#2134), DEFAULT OFF -----------------------------
+# FAIL_ON / MAX_VIOLATIONS are OPTIONAL. Absent (empty) → GATE_ARGS stays empty,
+# so `check` runs WITHOUT the gate flags and exits 0 on any findings — today's
+# non-blocking behavior, unchanged. Set either and the engine's `check` exits
+# non-zero when the threshold/volume is met; GATE_EXIT carries that code to the
+# final `exit` so the Action fails. Gate is strictly opt-in — safe state by default.
+GATE_ARGS=""
+[ -n "${FAIL_ON:-}" ]        && GATE_ARGS="$GATE_ARGS --fail-on $FAIL_ON"
+[ -n "${MAX_VIOLATIONS:-}" ] && GATE_ARGS="$GATE_ARGS --max-violations $MAX_VIOLATIONS"
+[ -n "$GATE_ARGS" ] && log "blocking gate ON:$GATE_ARGS" || log "blocking gate: off (default non-blocking)"
+GATE_EXIT=0
+
 # ---- 1. Resolve the set of changed .tsx files -----------------------------
 # Delegated to the engine's ONE diff-scoping module (src/diff-scope.ts) via
 # bin/diff-scope.mjs, so the Action and the engine share a single scoper instead
@@ -70,14 +85,19 @@ if [ -n "$FILES" ]; then
   done
   log "scanning $n changed .tsx file(s)"
   SCAN_TARGET="$STAGE"
-  node "$ENGINE_DIR/bin/a11y.mjs" check "$STAGE" --json > "$REPORT" 2>/dev/null || true
+  # The --json scan is the authoritative gate run: `check` writes the report and
+  # THEN sets its exit from the (opt-in) gate, so REPORT is complete even on a
+  # non-zero gate exit. GATE_ARGS is empty by default → exit 0 → non-blocking.
+  node "$ENGINE_DIR/bin/a11y.mjs" check "$STAGE" --json $GATE_ARGS > "$REPORT" 2>/dev/null
+  GATE_EXIT=$?
 else
   # Fallback: no diff context — scan a mounted tree wholesale (default /src).
   SCAN_DIR="${SCAN_DIR:-/src}"
   if [ -d "$SCAN_DIR" ]; then
     log "no changed-file context; scanning $SCAN_DIR"
     SCAN_TARGET="$SCAN_DIR"
-    node "$ENGINE_DIR/bin/a11y.mjs" check "$SCAN_DIR" --json > "$REPORT" 2>/dev/null || true
+    node "$ENGINE_DIR/bin/a11y.mjs" check "$SCAN_DIR" --json $GATE_ARGS > "$REPORT" 2>/dev/null
+    GATE_EXIT=$?
   else
     log "nothing to scan (no changed files and no $SCAN_DIR)"
     SCAN_TARGET=""
@@ -131,5 +151,9 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "sarif-file=$(basename "$SARIF_OUT")" >> "$GITHUB_OUTPUT"
 fi
 
-# Advisory gate: never fail the workflow.
-exit 0
+# Exit: NON-BLOCKING by default (GATE_EXIT stays 0 — the advisory floor). Only a
+# customer who opted into the gate (FAIL_ON / MAX_VIOLATIONS) gets a non-zero
+# exit, carried here from the authoritative --json scan, which the runner
+# surfaces as an Action failure. Every side effect above (inline comments, PR
+# summary, SARIF) ran regardless, so opting in never suppresses the output.
+exit "${GATE_EXIT:-0}"
