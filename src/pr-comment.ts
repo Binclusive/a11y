@@ -31,6 +31,15 @@ export interface Finding {
   readonly line: number;
   readonly message: string;
   readonly wcag?: readonly string[];
+  /**
+   * The CSS selector of the offending rendered element, on axe/DOM findings
+   * only (source passes anchor by `file:line` and omit it). It is what
+   * distinguishes two same-rule findings co-located at one `file:line` — two
+   * `image-alt` failures on one page, or two `<img>` on one JSX line — so it
+   * MUST survive the boundary into {@link findingKey}, or the second collapses
+   * onto the first's key and is silently dropped.
+   */
+  readonly selector?: string;
 }
 
 /** An existing inline review comment already on the PR (id + rendered body). */
@@ -43,14 +52,52 @@ const MARKER_TAG = "binclusive-a11y-agent";
 const MARKER_RE = /<!--\s*binclusive-a11y-agent:(.*?)\s*-->/;
 
 /**
- * The stable identity of a finding across pushes: rule + location. Deliberately
- * EXCLUDES the message — when only the wording changes for the same rule at the
- * same spot we want to update the existing comment in place, not orphan it and
- * post a new one. A finding that genuinely moved to a different line is a
- * different anchor and correctly reconciles as delete-old + create-new.
+ * A live rendered element locator. Mirrors `emit-contract.ts`'s `hasSelector`:
+ * empty / whitespace-only is NOT a selector (a source pass has no DOM node), so
+ * it does not disambiguate and the base `ruleId:file:line` identity stands.
+ * Kept local so this CI-comment surface doesn't drag in the contract package.
+ */
+function hasSelector(selector: string | undefined): selector is string {
+  return selector !== undefined && selector.trim() !== "";
+}
+
+/**
+ * FNV-1a → 8 hex chars. The selector is folded into the marker, and a raw CSS
+ * selector can carry spaces, `>>>`, `-->`, or newlines — any of which would
+ * break the single-line HTML-comment marker (a `-->` closes it early; a newline
+ * makes {@link keyOf} fail to match, so the comment reads as not-ours and gets
+ * re-posted every push). Hashing into a fixed `[0-9a-f]` token is marker-safe by
+ * construction; we never decode it back — it exists only to make distinct
+ * selectors produce distinct keys.
+ */
+function selectorToken(selector: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < selector.length; i++) {
+    h ^= selector.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+/**
+ * The stable identity of a finding across pushes. Base identity is rule +
+ * location (`ruleId:file:line`); when the finding carries a live DOM selector
+ * it is folded in (as a marker-safe hash) so two same-rule findings co-located
+ * at one `file:line` — distinguished ONLY by their selector — get DISTINCT keys
+ * instead of the second silently collapsing onto the first (the #2131 review's
+ * blocking defect). This mirrors the engine's own `element = selector ?? ruleId`
+ * disambiguation (`emit-contract.ts`). A source finding with no selector keeps
+ * the bare `ruleId:file:line` key it always had.
+ *
+ * Deliberately EXCLUDES the message — when only the wording changes for the same
+ * rule/spot/element we update the existing comment in place, not orphan it and
+ * post a new one. A finding that genuinely moved to a different line (or a
+ * different element) is a different anchor and reconciles as delete-old +
+ * create-new.
  */
 export function findingKey(f: Finding): string {
-  return `${f.ruleId}:${f.file}:${f.line}`;
+  const base = `${f.ruleId}:${f.file}:${f.line}`;
+  return hasSelector(f.selector) ? `${base}:${selectorToken(f.selector)}` : base;
 }
 
 /** The hidden marker embedded in every agent-authored comment for `f`. */
@@ -144,7 +191,14 @@ export function reconcile(
  * bad call never aborts the rest of the sync (the Action stays advisory).
  */
 export interface PrCommentClient {
-  /** All inline review comments currently on the PR (paginated upstream). */
+  /**
+   * All inline review comments currently on the PR (paginated upstream). MUST
+   * resolve to a COMPLETE view or THROW — never a partial list. If any page
+   * fetch fails, reconciling against the truncated result would read an existing
+   * comment (on an unfetched page) as absent and re-CREATE it → a duplicate. So
+   * a page failure aborts the whole sync (via {@link syncCommentsBestEffort},
+   * which swallows the throw and skips the run) rather than half-reconciling.
+   */
   list(): Promise<ReviewComment[]>;
   /** POST a new inline review comment for `f`. */
   create(f: Finding): Promise<void>;
@@ -187,6 +241,27 @@ export async function syncComments(
 }
 
 /**
+ * The best-effort boundary the CI entrypoint runs: {@link syncComments} wrapped
+ * so it NEVER throws. Comment de-duplication is advisory — a failure (a
+ * partial-list abort, a mid-sync API error, a bad JSON parse) must log and skip
+ * the run, never fail the CI job. Returns the executed plan, or `null` when the
+ * sync was aborted/skipped. This is the invariant the top-level CLI relies on to
+ * always exit 0.
+ */
+export async function syncCommentsBestEffort(
+  findings: readonly Finding[],
+  client: PrCommentClient,
+  log: (msg: string) => void = () => {},
+): Promise<ReconcilePlan | null> {
+  try {
+    return await syncComments(findings, client, log);
+  } catch (e) {
+    log(`sync aborted (best-effort, no-op): ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
+/**
  * Boundary parse of the engine's findings JSON into the minimal shape this
  * module renders from. Unknown in, narrowed out — a malformed entry is dropped
  * rather than smuggling `any` inward (same discipline as the rest of the engine).
@@ -202,12 +277,16 @@ export function parseFindings(raw: unknown): Finding[] {
     if (typeof f.ruleId !== "string" || typeof f.file !== "string") continue;
     if (typeof f.line !== "number") continue;
     const wcag = Array.isArray(f.wcag) ? f.wcag.filter((w): w is string => typeof w === "string") : undefined;
+    // Keep the selector across the boundary — it is what distinguishes co-located
+    // same-rule findings in findingKey; dropping it here reintroduces the collision.
+    const selector = typeof f.selector === "string" ? f.selector : undefined;
     out.push({
       ruleId: f.ruleId,
       file: f.file,
       line: f.line,
       message: typeof f.message === "string" ? f.message : "",
       ...(wcag ? { wcag } : {}),
+      ...(selector !== undefined ? { selector } : {}),
     });
   }
   return out;

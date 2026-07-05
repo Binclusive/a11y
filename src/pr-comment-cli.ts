@@ -22,7 +22,7 @@ import {
   type PrCommentClient,
   renderBody,
   type ReviewComment,
-  syncComments,
+  syncCommentsBestEffort,
 } from "./pr-comment";
 
 const reportPath = process.argv[2];
@@ -71,17 +71,25 @@ const client: PrCommentClient = {
     for (let page = 1; ; page++) {
       const url = `${api}/repos/${repo}/pulls/${pr}/comments?per_page=100&page=${page}`;
       let res: Response;
+      // A page failure must ABORT the whole sync (throw), not `break` with a
+      // partial list: reconciling against a truncated view reads comments on the
+      // unfetched pages as absent and re-CREATEs them → duplicates, exactly on
+      // large PRs where dedup matters most. Better to skip this run entirely.
       try {
         res = await fetch(url, { headers });
       } catch (e) {
-        log(`list page ${page} failed: ${e instanceof Error ? e.message : String(e)}`);
-        break;
+        throw new Error(`list page ${page} fetch failed: ${e instanceof Error ? e.message : String(e)}`);
       }
       if (!res.ok) {
-        log(`list page ${page} -> ${res.status} ${(await res.text()).slice(0, 200)}`);
-        break;
+        throw new Error(`list page ${page} -> ${res.status} ${(await res.text().catch(() => "")).slice(0, 200)}`);
       }
-      const batch = (await res.json()) as unknown;
+      let batch: unknown;
+      try {
+        batch = await res.json();
+      } catch (e) {
+        // A 200 with an unparseable body is still an incomplete view → abort.
+        throw new Error(`list page ${page} JSON parse failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
       if (!Array.isArray(batch) || batch.length === 0) break;
       for (const c of batch) {
         if (c && typeof c === "object" && typeof (c as { id?: unknown }).id === "number" && typeof (c as { body?: unknown }).body === "string") {
@@ -127,4 +135,7 @@ const client: PrCommentClient = {
   },
 };
 
-await syncComments(findings, client, log);
+// Best-effort by contract: syncCommentsBestEffort swallows any throw (a
+// partial-list abort, a mid-sync API error) so the entrypoint always exits 0 —
+// comment de-dup is advisory and must never fail the CI job.
+await syncCommentsBestEffort(findings, client, log);

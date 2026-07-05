@@ -10,6 +10,7 @@ import {
   renderBody,
   type ReviewComment,
   syncComments,
+  syncCommentsBestEffort,
 } from "../src/pr-comment";
 
 /**
@@ -48,6 +49,35 @@ describe("marker identity", () => {
   it("returns null for a comment that is not ours (no marker) — human comments are off-limits", () => {
     expect(keyOf("Looks good to me, ship it!")).toBeNull();
     expect(keyOf("**a11y** but hand-written, no marker")).toBeNull();
+  });
+});
+
+describe("marker identity — selector disambiguates co-located same-rule findings (#2131 review grill #1)", () => {
+  it("gives two same-rule, same-file, same-line findings DISTINCT keys when their selectors differ", () => {
+    const a = finding({ selector: "html > body > img:nth-child(1)" });
+    const b = finding({ selector: "html > body > img:nth-child(2)" });
+    // same ruleId:file:line, but distinct selectors ⇒ distinct keys (no collapse)
+    expect(findingKey(a)).not.toBe(findingKey(b));
+    // same selector ⇒ same key (still updates in place across pushes)
+    expect(findingKey(finding({ selector: "img.logo" }))).toBe(findingKey(finding({ selector: "img.logo" })));
+  });
+
+  it("leaves a selector-less (source-pass) finding's key at the bare ruleId:file:line", () => {
+    expect(findingKey(finding())).toBe("img-alt:src/App.tsx:12");
+    // whitespace-only selector is NOT a selector — no disambiguation, base key stands
+    expect(findingKey(finding({ selector: "   " }))).toBe("img-alt:src/App.tsx:12");
+  });
+
+  it("encodes the selector marker-safely — no `-->` or newline can break the HTML-comment marker", () => {
+    // a selector engineered to break a naive marker: contains `-->` and a newline
+    const nasty = finding({ selector: "div --> </script>\n<img>" });
+    const marker = markerFor(nasty);
+    expect(marker).toMatch(/^<!-- binclusive-a11y-agent:.* -->$/);
+    // the marker still round-trips: the comment is recognized as ours by its key
+    expect(keyOf(renderBody(nasty))).toBe(findingKey(nasty));
+    // no premature close, no newline smuggled into the single-line marker
+    expect(marker.slice(4, -3)).not.toContain("-->");
+    expect(marker).not.toContain("\n");
   });
 });
 
@@ -103,6 +133,17 @@ describe("reconcile — create vs update vs delete", () => {
     // one canonical copy kept (unchanged), the two extras removed
     expect(plan.unchanged).toEqual([1]);
     expect(plan.remove.sort()).toEqual([2, 3]);
+  });
+
+  it("posts BOTH of two co-located same-rule findings with distinct selectors — no silent drop (#2131 grill #1)", () => {
+    const a = finding({ selector: "img:nth-child(1)" });
+    const b = finding({ selector: "img:nth-child(2)" });
+    const plan = reconcile([a, b], []);
+    // pre-fix, both keyed to `img-alt:src/App.tsx:12` → the second was dropped;
+    // now distinct selectors ⇒ distinct keys ⇒ two creates.
+    expect(plan.create).toHaveLength(2);
+    expect(plan.create).toEqual([a, b]);
+    expect(plan.remove).toHaveLength(0);
   });
 
   it("handles a mixed run: one kept, one new, one fixed", () => {
@@ -178,6 +219,65 @@ describe("syncComments — drives the mocked comments API", () => {
   });
 });
 
+/**
+ * A client whose `list()` fails — the partial-pagination-failure case. Reconciling
+ * against a truncated list would re-CREATE comments on unfetched pages (duplicates),
+ * so a list failure must ABORT the sync (throw) before any create/update/delete.
+ */
+class ListFailsClient implements PrCommentClient {
+  created: Finding[] = [];
+  updated: { id: number; finding: Finding }[] = [];
+  removed: number[] = [];
+  list(): Promise<ReviewComment[]> {
+    return Promise.reject(new Error("list page 2 -> 500 (a page fetch failed)"));
+  }
+  create(f: Finding): Promise<void> {
+    this.created.push(f);
+    return Promise.resolve();
+  }
+  update(id: number, f: Finding): Promise<void> {
+    this.updated.push({ id, finding: f });
+    return Promise.resolve();
+  }
+  remove(id: number): Promise<void> {
+    this.removed.push(id);
+    return Promise.resolve();
+  }
+}
+
+describe("syncComments — aborts on a partial-list failure (#2131 grill #4)", () => {
+  it("a list-page fetch failure aborts the sync — NO create/update/delete (no duplicate POSTs)", async () => {
+    const client = new ListFailsClient();
+    // syncComments propagates the list failure (the abort); it must not have written anything
+    await expect(syncComments([finding({ line: 1 }), finding({ line: 2 })], client)).rejects.toThrow(/list page/);
+    expect(client.created).toHaveLength(0);
+    expect(client.updated).toHaveLength(0);
+    expect(client.removed).toHaveLength(0);
+  });
+});
+
+describe("syncCommentsBestEffort — never throws, so the CI job always exits 0 (#2131 grill #5)", () => {
+  it("swallows a list-abort throw and returns null (no create/update/delete)", async () => {
+    const client = new ListFailsClient();
+    const plan = await syncCommentsBestEffort([finding()], client);
+    expect(plan).toBeNull();
+    expect(client.created).toHaveLength(0);
+  });
+
+  it("swallows a throw raised mid-sync (in create) — resolves rather than rejecting", async () => {
+    const client: PrCommentClient = {
+      list: () => Promise.resolve([]),
+      create: () => Promise.reject(new Error("POST exploded")),
+      update: () => Promise.resolve(),
+      remove: () => Promise.resolve(),
+    };
+    // the raw syncComments rejects…
+    await expect(syncComments([finding()], client)).rejects.toThrow(/exploded/);
+    // …but the best-effort boundary the CLI runs never does — the process still exits 0
+    await expect(syncCommentsBestEffort([finding()], client)).resolves.toBeNull();
+  });
+});
+
 describe("parseFindings — boundary parse of the report JSON", () => {
   it("narrows well-formed findings and drops malformed entries", () => {
     const parsed = parseFindings({
@@ -189,6 +289,25 @@ describe("parseFindings — boundary parse of the report JSON", () => {
       ],
     });
     expect(parsed).toEqual([{ ruleId: "img-alt", file: "a.tsx", line: 3, message: "m", wcag: ["1.1.1"] }]);
+  });
+
+  it("preserves the selector across the boundary so it can distinguish co-located findings (#2131 grill #1)", () => {
+    const parsed = parseFindings({
+      findings: [
+        { ruleId: "image-alt", file: "/page", line: 0, message: "m", selector: "img:nth-child(1)" },
+        { ruleId: "image-alt", file: "/page", line: 0, message: "m", selector: "img:nth-child(2)" },
+      ],
+    });
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]?.selector).toBe("img:nth-child(1)");
+    expect(parsed[1]?.selector).toBe("img:nth-child(2)");
+    // the whole point: distinct selectors survive into distinct keys
+    expect(findingKey(parsed[0] as Finding)).not.toBe(findingKey(parsed[1] as Finding));
+  });
+
+  it("drops a non-string selector rather than smuggling it inward", () => {
+    const [f] = parseFindings({ findings: [{ ruleId: "r", file: "f", line: 1, message: "m", selector: 42 }] });
+    expect(f?.selector).toBeUndefined();
   });
 
   it("returns [] for non-object / missing findings", () => {
