@@ -92,6 +92,25 @@ inputs:
       https://kontrol.binclusive.io/graphql). For staging/self-host only.
     required: false
     default: ""
+  fail-on:
+    description: >
+      OPTIONAL, default OFF. Opt-in blocking gate. Set to a severity —
+      `critical`, `major`, or `minor` — to FAIL the check (non-zero, surfaced as
+      an Action failure) when any finding is at or above that threshold, using
+      the engine's own `critical < major < minor` ordering. Absent (empty, the
+      default) → the check is NON-BLOCKING: it exits 0 on any severity or volume
+      of findings, so it never breaks a customer's CI. Blocking is strictly
+      opt-in — the deterministic floor is always the safe, non-blocking default.
+    required: false
+    default: ""
+  max-violations:
+    description: >
+      OPTIONAL, default OFF. Opt-in blocking gate. Set to an integer N to FAIL
+      the check when the total finding count exceeds N. Absent (empty, the
+      default) → no volume gate; the check stays non-blocking. Independent of
+      `fail-on`; either or both may be set.
+    required: false
+    default: ""
 
 outputs:
   sarif-file:
@@ -141,3 +160,9 @@ runs:
     B8E_PROJECT_ID: ${{ inputs.b8e-project-id }}
     B8E_AUDIT_ID: ${{ inputs.b8e-audit-id }}
     B8E_INGEST_URL: ${{ inputs.b8e-ingest-url }}
+    # OPT-IN blocking gate (#2134), both default OFF. An unset input passes ""
+    # through, which the entrypoint reads as "gate off" — so `check` runs WITHOUT
+    # `--fail-on` / `--max-violations` and exits 0 on any findings (today's
+    # non-blocking behavior). Set either to opt a repo into a failing check.
+    FAIL_ON: ${{ inputs.fail-on }}
+    MAX_VIOLATIONS: ${{ inputs.max-violations }}

@@ -118,7 +118,8 @@ Drop the Action into a pull-request workflow. On every PR it scans the changed
 `.tsx` files, posts inline review comments, and writes a SARIF file. Feed that
 file to GitHub's own `upload-sarif` step and the findings also render as
 **native code-scanning annotations** on the PR diff — the reference UX, à la
-CodeQL. The scan is **advisory: it always exits 0** and never blocks a merge.
+CodeQL. The scan is **advisory by default: it exits 0** and never blocks a merge
+— unless you [opt into a blocking check](#optional--opt-into-a-blocking-check-default-off).
 
 ```yaml
 name: a11y
@@ -146,6 +147,31 @@ Annotations land on the exact changed file + line, and each carries its
 provenance (`deterministic` vs `agent`) in the SARIF property bag. The SARIF
 file exists only to render on **your** GitHub — it carries file/line for local
 annotation and is never sent to the Binclusive dashboard.
+
+### Optional — opt into a blocking check (default off)
+
+The check is **non-blocking by default**: it exits 0 on any severity or volume of
+findings, so it never breaks your CI. Blocking is **strictly opt-in**. Set either
+input below and the check **fails** (non-zero, surfaced as an Action failure) when
+the threshold is met — the inline comments, PR summary, and SARIF still post either
+way.
+
+| Input | Set it to | Effect | Absent (default) |
+|---|---|---|---|
+| `fail-on` | `critical` \| `major` \| `minor` | Fail when any finding is **at or above** that severity (the engine's `critical < major < minor` ordering) | Non-blocking — findings never fail the check on severity |
+| `max-violations` | an integer `N` | Fail when the total finding count **exceeds** `N` | No volume gate |
+
+```yaml
+      - id: a11y
+        uses: Binclusive/a11y-checker-plugin@main
+        with:
+          fail-on: critical    # optional — block only on critical findings
+          # max-violations: 0  # optional — block on any finding at all
+```
+
+Both use the **same** severity vocabulary as the engine's `check` command — there
+is no separate CI severity map. Leaving both unset keeps the reference,
+always-green advisory behavior.
 
 ### Optional secrets — AI lane & dashboard
 

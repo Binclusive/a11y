@@ -26,6 +26,13 @@ import {
 import { runHookCli } from "./hook";
 import { phoneHome } from "./phone-home";
 import { formatSarif } from "./sarif";
+import {
+  GATE_OFF,
+  type GateConfig,
+  gateExitCode,
+  SEVERITY_ORDER,
+  toGateFinding,
+} from "./severity-gate";
 import type { ComponentResolution, Coverage } from "./resolve-components";
 import type { SuggestResult } from "./suggest";
 
@@ -414,6 +421,7 @@ function renderReport(
     readonly groupHeader: (key: string) => string;
     readonly formatItem: (f: EnrichedFinding) => string;
   },
+  gate: GateConfig = GATE_OFF,
 ): void {
   if (findings.length === 0) {
     console.log(opts.emptyMessage);
@@ -440,9 +448,10 @@ function renderReport(
   const totals = reportTotals(findings);
   for (const line of totals.lines) console.log(line);
 
-  // Exit non-zero only when something the contract BLOCKS fired. A scan that
-  // surfaces warn-only findings is a clean build by the customer's own policy.
-  process.exitCode = totals.blocking > 0 ? 1 : 0;
+  // Default (unset gate): exit non-zero only when something the contract BLOCKS
+  // fired — a warn-only scan is a clean build. When the opt-in gate is set, the
+  // exit reflects the gate (severity threshold / max-violations) instead (#2134).
+  process.exitCode = gateExitCode(findings.map(toGateFinding), gate);
 }
 
 /**
@@ -457,6 +466,7 @@ export async function runCheck(
   sarif = false,
   runId = "local",
   agentOverrides: AgentLaneOverrides = {},
+  gate: GateConfig = GATE_OFF,
 ): Promise<void> {
   const root = resolve(dir);
   const files = await collectTsx(root);
@@ -471,7 +481,7 @@ export async function runCheck(
     // computed on the augmented list and can only reflect the deterministic floor.
     const findings = await augmentWithAgentLane(deterministic, root, process.env, agentOverrides);
     console.log(formatSarif(findings, runId, { root }));
-    process.exitCode = findings.filter((f) => f.enforcement === "block").length > 0 ? 1 : 0;
+    process.exitCode = gateExitCode(findings.map(toGateFinding), gate);
     return;
   }
 
@@ -494,8 +504,7 @@ export async function runCheck(
     // env-gated, so a local `check --json` (no such env) silently skips; a
     // failure here is swallowed inside `phoneHome` and never changes exit code.
     await phoneHome(findings, root, process.env);
-    const blocking = findings.filter((f) => f.enforcement === "block").length;
-    process.exitCode = blocking > 0 ? 1 : 0;
+    process.exitCode = gateExitCode(findings.map(toGateFinding), gate);
     return;
   }
 
@@ -515,12 +524,16 @@ export async function runCheck(
   console.log("");
 
   // Group by file for a readable report.
-  renderReport(findings, {
-    emptyMessage: "No jsx-a11y violations found.",
-    groupKey: (f) => f.file,
-    groupHeader: (file) => relative(root, file),
-    formatItem: (f) => formatFinding(f, root),
-  });
+  renderReport(
+    findings,
+    {
+      emptyMessage: "No jsx-a11y violations found.",
+      groupKey: (f) => f.file,
+      groupHeader: (file) => relative(root, file),
+      formatItem: (f) => formatFinding(f, root),
+    },
+    gate,
+  );
 }
 
 /**
@@ -808,6 +821,23 @@ async function runGen(check: boolean, dirArg: string): Promise<void> {
 const dirArg = Args.text({ name: "dir" });
 const optionalDir = Args.text({ name: "dir" }).pipe(Args.withDefault("."));
 
+// OPT-IN blocking gate (issue #2134), default OFF. `--fail-on` is a choice over
+// the contract's own severity vocabulary (SEVERITY_ORDER) so the flag can never
+// name a severity the contract doesn't; both are `optional` (no default) so an
+// unset gate is the safe state — findings never fail the check on severity/volume.
+const failOnOption = Options.choice("fail-on", SEVERITY_ORDER).pipe(
+  Options.optional,
+  Options.withDescription(
+    "OPT-IN blocking gate (default OFF): fail the check when any finding's severity is at or above this threshold (critical | major | minor). Unset ⇒ non-blocking — findings never fail the check on severity.",
+  ),
+);
+const maxViolationsOption = Options.integer("max-violations").pipe(
+  Options.optional,
+  Options.withDescription(
+    "OPT-IN blocking gate (default OFF): fail the check when the total finding count exceeds N. Unset ⇒ no volume gate.",
+  ),
+);
+
 const checkCommand = Command.make(
   "check",
   {
@@ -815,11 +845,19 @@ const checkCommand = Command.make(
     json: Options.boolean("json"),
     sarif: Options.boolean("sarif"),
     runId: Options.text("run-id").pipe(Options.withDefault("local")),
+    failOn: failOnOption,
+    maxViolations: maxViolationsOption,
   },
-  ({ dir, json, sarif, runId }) => Effect.promise(() => runCheck(dir, json, sarif, runId)),
+  ({ dir, json, sarif, runId, failOn, maxViolations }) =>
+    Effect.promise(() =>
+      runCheck(dir, json, sarif, runId, {}, {
+        failOn: Option.getOrNull(failOn),
+        maxViolations: Option.getOrNull(maxViolations),
+      }),
+    ),
 ).pipe(
   Command.withDescription(
-    "scan .tsx for a11y findings (--json / --sarif: machine-readable output; --run-id names the SARIF run)",
+    "scan .tsx for a11y findings (--json / --sarif: machine-readable output; --run-id names the SARIF run; --fail-on / --max-violations: OPT-IN blocking gate, default off)",
   ),
 );
 
