@@ -3,8 +3,10 @@ import { pathToFileURL } from "node:url";
 import { Args, Command, Options } from "@effect/cli";
 import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import { Effect, Option } from "effect";
+import type { Severity as ContractSeverity } from "@binclusive/a11y-contract";
 import { type AgentLaneOverrides, augmentWithAgentLane } from "./agent-lane";
 import { collectTsx } from "./collect";
+import { contractSeverity } from "./emit-contract";
 // Type-only: the rendered-DOM lane (playwright/@axe-core) is loaded lazily inside
 // `runCheckUrl` so the static `check` path carries no eager browser-stack import
 // and the CI image can ship without it (issue #2133).
@@ -281,6 +283,16 @@ export interface JsonFinding {
   readonly enforcement: "block" | "warn";
   readonly provenance: FindingProvenance;
   readonly wcag: readonly string[];
+  /**
+   * The contract's 3-level severity (`critical`/`major`/`minor`), resolved
+   * through the ONE {@link contractSeverity} mapping so this field can never
+   * disagree with the wire projection or SARIF. Emitted here so downstream
+   * consumers (the CI PR-summary rollup, #2132) count by the canonical contract
+   * severity rather than re-deriving it from `corpus`/axe impact.
+   */
+  readonly severity: ContractSeverity;
+  /** The WCAG success-criterion id the finding maps to (contract `criterion` = the first `wcag` tag), e.g. "1.4.3"; "" when the rule carries no SC. */
+  readonly criterion: string;
   readonly corpus: { readonly tier: string; readonly sc: string | null; readonly orgs: number | null };
   readonly message: string;
 }
@@ -356,6 +368,10 @@ export function buildJsonReport(
     enforcement: f.enforcement,
     provenance: f.provenance,
     wcag: f.wcag,
+    // Resolve severity + criterion through the ONE contract projection so the
+    // report's counts match the wire/SARIF and never re-derive a second mapping.
+    severity: contractSeverity(f),
+    criterion: f.wcag[0] ?? "",
     corpus: jsonCorpus(f.corpus),
     message: f.message,
   }));
