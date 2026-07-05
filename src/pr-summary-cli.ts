@@ -14,15 +14,19 @@
  *
  * Best-effort by design: any missing context, failed read, or failed API call is
  * logged to stderr and skipped — never thrown — so the calling entrypoint still
- * exits 0. The rollup posts through the Action's own `GITHUB_TOKEN` identity, the
- * same identity as the inline comments (no hardcoded bot — #2130's branded bot
- * carries it for free).
+ * exits 0. The rollup posts through the shared identity resolver (issue #2130):
+ * the Binclusive GitHub App when configured, else the Action's own `GITHUB_TOKEN`
+ * — the SAME identity the inline comments post under (both go through
+ * `resolvePostingToken`, so the two comment surfaces never diverge).
  *
  * Env: GITHUB_TOKEN, GITHUB_REPOSITORY ("owner/name"), PR_NUMBER, HEAD_SHA,
  *      GITHUB_STEP_SUMMARY, GITHUB_SERVER_URL, GITHUB_API_URL (all optional; the
- *      job summary needs only GITHUB_STEP_SUMMARY, the comment needs the PR set).
+ *      job summary needs only GITHUB_STEP_SUMMARY, the comment needs the PR set);
+ *      BINCLUSIVE_APP_ID / BINCLUSIVE_APP_PRIVATE_KEY (optional, opt into the
+ *      branded App identity).
  */
 import { appendFileSync, readFileSync } from "node:fs";
+import { resolvePostingToken } from "./github-identity";
 import { type Finding, parseFindings } from "./pr-comment";
 import {
   computeRollup,
@@ -79,14 +83,22 @@ if (summaryPath) {
 }
 
 // ---- 2. Rollup PR comment — only with a PR context -------------------------
-const token = process.env.GITHUB_TOKEN;
 const pr = process.env.PR_NUMBER;
 const api = process.env.GITHUB_API_URL || "https://api.github.com";
 
-if (!token || !repo || !pr) {
-  log("no PR context/token — skipping rollup comment");
+if (!repo || !pr) {
+  log("no PR context — skipping rollup comment");
   process.exit(0);
 }
+
+// Resolve WHO posts once, the SAME resolver the inline comments use, so both
+// surfaces post under one identity. Never throws — degrades to GITHUB_TOKEN.
+const { token, identity } = await resolvePostingToken(process.env, { repo, api }, log);
+if (!token) {
+  log("no posting token (no GitHub App configured and no GITHUB_TOKEN) — skipping rollup comment");
+  process.exit(0);
+}
+log(`posting rollup comment as ${identity}`);
 
 const headers: Record<string, string> = {
   Authorization: `Bearer ${token}`,
