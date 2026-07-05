@@ -24,6 +24,9 @@
  * testable against an in-memory fake.
  */
 
+/** The contract's 3-level severity — the `Severity` enum in `@binclusive/a11y-contract`. */
+export type Severity = "critical" | "major" | "minor";
+
 /** The subset of an a11y finding an inline PR comment is rendered from. */
 export interface Finding {
   readonly ruleId: string;
@@ -31,6 +34,15 @@ export interface Finding {
   readonly line: number;
   readonly message: string;
   readonly wcag?: readonly string[];
+  /**
+   * The finding's contract severity, carried through from the report so the
+   * PR-summary rollup (#2132) can count by it. Optional: it plays no part in
+   * {@link findingKey} or {@link renderBody} — the inline comment is unchanged —
+   * and a report predating the field simply buckets the finding as unknown.
+   */
+  readonly severity?: Severity;
+  /** The WCAG success-criterion id (contract `criterion`), e.g. "1.4.3"; used only by the rollup's by-WCAG breakdown. */
+  readonly criterion?: string;
   /**
    * The CSS selector of the offending rendered element, on axe/DOM findings
    * only (source passes anchor by `file:line` and omit it). It is what
@@ -59,6 +71,11 @@ const MARKER_RE = /<!--\s*binclusive-a11y-agent:(.*?)\s*-->/;
  */
 function hasSelector(selector: string | undefined): selector is string {
   return selector !== undefined && selector.trim() !== "";
+}
+
+/** Narrow an unknown report value to the contract's 3-level severity enum. */
+function isSeverity(value: unknown): value is Severity {
+  return value === "critical" || value === "major" || value === "minor";
 }
 
 /**
@@ -280,6 +297,12 @@ export function parseFindings(raw: unknown): Finding[] {
     // Keep the selector across the boundary — it is what distinguishes co-located
     // same-rule findings in findingKey; dropping it here reintroduces the collision.
     const selector = typeof f.selector === "string" ? f.selector : undefined;
+    // Narrow severity to the contract enum — an unknown/absent value is dropped
+    // (the rollup buckets it as unknown) rather than smuggled through as a string.
+    const severity = isSeverity(f.severity) ? f.severity : undefined;
+    // criterion is the contract's SC id; fall back to the first wcag tag so an
+    // older report (no criterion field) still yields a by-WCAG breakdown.
+    const criterion = typeof f.criterion === "string" && f.criterion !== "" ? f.criterion : wcag?.[0];
     out.push({
       ruleId: f.ruleId,
       file: f.file,
@@ -287,6 +310,8 @@ export function parseFindings(raw: unknown): Finding[] {
       message: typeof f.message === "string" ? f.message : "",
       ...(wcag ? { wcag } : {}),
       ...(selector !== undefined ? { selector } : {}),
+      ...(severity !== undefined ? { severity } : {}),
+      ...(criterion !== undefined ? { criterion } : {}),
     });
   }
   return out;

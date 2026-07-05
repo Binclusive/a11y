@@ -97,6 +97,14 @@ else
   log "no PR context/token — skipping inline comments"
 fi
 
+# ---- 3.5 Consolidated PR summary + rollup (best-effort) -------------------
+# Writes the GitHub Actions job summary UNCONDITIONALLY (visible on the run page
+# even with no PR context — push / manual dispatch) and, when a PR context is
+# present, posts/updates the ONE rollup comment in place (issue #2132). The CLI
+# decides which surfaces apply from its env and always exits 0 — advisory.
+log "writing PR summary + rollup"
+node "$ENGINE_DIR/pr-summary.mjs" "$REPORT" || log "summary step failed (ignored)"
+
 # ---- 4. Emit SARIF for GitHub code-scanning native annotations ------------
 # Render the SAME findings as SARIF 2.1.0 into the workspace. This Action only
 # EMITS the file (a Docker action cannot invoke another action); the consumer's
