@@ -311,19 +311,18 @@ describe("wire is metadata-only and location-keyed", () => {
 
 // ── The `impact` transport extra carries the 4-level axe value, not the 3-level band (#153) ──
 
-describe("wire `impact` is the 4-level axe runtime value, never the 3-level band", () => {
-  // The regression: after the EnrichedFinding→ContractFinding collapse, `impact` was
-  // sourced from the contract's 3-level `severity` band — so a `serious`/`moderate` axe
-  // impact went out as `major`, which the dashboard's parseImpact drops. Restore
-  // origin/main's `impact: f.severity ?? band`: the raw 4-level axe impact when present.
-  it("axe finding with runtime impact → POST `impact` is the 4-level value (`moderate`), not `major`", async () => {
+describe("wire sends the 4-level `impact` only — never the 3-level `severity` band (ADR 0044 slice v(A), #153)", () => {
+  // The engine now speaks impact on the wire: `impact` is always a valid 4-level value
+  // (`critical|serious|moderate|minor|unknown`), and the 3-level `severity` band is no
+  // longer sent at all (CiFindingInput.severity is optional platform-side).
+  it("axe finding with runtime impact → POST `impact` is the 4-level value (`moderate`), and NO `severity`", async () => {
     // `moderate` is the sharp discriminator: contractSeverity maps it to the `major` band,
     // so if `impact` were sourced from the band it would read `major` (invalid 4-level).
     const wire = await capturePost(finding({ provenance: "axe", file: "https://example.com/p", line: 0, selector: "button", severity: "moderate" }), "/root");
     const [occ] = wire.variables.input.findings;
     expect(occ.impact).toBe("moderate");
     expect(occ.impact).not.toBe("major");
-    expect(occ.severity).toBe("major"); // the band still travels on `severity`, unchanged
+    expect(occ.severity).toBeUndefined(); // the band no longer travels on the wire
   });
 
   it("axe finding with `serious` impact → POST `impact` is `serious`", async () => {
@@ -332,12 +331,13 @@ describe("wire `impact` is the 4-level axe runtime value, never the 3-level band
     expect(occ.impact).toBe("serious");
   });
 
-  it("finding with NO axe impact → POST `impact` falls back to the band (non-regressive vs main)", async () => {
-    // Pre-existing platform-wide gap (tracked separately): a finding with no axe impact
-    // sends the 3-level band. This asserts ONLY the non-regressive fallback main already had.
+  it("finding with NO axe impact → POST `impact` falls back to the valid 4-level `\"unknown\"`, never the band", async () => {
+    // A finding with no axe impact (e.g. an agent finding) sends `"unknown"` — the valid
+    // 5th impact value — NOT the 3-level band (`major`), which parseImpact would drop.
     const wire = await capturePost(finding({ file: "/root/src/Button.tsx", line: 12 }), "/root");
     const [occ] = wire.variables.input.findings;
-    expect(occ.impact).toBe(occ.severity);
+    expect(occ.impact).toBe("unknown");
+    expect(occ.severity).toBeUndefined();
   });
 });
 
