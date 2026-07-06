@@ -4,15 +4,17 @@ import { createCodeGraphLookup } from "./codegraph-lookup";
 import { LookupCounter, meterLookup } from "./lookup";
 
 /**
- * These tests drive the REAL vendored code-graph CLI as a subprocess over a real
- * directory (the vendored code-graph's own `src`), so they exercise the actual
- * stdout contract this seam depends on — not a mock. Each spawns tsx + a ts-morph
- * cheap pass (~1-2s), so they carry an explicit per-test timeout.
+ * These tests drive the REAL published `@binclusive/code-graph` CLI as a subprocess
+ * over a real directory (a small `test/fixtures/code-graph-lookup` module), so they
+ * exercise the actual stdout contract this seam depends on — not a mock. Each spawns
+ * a ts-morph cheap pass (~1-2s), so they carry an explicit per-test timeout.
  */
-const CODE_GRAPH_SRC = fileURLToPath(new URL("../code-graph/src", import.meta.url));
+const CODE_GRAPH_SRC = fileURLToPath(
+  new URL("../../test/fixtures/code-graph-lookup", import.meta.url),
+);
 const TIMEOUT = 30_000;
 
-describe("createCodeGraphLookup — structural lookups over the vendored CLI", () => {
+describe("createCodeGraphLookup — structural lookups over the published CLI", () => {
   it(
     "a `file` query returns the module's structural JSON",
     async () => {
