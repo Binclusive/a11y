@@ -21,6 +21,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { augmentWithAgentLane } from "../src/agent-lane";
 import { runCheck } from "../src/cli";
 import { toContractFinding } from "../src/emit-contract";
+import { resolveLocations } from "../src/source-identity";
 import { scan } from "../src/core";
 import { enrichAll } from "../src/evidence";
 import type { Provider } from "../src/runner/provider";
@@ -134,12 +135,15 @@ describe("AI-lane vertical slice (tracer)", () => {
     // Advisory by construction.
     expect(agent.every((f) => f.enforcement === "warn")).toBe(true);
 
-    // Metadata-only wire: the contract projection carries no source locator.
-    const wire = toContractFinding(agent[0]!, "ci-diff");
+    // Metadata-only wire: the contract projection carries no source locator, only
+    // the resolved source fingerprint (path + lineHash + index, no file:line).
+    const location = resolveLocations([agent[0]!]).get(agent[0]!)!;
+    const wire = toContractFinding(agent[0]!, "ci-diff", location);
     expect(wire.provenance).toBe("agent");
     expect(Object.keys(wire)).not.toContain("file");
     expect(Object.keys(wire)).not.toContain("line");
     expect(Object.keys(wire)).not.toContain("ruleId");
+    expect(wire.location.kind).toBe("source");
   });
 
   it("a provider that THROWS still succeeds (exit 0) with just the deterministic floor", async () => {

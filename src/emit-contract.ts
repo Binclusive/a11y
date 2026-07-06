@@ -24,12 +24,14 @@ import {
   Finding as ContractFindingSchema,
   type Finding as ContractFinding,
   type FindingPayload,
+  type Location as ContractLocation,
   parseFindingPayload,
   type Provenance as ContractProvenance,
   type Severity as ContractSeverity,
 } from "@binclusive/a11y-contract";
 import type { FindingProvenance } from "./core";
 import { evidenceSeverity, type EnrichedFinding, type Severity as AxeImpact } from "./evidence";
+import { type LocationOptions, resolveLocations } from "./source-identity";
 
 /**
  * The ONE axe-impact -> contract-severity mapping. axe's runtime vocabulary has
@@ -86,13 +88,25 @@ export function hasSelector(selector: string | undefined): selector is string {
 }
 
 /**
- * Project one enriched local finding onto the contract DTO, dropping every
- * source locator. `element` falls back to the rule id when there is no rendered
- * DOM selector — a source-static pass has no live element, and the rule id is
- * the honest non-source locator for the occurrence.
+ * Project one enriched local finding onto the contract DTO, given its already
+ * resolved wire {@link ContractLocation}. Every source locator (`file`, `line`,
+ * `ruleId`, raw line content) is dropped: the ONLY location that crosses is the
+ * pre-computed `location` — a page `url`, or a source `{ path, lineHash, index }`
+ * fingerprint carrying neither the line number nor the content (ADR 0042). `index`
+ * disambiguation is a batch property, so the location is resolved by the batch
+ * ({@link toFindingPayload}) and threaded in here, keeping this projection pure.
+ *
+ * `element` falls back to the rule id when there is no rendered DOM selector — a
+ * source-static pass has no live element, and the rule id is the honest non-source
+ * locator for the occurrence.
  */
-export function toContractFinding(f: EnrichedFinding, scope: string): ContractFinding {
+export function toContractFinding(
+  f: EnrichedFinding,
+  scope: string,
+  location: ContractLocation,
+): ContractFinding {
   const base = {
+    location,
     criterion: f.wcag[0] ?? "",
     severity: contractSeverity(f),
     element: hasSelector(f.selector) ? f.selector : f.ruleId,
@@ -103,12 +117,7 @@ export function toContractFinding(f: EnrichedFinding, scope: string): ContractFi
   if (toContractProvenance(f.provenance) === "agent") {
     return { provenance: "agent", ...base, rationale: f.message };
   }
-  // ADR 0041 §G: the corpus left the engine, so frequency is no longer known
-  // here — it is platform-derived and read-joined onto the ticket. The published
-  // `@binclusive/a11y-contract` still REQUIRES `tier` (a string), so we emit a
-  // frozen `"unknown"` placeholder rather than deriving it. PARKED: once Can's OTP
-  // session republishes the contract with `tier` removed, this constant drops too.
-  return { provenance: "deterministic", ...base, tier: "unknown" };
+  return { provenance: "deterministic", ...base };
 }
 
 /**
@@ -116,9 +125,28 @@ export function toContractFinding(f: EnrichedFinding, scope: string): ContractFi
  * re-parse it through the contract's own schema. The parse is the boundary
  * guarantee — a payload that drifts from the metadata-only shape throws here
  * (`ZodError`) rather than reaching the platform.
+ *
+ * Locations are resolved for the WHOLE batch up front — a source finding's
+ * `index` disambiguates identical line-content within one file, so it can only be
+ * assigned with the batch in hand (ADR 0042). `options` injects the repo root
+ * (for the relative `path`) and the line-content source (default: read from disk).
  */
-export function toFindingPayload(findings: readonly EnrichedFinding[], scope: string): FindingPayload {
-  return parseFindingPayload({ findings: findings.map((f) => toContractFinding(f, scope)) });
+export function toFindingPayload(
+  findings: readonly EnrichedFinding[],
+  scope: string,
+  options?: LocationOptions,
+): FindingPayload {
+  const locations = resolveLocations(findings, options);
+  return parseFindingPayload({
+    findings: findings.map((f) => toContractFinding(f, scope, mustLocate(locations, f))),
+  });
+}
+
+/** A finding is always in the resolved map ({@link resolveLocations} covers the batch). */
+function mustLocate(locations: ReadonlyMap<EnrichedFinding, ContractLocation>, f: EnrichedFinding): ContractLocation {
+  const location = locations.get(f);
+  if (location === undefined) throw new Error("finding missing from resolved location map");
+  return location;
 }
 
 /** A lenient emit that projects each finding independently, keeping the valid ones. */
@@ -139,24 +167,34 @@ export interface LenientPayload {
  * {@link toContractFinding} + the contract's own `Finding` schema, so there is no
  * second projection and no second wire schema.
  */
-export function toFindingPayloadLenient(findings: readonly EnrichedFinding[], scope: string): LenientPayload {
+export function toFindingPayloadLenient(
+  findings: readonly EnrichedFinding[],
+  scope: string,
+  options?: LocationOptions,
+): LenientPayload {
+  const locations = resolveLocations(findings, options);
   const projected: ContractFinding[] = [];
   let dropped = 0;
   for (const f of findings) {
     // Guard the WHOLE projection, not just the parse: a malformed finding can
     // throw inside toContractFinding (a bad wcag/corpus shape) as easily as it
     // can fail the schema. Either way the one finding is dropped, never the run.
-    const contract = tryProject(f, scope);
+    const contract = tryProject(f, scope, locations.get(f));
     if (contract === null) dropped += 1;
     else projected.push(contract);
   }
   return { payload: parseFindingPayload({ findings: projected }), dropped };
 }
 
-/** Project one finding, returning `null` if it throws or fails the contract. */
-function tryProject(f: EnrichedFinding, scope: string): ContractFinding | null {
+/** Project one finding, returning `null` if it throws, has no location, or fails the contract. */
+function tryProject(
+  f: EnrichedFinding,
+  scope: string,
+  location: ContractLocation | undefined,
+): ContractFinding | null {
+  if (location === undefined) return null;
   try {
-    const parsed = ContractFindingSchema.safeParse(toContractFinding(f, scope));
+    const parsed = ContractFindingSchema.safeParse(toContractFinding(f, scope, location));
     return parsed.success ? parsed.data : null;
   } catch {
     return null;

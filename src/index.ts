@@ -99,6 +99,15 @@ export {
   toFindingPayload,
   toFindingPayloadLenient,
 } from "./emit-contract";
+export {
+  diskLineSource,
+  isPageFinding,
+  type LineSource,
+  lineContentHash,
+  type LocationOptions,
+  normalizeLine,
+  resolveLocations,
+} from "./source-identity";
 export { formatSarif, severityToLevel } from "./sarif";
 export {
   type ComponentSuggestion,
