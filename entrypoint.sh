@@ -108,14 +108,13 @@ fi
 # ---- 2. Emit the findings JSON to stdout ----------------------------------
 cat "$REPORT"
 
-# ---- 3. Post inline PR review comments (best-effort) ----------------------
-if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] \
-   && [ -n "${PR_NUMBER:-}" ] && [ -n "${HEAD_SHA:-}" ]; then
-  log "posting inline review comments to PR #$PR_NUMBER"
-  node "$ENGINE_DIR/pr-comment.mjs" "$REPORT" || log "comment step failed (ignored)"
-else
-  log "no PR context/token — skipping inline comments"
-fi
+# ---- 3. Report findings on the platform's native review surface -----------
+# Routed through the reporter-adapter seam (issue #2235): the selected platform
+# adapter (A11Y_PLATFORM, default `github`) resolves the post-context from env and
+# posts — the GitHub adapter reconciles inline PR review comments when a PR context
+# + credential are present, and no-ops otherwise (opt-in). Best-effort; the CLI
+# always exits 0 (advisory), so the output above and the surfaces below still run.
+node "$ENGINE_DIR/report.mjs" "$REPORT" || log "report step failed (ignored)"
 
 # ---- 3.5 Consolidated PR summary + rollup (best-effort) -------------------
 # Writes the GitHub Actions job summary UNCONDITIONALLY (visible on the run page

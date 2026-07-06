@@ -1,8 +1,8 @@
 /**
  * The one identity resolver both PR-comment surfaces authenticate through (issue
- * #2130). Inline per-finding comments (`pr-comment-cli.ts`) and the single rollup
- * comment (`pr-summary-cli.ts`) MUST post under the *same* GitHub identity, so the
- * auth decision lives here once rather than duplicated at each callsite.
+ * #2130). Inline per-finding comments (the GitHub reporter, `reporter/github-adapter.ts`)
+ * and the single rollup comment (`pr-summary-cli.ts`) MUST post under the *same*
+ * GitHub identity, so the auth decision lives here once rather than duplicated at each callsite.
  *
  * Default-safe by construction — the load-bearing invariant:
  *
