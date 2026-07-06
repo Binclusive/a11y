@@ -5,11 +5,13 @@
 # them, prints the findings JSON to stdout, and — when a PR context + token are
 # present — posts each finding as an inline PR review comment.
 #
-# Exits 0 BY DEFAULT: this gate is advisory. A blocking finding sets the engine's
-# own exit code to 1; we deliberately swallow it so the workflow never fails —
-# UNLESS a customer opts into the severity/volume gate via the FAIL_ON /
-# MAX_VIOLATIONS inputs (#2134), in which case the engine's non-zero exit is
-# propagated (see GATE_EXIT below) so the check fails. Default stays non-blocking.
+# Exits 0 BY DEFAULT: this gate is advisory. Non-blocking is now a FIRST-CLASS
+# engine mode (issue #2236) — the scan runs `check … --ci`, so the engine itself
+# returns exit 0 even with blocking findings rather than the runner swallowing a
+# non-zero exit with `|| true`. A customer opts back into a failing check via the
+# FAIL_ON / MAX_VIOLATIONS inputs (#2134): those flags still override `--ci`, and
+# the engine's non-zero exit is then propagated (see GATE_EXIT below). Default
+# stays non-blocking, owned by the engine.
 set -u
 
 ENGINE_DIR="${ENGINE_DIR:-/engine}"
@@ -87,8 +89,10 @@ if [ -n "$FILES" ]; then
   SCAN_TARGET="$STAGE"
   # The --json scan is the authoritative gate run: `check` writes the report and
   # THEN sets its exit from the (opt-in) gate, so REPORT is complete even on a
-  # non-zero gate exit. GATE_ARGS is empty by default → exit 0 → non-blocking.
-  node "$ENGINE_DIR/bin/a11y.mjs" check "$STAGE" --json $GATE_ARGS > "$REPORT" 2>/dev/null
+  # non-zero gate exit. `--ci` makes exit 0 first-class (non-blocking baseline,
+  # #2236); GATE_ARGS (FAIL_ON / MAX_VIOLATIONS) overrides to a non-zero exit when
+  # opted in. Empty GATE_ARGS → the advisory exit-0 default, owned by the engine.
+  node "$ENGINE_DIR/bin/a11y.mjs" check "$STAGE" --json --ci $GATE_ARGS > "$REPORT" 2>/dev/null
   GATE_EXIT=$?
 else
   # Fallback: no diff context — scan a mounted tree wholesale (default /src).
@@ -96,7 +100,7 @@ else
   if [ -d "$SCAN_DIR" ]; then
     log "no changed-file context; scanning $SCAN_DIR"
     SCAN_TARGET="$SCAN_DIR"
-    node "$ENGINE_DIR/bin/a11y.mjs" check "$SCAN_DIR" --json $GATE_ARGS > "$REPORT" 2>/dev/null
+    node "$ENGINE_DIR/bin/a11y.mjs" check "$SCAN_DIR" --json --ci $GATE_ARGS > "$REPORT" 2>/dev/null
     GATE_EXIT=$?
   else
     log "nothing to scan (no changed files and no $SCAN_DIR)"
@@ -137,7 +141,7 @@ node "$ENGINE_DIR/pr-summary.mjs" "$REPORT" || log "summary step failed (ignored
 SARIF_OUT="${SARIF_OUTPUT:-$WORKSPACE/a11y.sarif}"
 RUN_ID="${GITHUB_RUN_ID:-${HEAD_SHA:-local}}"
 if [ -n "$SCAN_TARGET" ]; then
-  node "$ENGINE_DIR/bin/a11y.mjs" check "$SCAN_TARGET" --sarif --run-id "$RUN_ID" > "$SARIF_OUT" 2>/dev/null || true
+  node "$ENGINE_DIR/bin/a11y.mjs" check "$SCAN_TARGET" --format sarif --ci --run-id "$RUN_ID" > "$SARIF_OUT" 2>/dev/null || true
 fi
 # Safety net: if there was no scan target (no diff + no /src) or the render came
 # back empty, still write a valid empty SARIF run so the upload step succeeds.

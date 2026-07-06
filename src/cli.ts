@@ -790,26 +790,68 @@ const maxViolationsOption = Options.integer("max-violations").pipe(
   ),
 );
 
+/** The `check` command's machine-readable output formats. */
+const OUTPUT_FORMATS = ["text", "json", "sarif"] as const;
+type OutputFormat = (typeof OUTPUT_FORMATS)[number];
+
+// `--format` is the CANONICAL output selector (issue #2236) — one flag, one of
+// text | json | sarif — the generic `--ci` mode and every CI config point at.
+// The legacy `--json` / `--sarif` booleans remain as back-compat aliases (the
+// shipped GitHub Action and older docs still pass them); an explicit `--format`
+// wins, else the booleans resolve with sarif taking precedence over json, which
+// mirrors runCheck's own sarif-over-json precedence.
+const formatOption = Options.choice("format", OUTPUT_FORMATS).pipe(
+  Options.optional,
+  Options.withDescription(
+    "Output format: text (human report, default) | json | sarif (SARIF 2.1.0 for code-scanning). Canonical machine-readable selector; --json / --sarif remain as aliases.",
+  ),
+);
+
+// The generic CI runner mode (issue #2236): NON-BLOCKING by default. The run
+// exits 0 even when contract-blocking findings are present, so any CI can emit
+// and consume the SARIF/JSON artifact without the check failing. This is a
+// first-class engine mode, not a shell `|| true` swallow — opt back into a
+// failing exit with --fail-on / --max-violations, which still apply here.
+const ciOption = Options.boolean("ci").pipe(
+  Options.withDescription(
+    "Generic CI runner mode: NON-BLOCKING — always exit 0 even with blocking findings, so any CI/CD can consume the SARIF/JSON artifact without failing the build. Combine with --format sarif|json. Opt into a failing exit via --fail-on / --max-violations.",
+  ),
+);
+
+/**
+ * Resolve the one output format from the canonical `--format` and the legacy
+ * `--json` / `--sarif` aliases. Explicit `--format` wins; otherwise sarif > json
+ * > text (runCheck applies the same sarif-over-json precedence internally).
+ */
+function resolveFormat(format: Option.Option<OutputFormat>, json: boolean, sarif: boolean): OutputFormat {
+  return Option.getOrElse(format, (): OutputFormat => (sarif ? "sarif" : json ? "json" : "text"));
+}
+
 const checkCommand = Command.make(
   "check",
   {
     dir: dirArg,
     json: Options.boolean("json"),
     sarif: Options.boolean("sarif"),
+    format: formatOption,
+    ci: ciOption,
     runId: Options.text("run-id").pipe(Options.withDefault("local")),
     failOn: failOnOption,
     maxViolations: maxViolationsOption,
   },
-  ({ dir, json, sarif, runId, failOn, maxViolations }) =>
-    Effect.promise(() =>
-      runCheck(dir, json, sarif, runId, {}, {
+  ({ dir, json, sarif, format, ci, runId, failOn, maxViolations }) => {
+    const resolved = resolveFormat(format, json, sarif);
+    return Effect.promise(() =>
+      runCheck(dir, resolved === "json", resolved === "sarif", runId, {}, {
         failOn: Option.getOrNull(failOn),
         maxViolations: Option.getOrNull(maxViolations),
+        advisory: ci,
       }),
-    ),
+    );
+  },
 ).pipe(
   Command.withDescription(
-    "scan .tsx for a11y findings (--json / --sarif: machine-readable output; --run-id names the SARIF run; --fail-on / --max-violations: OPT-IN blocking gate, default off)",
+    "scan .tsx for a11y findings (--format text|json|sarif, canonical; --json / --sarif aliases; --ci: non-blocking exit-0 runner mode; --run-id names the SARIF run; --fail-on / --max-violations: OPT-IN blocking gate, default off)",
   ),
 );
 
