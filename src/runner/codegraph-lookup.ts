@@ -3,9 +3,9 @@
  *
  * This fills the {@link LookupTool} interface `lookup.ts` left open: it answers a
  * reasoner's structural questions ("which module is this / what does it export",
- * "who calls this function") by shelling out to the VENDORED code-graph CLI
- * (`src/code-graph`) and returning its deterministic JSON. Calling it as a
- * subprocess — rather than importing its internals — keeps the boundary at
+ * "who calls this function") by shelling out to the published
+ * `@binclusive/code-graph` CLI and returning its deterministic JSON. Calling it as
+ * a subprocess — rather than importing its internals — keeps the boundary at
  * code-graph's stdout contract: one JSON document per query, nothing else.
  *
  * The tool spends NO model tokens, so it is metered on the count-based per-finding
@@ -16,20 +16,22 @@
  * throw. The AI lane is non-blocking; a structure lookup that can't answer is a
  * gap the reasoner works around, not an error that ends the pass.
  *
- * Invocation mirrors `bin/a11y.mjs`: `node --import tsx <cli> …`, with both the
- * tsx loader and the CLI resolved from THIS file, so the customer's cwd never
- * matters and the vendored source runs the same in the Docker image as locally.
+ * The CLI is resolved from the installed `@binclusive/code-graph` dependency, so
+ * the customer's cwd never matters and the same compiled artifact runs in the
+ * Docker image as locally. The published package ships a compiled ESM bin
+ * (`dist/index.js`), so it runs under plain `node` — no tsx loader needed.
  */
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import type { LookupQuery, LookupResult, LookupTool } from "./lookup";
 
 const require = createRequire(import.meta.url);
-/** tsx's self-registering loader, resolved from this package's own deps. */
-const TSX_ENTRY = pathToFileURL(require.resolve("tsx")).href;
-/** The vendored code-graph CLI entry, resolved relative to this file. */
-const CODE_GRAPH_CLI = fileURLToPath(new URL("../code-graph/src/index.ts", import.meta.url));
+/**
+ * The published code-graph CLI entry. Resolved by subpath from the installed
+ * dependency — the package exposes its bin as `dist/index.js` (no `main`/`exports`
+ * map), so the explicit subpath is how a consumer reaches it.
+ */
+const CODE_GRAPH_CLI = require.resolve("@binclusive/code-graph/dist/index.js");
 
 /** A slow subprocess must not stall a pass; the pull loop stays responsive. */
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -155,7 +157,7 @@ function runCli(
   timeoutMs: number,
 ): Promise<{ readonly code: number; readonly stdout: string }> {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, ["--import", TSX_ENTRY, CODE_GRAPH_CLI, ...argv], {
+    const child = spawn(process.execPath, [CODE_GRAPH_CLI, ...argv], {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
