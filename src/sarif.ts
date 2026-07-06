@@ -16,6 +16,7 @@ import { relative } from "node:path";
 import type { Severity as ContractSeverity } from "@binclusive/a11y-contract";
 import { contractSeverity, hasSelector, impactToSeverity, toContractProvenance } from "./emit-contract";
 import { evidenceHelpUrl, type EnrichedFinding } from "./evidence";
+import { type LocationOptions, resolveLocations } from "./source-identity";
 
 // Re-export the severity mapping so a consumer wiring SARIF has the whole
 // severity story from one module. `impactToSeverity` is the axe -> contract
@@ -77,14 +78,25 @@ function findingLocations(f: EnrichedFinding, root: string | undefined): SarifLo
  * checker lanes stay distinguishable once both feed SARIF. `opts.root`, when
  * given, relativizes source-file uris against the scanned root — the form
  * GitHub code-scanning needs to anchor annotations on the PR diff.
+ *
+ * A source result also carries `partialFingerprints.primaryLocationLineHash` so
+ * code-scanning tracks the alert across commits as lines move (ADR 0042's "free
+ * consistency win"): the hash is the SAME source-identity fingerprint the wire
+ * contract emits — see the results map for why they can never disagree.
  */
 export function formatSarif(
   findings: readonly EnrichedFinding[],
   runId: string,
-  opts: { readonly root?: string } = {},
+  opts: LocationOptions = {},
 ): string {
   const ruleIds = [...new Set(findings.map((f) => f.ruleId))];
   const ruleById = new Map(findings.map((f) => [f.ruleId, f]));
+
+  // Resolve every finding's identity through the ONE hash function the wire
+  // contract uses (`resolveLocations`), so SARIF and the emitted identity can
+  // never disagree on a line's hash. Page findings resolve to a `page` location
+  // (no line hash) and honestly get no `primaryLocationLineHash`.
+  const located = resolveLocations(findings, opts);
 
   const sarif = {
     $schema:
@@ -107,13 +119,23 @@ export function formatSarif(
             }),
           },
         },
-        results: findings.map((f) => ({
-          ruleId: f.ruleId,
-          level: severityToLevel(contractSeverity(f)),
-          message: { text: f.message },
-          locations: findingLocations(f, opts.root),
-          properties: { provenance: toContractProvenance(f.provenance) },
-        })),
+        results: findings.map((f) => {
+          const loc = located.get(f);
+          return {
+            ruleId: f.ruleId,
+            level: severityToLevel(contractSeverity(f)),
+            message: { text: f.message },
+            locations: findingLocations(f, opts.root),
+            // `<lineHash>:<index>` — the content hash lets code-scanning re-match the
+            // alert when the line moves; `index` disambiguates identical lines within a
+            // file, exactly as the finding identity does. A page finding has no source
+            // line, so it carries no fingerprint (never fabricate one).
+            ...(loc?.kind === "source"
+              ? { partialFingerprints: { primaryLocationLineHash: `${loc.lineHash}:${loc.index}` } }
+              : {}),
+            properties: { provenance: toContractProvenance(f.provenance) },
+          };
+        }),
         automationDetails: {
           id: `binclusive-a11y/${runId}`,
         },
