@@ -230,6 +230,27 @@ unconfigured, the id/key is wrong, or the token mint fails for any reason, the
 Action **falls back to `github-token` and still exits 0** — a failed brand is
 never a failed check.
 
+## Use it on any other CI/CD (generic `--ci` mode)
+
+Not on GitHub? The engine runs the same scan on **CircleCI, Jenkins, Drone, or a
+bare `docker run`** with no native adapter — just run the image and emit a standard
+artifact:
+
+```sh
+docker run --rm -v "$PWD:/workspace" -w /workspace -e A11Y_PLATFORM=null \
+  ghcr.io/binclusive/a11y-checker:latest \
+  check /workspace/src --ci --format sarif > a11y.sarif
+```
+
+`--format sarif` emits a valid **SARIF 2.1.0** log (or `--format json` for the raw
+report); `--ci` makes the **non-blocking exit-0 a first-class engine mode** — the
+run always exits 0 even with blocking findings, so any platform can consume the
+artifact without failing the build. With no PR/MR context nothing is posted and the
+artifacts still emit. Opt into a failing build with `--fail-on` / `--max-violations`.
+
+Copy-paste CircleCI / Jenkins / Drone snippets, and the config-scaffold pattern that
+native platform adapters build on, are in **[`docs/CI.md`](docs/CI.md)**.
+
 ---
 
 ## Dig deeper
@@ -237,6 +258,7 @@ never a failed check.
 | If you want… | Open / read |
 |---|---|
 | **Adopt it with your own design system** | **`WALKTHROUGH.md`** |
+| **Run it on any CI/CD (CircleCI / Jenkins / Drone / generic)** | **`docs/CI.md`** |
 | **Audit a live URL or HTML page (non-React)** | **`docs/AUDIT-URL.md`** |
 | The pitch + the moat, with numbers | `docs/decks/numbers.html` |
 | Real findings on real OSS projects | `docs/decks/showcase.html` |

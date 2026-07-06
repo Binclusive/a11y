@@ -66,3 +66,52 @@ describe("check — opt-in blocking gate wiring", () => {
     expect(await runCheck([scanDir, "--json", "--fail-on", "critical"])).toBe(1);
   });
 });
+
+describe("check — generic --ci mode (#2236): first-class non-blocking exit-0", () => {
+  it("findings present ⇒ exit 0 under --ci (the same fixture that exits 1 by default)", async () => {
+    // The fixture is enforcement=block, so the plain default exits 1; `--ci` makes
+    // the non-blocking exit-0 a first-class engine mode, not a shell `|| true`.
+    expect(await runCheck([scanDir, "--json"])).toBe(1);
+    expect(await runCheck([scanDir, "--json", "--ci"])).toBe(0);
+  });
+
+  it("--ci emits SARIF and still exits 0 (--format sarif)", async () => {
+    expect(await runCheck([scanDir, "--format", "sarif", "--ci"])).toBe(0);
+  });
+
+  it("--ci is overridden by the opt-in gate — a runner can still fail the build", async () => {
+    // Non-blocking is the default, but --fail-on / --max-violations re-enable a
+    // failing exit even under --ci.
+    expect(await runCheck([scanDir, "--json", "--ci", "--fail-on", "critical"])).toBe(1);
+    expect(await runCheck([scanDir, "--json", "--ci", "--max-violations", "0"])).toBe(1);
+  });
+});
+
+describe("check — --format canonical output selector (#2236)", () => {
+  it("--format sarif emits a valid SARIF 2.1.0 log to stdout", async () => {
+    const lines: string[] = [];
+    const logSpy = vi.spyOn(console, "log").mockImplementation((...a) => {
+      lines.push(a.map(String).join(" "));
+    });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    process.exitCode = undefined;
+    try {
+      await Effect.runPromiseExit(
+        runCli(["node", "a11y-checker", "check", scanDir, "--format", "sarif", "--ci"]).pipe(
+          Effect.provide(NodeContext.layer),
+        ),
+      );
+    } finally {
+      logSpy.mockRestore();
+      errSpy.mockRestore();
+    }
+    const sarif = JSON.parse(lines.join("\n"));
+    expect(sarif.version).toBe("2.1.0");
+    expect(Array.isArray(sarif.runs)).toBe(true);
+    expect(sarif.runs[0].tool.driver.name).toBe("Binclusive");
+  });
+
+  it("--format json matches the legacy --json output (alias equivalence)", async () => {
+    expect(await runCheck([scanDir, "--format", "json"])).toBe(1);
+  });
+});
