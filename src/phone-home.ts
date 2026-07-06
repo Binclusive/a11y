@@ -43,6 +43,22 @@ const DEFAULT_INGEST_URL = "https://kontrol.binclusive.io/graphql";
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
+ * One occurrence on the wire: the metadata-only contract `Finding` the engine's emit
+ * path projects, PLUS `impact` — a Kontrol transport extra the moat contract omits.
+ *
+ * `impact` carries the axe runtime's 4-level value (`critical|serious|moderate|minor`),
+ * which Kontrol's `CiFindingInput` and the dashboard's `parseImpact` require; the contract
+ * `severity` is deliberately a 3-level band and is NOT a valid `impact` (`major` is dropped
+ * by the UI). The two travel together — a bare `ContractFinding` cannot represent the wire
+ * occurrence, so the 4-level value can never be silently lost to the band again (#153).
+ */
+interface EnvelopeFinding {
+  readonly contract: ContractFinding;
+  /** 4-level axe runtime impact when the finding carried one, else the 3-level band. */
+  readonly impact: string;
+}
+
+/**
  * The ingest envelope — ONE per provenance, because Kontrol's
  * `ingestExternalFindings` declares `provenance` at the envelope level, not
  * per-finding. `scannedTargets` is declared independently of `findings` so
@@ -56,12 +72,13 @@ export interface IngestEnvelope {
   readonly scope: string;
   readonly scannedTargets: readonly string[];
   /**
-   * The occurrences on the wire — the SAME metadata-only `@binclusive/a11y-contract`
-   * `Finding` the engine's emit path projects, so there is ONE wire projection, not a
-   * phone-home-private second one. Each carries a `location` (page `url` OR source
-   * `{path,lineHash,index}` fingerprint), never a `file:line` (ADR 0042).
+   * The occurrences on the wire — each pairs the SAME metadata-only
+   * `@binclusive/a11y-contract` `Finding` the engine's emit path projects (ONE wire
+   * projection, not a phone-home-private second one) with its transport `impact`.
+   * Each contract carries a `location` (page `url` OR source `{path,lineHash,index}`
+   * fingerprint), never a `file:line` (ADR 0042).
    */
-  readonly findings: readonly ContractFinding[];
+  readonly findings: readonly EnvelopeFinding[];
   /** ISO-8601 timestamp the run observed these occurrences (envelope-level: one run). */
   readonly seenAt: string;
 }
@@ -196,9 +213,18 @@ export function assembleEnvelopes(
   scannedTargets: readonly string[],
   seenAt: string,
 ): IngestEnvelope[] {
-  const { payload } = toFindingPayloadLenient(findings, config.scope, { root });
+  const { payload, sources } = toFindingPayloadLenient(findings, config.scope, { root });
 
-  const envelope = (provenance: ContractProvenance, items: readonly ContractFinding[]): IngestEnvelope => ({
+  // Pair each wire finding with its source's 4-level axe impact BEFORE the contract's
+  // 3-level band is all that's left. `sources[i]` is the enriched finding `payload.findings[i]`
+  // was projected from (1:1, drops applied). Reproduces origin/main's `impact: f.severity ?? band`
+  // — the raw axe runtime impact when present, else the band (`contract.severity`) as the fallback.
+  const occurrences: EnvelopeFinding[] = payload.findings.map((contract, i) => ({
+    contract,
+    impact: sources[i]?.severity ?? contract.severity,
+  }));
+
+  const envelope = (provenance: ContractProvenance, items: readonly EnvelopeFinding[]): IngestEnvelope => ({
     orgID: config.orgID,
     projectID: config.projectID,
     auditID: config.auditID,
@@ -209,8 +235,8 @@ export function assembleEnvelopes(
     seenAt,
   });
 
-  const deterministic = payload.findings.filter((f) => f.provenance === "deterministic");
-  const agent = payload.findings.filter((f) => f.provenance === "agent");
+  const deterministic = occurrences.filter((o) => o.contract.provenance === "deterministic");
+  const agent = occurrences.filter((o) => o.contract.provenance === "agent");
 
   const envelopes: IngestEnvelope[] = [];
   if (deterministic.length > 0) envelopes.push(envelope("deterministic", deterministic));
@@ -264,18 +290,20 @@ function toInputVariables(envelope: IngestEnvelope) {
     provenance: envelope.provenance,
     scope: envelope.scope,
     scannedTargets: envelope.scannedTargets,
-    findings: envelope.findings.map((f) => ({
+    findings: envelope.findings.map(({ contract, impact }) => ({
       // The location union — page url or source fingerprint — is what the platform
       // stores as a real Page()/Source(); no bare `url` arm, so source never fakes a page.
-      location: f.location,
-      criterion: f.criterion,
-      element: f.element,
-      severity: f.severity,
-      evidence: f.evidence,
-      description: f.evidence,
-      // `impact` mirrors the contract severity band: the axe 4-level runtime impact is
-      // deliberately NOT on the moat contract, so the band is the honest wire value.
-      impact: f.severity,
+      location: contract.location,
+      criterion: contract.criterion,
+      element: contract.element,
+      severity: contract.severity,
+      evidence: contract.evidence,
+      description: contract.evidence,
+      // `impact` is the axe 4-level runtime value (`critical|serious|moderate|minor`) when
+      // the finding carried one, else the 3-level band. The moat contract deliberately omits
+      // it, so it is carried as a transport extra — the band alone (`major`) is invalid 4-level
+      // and the dashboard's parseImpact would drop the ticket (#153 regression).
+      impact,
       recommendation: "",
       seenAt: envelope.seenAt,
     })),

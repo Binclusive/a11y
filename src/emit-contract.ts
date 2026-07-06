@@ -154,6 +154,14 @@ export interface LenientPayload {
   readonly payload: FindingPayload;
   /** How many findings failed the contract re-parse and were dropped. */
   readonly dropped: number;
+  /**
+   * The enriched sources that SURVIVED projection, in `payload.findings` order (1:1).
+   * The moat contract deliberately narrows the 4-level axe impact down to a 3-level
+   * band, so a transport layer that must send the raw 4-level value (Kontrol's
+   * `impact` extra) reads it off the paired source here — no second projection, and
+   * no widening of the wire contract.
+   */
+  readonly sources: readonly EnrichedFinding[];
 }
 
 /**
@@ -174,6 +182,7 @@ export function toFindingPayloadLenient(
 ): LenientPayload {
   const locations = resolveLocations(findings, options);
   const projected: ContractFinding[] = [];
+  const sources: EnrichedFinding[] = [];
   let dropped = 0;
   for (const f of findings) {
     // Guard the WHOLE projection, not just the parse: a malformed finding can
@@ -181,9 +190,14 @@ export function toFindingPayloadLenient(
     // can fail the schema. Either way the one finding is dropped, never the run.
     const contract = tryProject(f, scope, locations.get(f));
     if (contract === null) dropped += 1;
-    else projected.push(contract);
+    else {
+      // Push in lockstep so `sources[i]` is the source `payload.findings[i]` came
+      // from — the alignment a transport layer relies on to recover a source-only field.
+      projected.push(contract);
+      sources.push(f);
+    }
   }
-  return { payload: parseFindingPayload({ findings: projected }), dropped };
+  return { payload: parseFindingPayload({ findings: projected }), dropped, sources };
 }
 
 /** Project one finding, returning `null` if it throws, has no location, or fails the contract. */
