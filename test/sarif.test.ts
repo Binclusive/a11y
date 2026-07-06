@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { enrich } from "../src/evidence";
 import type { Finding } from "../src/core";
 import { formatSarif, severityToLevel } from "../src/sarif";
+import { lineContentHash, resolveLocations } from "../src/source-identity";
 
 /**
  * SARIF is a LOCAL renderer: it reads the rich source-anchored finding (needs
@@ -80,5 +81,62 @@ describe("formatSarif over the local finding", () => {
     const f = enrich(raw({ provenance: "axe", file: "https://x.com/page", line: 0, severity: "serious" }));
     const sarif = JSON.parse(formatSarif([f], "r", { root: "/work/stage" }));
     expect(sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri).toBe("https://x.com/page");
+  });
+});
+
+describe("partialFingerprints.primaryLocationLineHash (code-scanning alert tracking, ADR 0042)", () => {
+  // Inject the offending line's content so the hash is deterministic without a real
+  // file on disk — the SARIF renderer resolves identity through the same lineSource.
+  const lineAt = (content: string, line: number) => ({
+    lineSource: () => Array.from({ length: line }, (_, i) => (i === line - 1 ? content : "")),
+  });
+
+  it("carries a source finding's line-content hash (with the identity index) as the fingerprint", () => {
+    const content = '  <img src="hero.png" />';
+    const f = enrich(raw({ file: "src/Nav.tsx", line: 3 }));
+    const result = JSON.parse(formatSarif([f], "r", lineAt(content, 3))).runs[0].results[0];
+    expect(result.partialFingerprints.primaryLocationLineHash).toBe(`${lineContentHash(content)}:0`);
+  });
+
+  it("is the SAME hash the wire finding identity resolves — SARIF and identity can't disagree", () => {
+    const f = enrich(raw({ file: "src/Nav.tsx", line: 3 }));
+    const opts = lineAt('  <label htmlFor="x" />', 3);
+    const identity = resolveLocations([f], opts).get(f);
+    if (identity?.kind !== "source") throw new Error("expected a source location");
+    const fp = JSON.parse(formatSarif([f], "r", opts)).runs[0].results[0].partialFingerprints
+      .primaryLocationLineHash;
+    expect(fp).toBe(`${identity.lineHash}:${identity.index}`);
+  });
+
+  it("disambiguates two findings with identical line content by index (:0 then :1, ordered by source line)", () => {
+    const content = "<td></td>";
+    // line 5 and line 10 share (path, lineHash); index is assigned by ascending line,
+    // so the emit order below (line 10 first) must NOT decide the index.
+    const opts = {
+      lineSource: () => Array.from({ length: 10 }, (_, i) => (i === 4 || i === 9 ? content : "")),
+    };
+    const fs = [
+      enrich(raw({ file: "src/Grid.tsx", line: 10 })),
+      enrich(raw({ file: "src/Grid.tsx", line: 5 })),
+    ];
+    const results = JSON.parse(formatSarif(fs, "r", opts)).runs[0].results;
+    const h = lineContentHash(content);
+    const prints = results.map((r) => r.partialFingerprints.primaryLocationLineHash);
+    expect(new Set(prints)).toEqual(new Set([`${h}:0`, `${h}:1`]));
+  });
+
+  it("does NOT fabricate a fingerprint for a rendered-DOM (page) finding", () => {
+    const f = enrich(
+      raw({ provenance: "axe", file: "https://x.com", line: 0, selector: "main", severity: "serious" }),
+    );
+    const result = JSON.parse(formatSarif([f], "r")).runs[0].results[0];
+    expect(result.partialFingerprints).toBeUndefined();
+  });
+
+  it("stays valid SARIF 2.1.0 — the fingerprint is purely additive", () => {
+    const sarif = JSON.parse(formatSarif([enrich(raw())], "pr-1"));
+    expect(sarif.version).toBe("2.1.0");
+    expect(sarif.runs).toHaveLength(1);
+    expect(sarif.runs[0].results[0].locations).toHaveLength(1);
   });
 });
