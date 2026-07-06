@@ -7,7 +7,6 @@ import {
   type PhoneHomeDeps,
   phoneHome,
   resolveConfig,
-  toCiFinding,
 } from "../src/phone-home";
 
 /**
@@ -214,37 +213,84 @@ describe("secrets never appear in logs", () => {
   });
 });
 
-// ── Metadata-only wire + reconcile keying (#2166) ──
+// ── Metadata-only wire + the source-location vertical slice (#2252-B, ADR 0042) ──
 
-describe("wire is metadata-only and reconcile-keyed", () => {
-  it("toCiFinding keeps the path as url but drops file:line/source", () => {
-    const ci = toCiFinding(finding({ file: "/root/src/Button.tsx", line: 12 }), "/root", "2026-07-04T00:00:00.000Z");
-    expect(ci.url).toBe("src/Button.tsx");
-    expect(JSON.stringify(ci)).not.toContain("12"); // no source line on the wire
-    expect(JSON.stringify(ci)).not.toContain("line");
-    expect(ci).not.toHaveProperty("snippet");
-    expect(ci).not.toHaveProperty("source");
+/** POST body shape the engine sends to Kontrol's `ingestExternalFindings`. */
+type WireLocation =
+  | { kind: "page"; url: string }
+  | { kind: "source"; path: string; lineHash: string; index: number };
+interface WireVars {
+  variables: {
+    input: {
+      scannedTargets: string[];
+      findings: Array<{ location: WireLocation } & Record<string, unknown>>;
+    };
+  };
+}
+
+/** Drive one finding all the way through phone-home and capture the POST body. */
+async function capturePost(f: EnrichedFinding, root: string): Promise<WireVars> {
+  let captured: WireVars | undefined;
+  const fetchSpy = vi.fn(async (_url: unknown, init: { body: string }) => {
+    captured = JSON.parse(init.body) as WireVars;
+    return new Response(JSON.stringify({ data: { ingestExternalFindings: { count: 1 } } }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const { deps: d } = deps({ fetch: fetchSpy });
+  await phoneHome([f], root, FULL_ENV, d);
+  if (captured === undefined) throw new Error("no POST captured");
+  return captured;
+}
+
+describe("wire is metadata-only and location-keyed", () => {
+  // THE tracer test: a source finding leaves phone-home as a Source location arm —
+  // `{kind:"source", path, lineHash, index}`, NOT `{url: <path>}` and NOT a page. This
+  // is the send half of the finding-identity slice (#2252-B) — the compute half (#153)
+  // is inert unless this proves the engine actually PUTS the Source arm on the wire.
+  it("source finding → POST carries location {kind:source,...}, never url=path / not a page", async () => {
+    const wire = await capturePost(finding({ file: "/root/src/Button.tsx", line: 12 }), "/root");
+    const [occ] = wire.variables.input.findings;
+    expect(occ.location.kind).toBe("source");
+    if (occ.location.kind !== "source") throw new Error("expected a source location");
+    expect(occ.location.path).toBe("src/Button.tsx");
+    expect(typeof occ.location.lineHash).toBe("string");
+    expect(occ.location.index).toBe(0);
+    // The moat: NO url arm on a source finding — it must not fake a page.
+    expect(occ).not.toHaveProperty("url");
+    expect(occ.location).not.toHaveProperty("url");
+    // No `file:line` / raw content crosses: neither the line number nor a `line`/`file` key.
+    const body = JSON.stringify(occ);
+    expect(body).not.toContain('"line"');
+    expect(body).not.toContain('"file"');
+    expect(body).not.toContain('"snippet"');
+    expect(body).not.toContain('"12"');
   });
 
-  it("normalizes path separators to `/` on the wire url (#2180 — Windows edge)", () => {
-    // On POSIX `path.relative` never emits `\`, so force the separator into the
-    // input filename: whatever separators the relative result carries, the wire
-    // url must come out git-style `/` so `finding.url ∈ scannedTargets` holds on
-    // every OS (on Windows the same code path is what `relative` would emit).
-    const ci = toCiFinding(finding({ file: "/root/src\\a11y\\Button.tsx" }), "/root", "2026-07-04T00:00:00.000Z");
-    expect(ci.url).toBe("src/a11y/Button.tsx");
-    expect(ci.url).not.toContain("\\");
+  it("page finding → POST carries location {kind:page,url} (rendered-DOM occurrence)", async () => {
+    const wire = await capturePost(finding({ file: "https://example.com/pricing", line: 0, selector: "button" }), "/root");
+    const [occ] = wire.variables.input.findings;
+    expect(occ.location).toEqual({ kind: "page", url: "https://example.com/pricing" });
   });
 
-  it("finding.url ∈ scannedTargets: the run stamps both from the same path vocabulary (#2166)", () => {
+  it("normalizes source path separators to `/` on the wire (#2180 — Windows edge)", async () => {
+    const wire = await capturePost(finding({ file: "/root/src\\a11y\\Button.tsx" }), "/root");
+    const [occ] = wire.variables.input.findings;
+    if (occ.location.kind !== "source") throw new Error("expected a source location");
+    expect(occ.location.path).toBe("src/a11y/Button.tsx");
+    expect(occ.location.path).not.toContain("\\");
+  });
+
+  it("source path ∈ scannedTargets: run stamps both from the same path vocabulary (#2166)", () => {
     const scanned = ["src/Button.tsx", "src/Nav.tsx"];
     const envelopes = assembleEnvelopes([finding({ file: "/root/src/Button.tsx" })], "/root", CONFIG, scanned, "2026-07-04T00:00:00.000Z");
     expect(envelopes).toHaveLength(1);
     const [env] = envelopes;
     expect(env.scannedTargets).toEqual(scanned);
-    // Reconcile keys on ticket.url ∈ scannedTargets — so an emitted finding's url
-    // MUST be drawn from the scannedTargets vocabulary. Prove the intersection.
-    for (const f of env.findings) expect(scanned).toContain(f.url);
+    // Reconcile keys on the finding's path ∈ scannedTargets — so an emitted source
+    // finding's path MUST be drawn from the scannedTargets vocabulary. Prove it.
+    for (const f of env.findings) {
+      if (f.location.kind !== "source") throw new Error("expected a source location");
+      expect(scanned).toContain(f.location.path);
+    }
   });
 
   it("scannedTargets is sourced from the injected diff-scope seam", async () => {
