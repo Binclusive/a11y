@@ -21,7 +21,7 @@
  * lenient variant drops a single malformed finding rather than failing the run.
  */
 import { dedupeRecall } from "../core";
-import type { EnrichedFinding } from "../corpus";
+import type { EnrichedFinding } from "../evidence";
 import { toFindingPayloadLenient } from "../emit-contract";
 import type { FindingPayload } from "@binclusive/a11y-contract";
 import { type BudgetSnapshot, meterProvider, TokenCeilingExceeded, TokenLedger } from "./budget";

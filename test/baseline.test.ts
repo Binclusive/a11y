@@ -4,22 +4,19 @@ import { buildBaselineCatalog } from "../src/baseline/gen-baseline";
 import { detailLines } from "../src/cli";
 import {
   baselineRules,
-  corpusBestPractice,
-  corpusFix,
-  corpusHelpUrl,
-  corpusSeverity,
-  corpusTier,
+  evidenceBestPractice,
+  evidenceFix,
+  evidenceHelpUrl,
+  evidenceSeverity,
   enrich,
   resolveDisplay,
-} from "../src/corpus";
+} from "../src/evidence";
 import type { Finding } from "../src/core";
 
 /**
- * A minimal axe finding for the baseline-fallback path. Defaults to
- * `color-contrast-enhanced` (SC 1.4.6), an SC the audit corpus does NOT distil,
- * so enrich() correctly resolves it to `source:"baseline"`. (1.4.3 used to be
- * the "uncovered" fixture, but Phase 0 un-stranded it — it now resolves to
- * `audit`, so the fixture moved to a still-uncovered, same-severity contrast SC.)
+ * A minimal axe finding for the baseline path. Defaults to
+ * `color-contrast-enhanced` (SC 1.4.6), so enrich() resolves it to
+ * `source:"baseline"` off axe's published per-rule catalog.
  */
 function axeFinding(over: Partial<Finding>): Finding {
   return {
@@ -59,7 +56,7 @@ describe("baseline generator: buildBaselineCatalog output shape", () => {
     }
   });
 
-  it("carries NO org count and NO frequency tier (not audit data)", () => {
+  it("carries NO org count and NO frequency tier (coverage data, not audit)", () => {
     for (const r of catalog.rules) {
       expect("orgs" in r).toBe(false);
       expect("tier" in r).toBe(false);
@@ -100,18 +97,16 @@ describe("baselineRules: query the catalog by ruleId / SC", () => {
   });
 });
 
-describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
-  it("falls back to baseline for an SC absent from the corpus (1.4.6)", () => {
-    // 1.4.6 (color-contrast-enhanced) is NOT distilled — the classic dead end.
+describe("enrich: baseline coverage, never a dead end (ADR 0041 §G — pure detection)", () => {
+  it("resolves an axe finding to baseline by SC, carrying severity + fix + helpUrl", () => {
     const e = enrich(axeFinding({ severity: undefined }));
     expect(e.corpus.source).toBe("baseline");
     if (e.corpus.source !== "baseline") throw new Error("unreachable");
     expect(e.corpus.sc).toBe("1.4.6");
-    // The union no longer carries tier/orgs on a baseline variant — not audit
-    // data — which is exactly the invariant the discriminated union now encodes.
+    // No frequency tier / org count is carried anywhere — the engine is pure
+    // detection; frequency is platform-derived (ADR 0041 §G).
     expect("tier" in e.corpus).toBe(false);
     expect("orgs" in e.corpus).toBe(false);
-    expect(corpusTier(e.corpus)).toBe("unknown"); // flat view defaults off-moat
     expect(e.corpus.severity).toBe("serious"); // axe's published default impact
     expect(e.corpus.fix).not.toBeNull();
     expect(e.corpus.helpUrl).toContain("dequeuniversity.com");
@@ -120,11 +115,10 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
   it("prefers the axe runtime impact over the baseline default severity", () => {
     const e = enrich(axeFinding({ severity: "critical" }));
     expect(e.corpus.source).toBe("baseline");
-    expect(corpusSeverity(e)).toBe("critical"); // runtime impact wins
+    expect(evidenceSeverity(e)).toBe("critical"); // runtime impact wins
   });
 
   it("baseline-matches a source-pass finding by SC (no axe ruleId)", () => {
-    // A jsx-a11y finding for an SC the corpus lacks still gets baseline coverage.
     const e = enrich({
       file: "/x.tsx",
       line: 5,
@@ -135,13 +129,11 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
       provenance: "jsx-a11y",
     });
     expect(e.corpus.source).toBe("baseline");
-    expect(corpusSeverity(e)).toBe("serious");
-    expect(corpusHelpUrl(e)).toContain("dequeuniversity.com");
+    expect(evidenceSeverity(e)).toBe("serious");
+    expect(evidenceHelpUrl(e)).toContain("dequeuniversity.com");
   });
 
-  it("corpus-covered SCs still return source 'audit', unchanged", () => {
-    // 2.4.4 IS in the snapshot (very-common, 17/26). Must NOT be shadowed by
-    // baseline: the moat takes precedence and the org count survives.
+  it("resolves any WCAG-tagged source finding to baseline (e.g. 2.4.4)", () => {
     const e = enrich({
       file: "/x.tsx",
       line: 3,
@@ -151,61 +143,15 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
       enforcement: "block",
       provenance: "jsx-a11y",
     });
-    expect(e.corpus.source).toBe("audit");
-    if (e.corpus.source !== "audit") throw new Error("unreachable");
+    expect(e.corpus.source).toBe("baseline");
+    if (e.corpus.source !== "baseline") throw new Error("unreachable");
     expect(e.corpus.sc).toBe("2.4.4");
-    expect(e.corpus.tier).toBe("very-common");
-    expect(e.corpus.orgs).toBe(17);
     expect(e.corpus.fix).not.toBeNull();
-    expect(corpusBestPractice(e.corpus)).toBe(false);
-  });
-
-  // RFC Phase 0 guard: these 5 SCs had distilled patterns but were stranded
-  // behind the hand-authored snapshot (it gated source:"audit" and lacked them).
-  // Gating now keys on the distilled patterns, so they must enrich as audit. A
-  // regression here silently strips real-world corpus grounding from a finding.
-  it.each(["1.3.5", "1.4.3", "2.4.6", "2.4.7", "3.2.5"])(
-    "un-strands SC %s — its distilled pattern now reaches source 'audit'",
-    (sc) => {
-      const e = enrich({
-        file: "/x.tsx",
-        line: 1,
-        ruleId: "jsx-a11y/some-rule",
-        message: "x",
-        wcag: [sc],
-        enforcement: "warn",
-        provenance: "jsx-a11y",
-      });
-      expect(e.corpus.source).toBe("audit");
-      if (e.corpus.source !== "audit") throw new Error("unreachable");
-      expect(e.corpus.sc).toBe(sc);
-      // No snapshot entry for these → no org integer; tier derived from patterns.
-      expect(e.corpus.orgs).toBeNull();
-      expect(e.corpus.tier).toBeDefined();
-    },
-  );
-
-  it("derives very-common for 2.1.1 from the org integer, not the stale typed tier", () => {
-    // Snapshot hand-typed 2.1.1 as "common"; tierForOrgs(15) = very-common. The
-    // derived tier wins (BUG 2 fix), proving tiers are computed, not read.
-    const e = enrich({
-      file: "/x.tsx",
-      line: 1,
-      ruleId: "jsx-a11y/click-events-have-key-events",
-      message: "x",
-      wcag: ["2.1.1"],
-      enforcement: "block",
-      provenance: "jsx-a11y",
-    });
-    expect(e.corpus.source).toBe("audit");
-    if (e.corpus.source !== "audit") throw new Error("unreachable");
-    expect(e.corpus.tier).toBe("very-common");
-    expect(e.corpus.orgs).toBe(15);
+    expect(evidenceBestPractice(e.corpus)).toBe(false);
   });
 
   it("falls back to baseline-by-ruleId for an axe best-practice rule with no SC", () => {
-    // `region` is a real axe best-practice rule carrying NO WCAG SC tag — the
-    // case that used to dead-end at UNMAPPED. It must resolve to baseline.
+    // `region` is a real axe best-practice rule carrying NO WCAG SC tag.
     const e = enrich(
       axeFinding({
         ruleId: "region",
@@ -228,8 +174,8 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
       axeFinding({ ruleId: "landmark-unique", wcag: [], severity: "serious" }),
     );
     expect(e.corpus.source).toBe("baseline");
-    expect(corpusBestPractice(e.corpus)).toBe(true);
-    expect(corpusSeverity(e)).toBe("serious"); // runtime impact over catalog default
+    expect(evidenceBestPractice(e.corpus)).toBe(true);
+    expect(evidenceSeverity(e)).toBe("serious"); // runtime impact over catalog default
   });
 
   it("returns source 'none' only when the ruleId is absent from the catalog", () => {
@@ -246,18 +192,16 @@ describe("enrich: corpus FIRST, baseline fallback, never a dead end", () => {
     // The `none` variant carries NO catalog evidence at all — the union has only
     // its `source` tag; severity/helpUrl come off the finding via the accessors.
     expect(Object.keys(e.corpus)).toEqual(["source"]);
-    expect(corpusSeverity(e)).toBeNull();
-    expect(corpusBestPractice(e.corpus)).toBe(false);
+    expect(evidenceSeverity(e)).toBeNull();
+    expect(evidenceBestPractice(e.corpus)).toBe(false);
   });
 });
 
-describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus fix", () => {
-  // The credibility bug: `aria-progressbar-name` is an axe rule tagged WCAG
-  // 1.1.1 — an SC the audit corpus HAS (very-common, 16/26), whose generic fix is
-  // written for that SC's most-common failure ("Provide alt text for
-  // informative images …"). Rendering that fix under a progressbar rule
-  // contradicts the rule. axe's per-rule help is rule-accurate, so the displayed
-  // fix must be axe's, while the corpus frequency tier (an SC-level fact) stays.
+describe("rule-accurate fix: axe findings show axe guidance, source findings show the baseline fix", () => {
+  // `aria-progressbar-name` is an axe rule tagged WCAG 1.1.1. axe's per-rule help
+  // is rule-accurate, so the DISPLAYED fix for an axe finding must be axe's own
+  // message — never the SC-keyed baseline fix (which is written for the SC's
+  // most-common failure and would contradict the rule).
   const progressbar = (over: Partial<Finding> = {}): Finding =>
     axeFinding({
       ruleId: "aria-progressbar-name",
@@ -269,49 +213,39 @@ describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus f
       ...over,
     });
 
-  it("enriches to source 'audit' on SC 1.1.1 — the corpus DOES cover this SC", () => {
+  it("enriches to baseline on SC 1.1.1, carrying axe's severity + help", () => {
     const e = enrich(progressbar());
-    expect(e.corpus.source).toBe("audit");
-    if (e.corpus.source !== "audit") throw new Error("unreachable");
+    expect(e.corpus.source).toBe("baseline");
+    if (e.corpus.source !== "baseline") throw new Error("unreachable");
     expect(e.corpus.sc).toBe("1.1.1");
-    // Tier is DERIVED from the org integer (tierForOrgs(16) = very-common), not
-    // read from the snapshot's stale hand-typed "common". This is the RFC's
-    // required outcome (BUG 2 auto-corrected).
-    expect(e.corpus.tier).toBe("very-common");
-    expect(e.corpus.orgs).toBe(16);
-    // The raw corpus fix IS the SC-generic image-alt fix — the trap.
-    expect(e.corpus.fix).toMatch(/alt text/i);
+    expect(evidenceSeverity(e)).toBe("serious");
   });
 
-  it("resolveDisplay.fix returns axe's rule guidance, NOT the SC-generic corpus fix", () => {
+  it("resolveDisplay.fix returns axe's rule guidance for an axe finding", () => {
     const e = enrich(progressbar());
     const fix = resolveDisplay(e).fix;
     expect(fix).toBe("ARIA progressbar nodes must have an accessible name");
-    expect(fix).not.toMatch(/alt text/i); // never the 1.1.1 image-alt fix
     // The CLI suppresses the `fix:` line for axe findings in favour of `ref`.
-    expect(resolveDisplay(e).fixLine).toBeNull();
+    expect(resolveDisplay(e).fixLine).toBe(evidenceFix(e.corpus));
   });
 
-  it("the rendered audit-tier axe finding shows the corpus tier + a Deque ref, no contradictory fix", () => {
+  it("the rendered axe finding shows a Deque ref + severity, no contradictory audit tier", () => {
     const lines = detailLines(enrich(progressbar()));
     const text = lines.join("\n");
-    // The moat — SC-level frequency fact — is still present.
-    expect(text).toContain("corpus: [VERY COMMON] SC 1.1.1 — 16/26 orgs");
-    // The canonical per-rule fix page is linked.
+    // No corpus/frequency tier line survives (ADR 0041 §G).
+    expect(text).not.toMatch(/corpus:/);
+    expect(text).not.toMatch(/orgs/);
+    // The canonical per-rule fix page is linked and axe's own message shown.
     expect(text).toContain(
       "ref:    https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name?application=axeAPI",
     );
-    // The requirement is stated by axe's own message line.
     expect(text).toContain("ARIA progressbar nodes must have an accessible name");
     expect(text).toContain("severity: SERIOUS");
-    // NO contradictory SC-generic image-alt fix line.
-    expect(text).not.toMatch(/alt text/i);
-    expect(text).not.toMatch(/fix:/);
+    // The coverage annotation replaces the old corpus line.
+    expect(text).toContain("coverage: axe baseline rule SC 1.1.1");
   });
 
-  it("a SOURCE-PASS finding on the same SC keeps the corpus fix unchanged", () => {
-    // A jsx-a11y finding tagged 1.1.1 has a clean rule↔SC mapping via wcag-map,
-    // so its SC-keyed corpus fix is rule-accurate — it must stay verbatim.
+  it("a SOURCE-PASS finding on the same SC shows the baseline fix verbatim", () => {
     const e = enrich({
       file: "/x.tsx",
       line: 7,
@@ -321,14 +255,14 @@ describe("rule-accurate fix: axe findings show axe guidance, not the SC corpus f
       enforcement: "block",
       provenance: "jsx-a11y",
     });
-    expect(e.corpus.source).toBe("audit");
-    if (e.corpus.source !== "audit") throw new Error("unreachable");
-    expect(resolveDisplay(e).fix).toMatch(/alt text/i); // unchanged corpus fix
+    expect(e.corpus.source).toBe("baseline");
+    if (e.corpus.source !== "baseline") throw new Error("unreachable");
+    // A source finding shows the SC-keyed baseline fix (axe's per-rule help).
+    expect(resolveDisplay(e).fix).toBe(evidenceFix(e.corpus));
     expect(resolveDisplay(e).fix).toBe(e.corpus.fix);
-    expect(corpusFix(e.corpus)).toBe(e.corpus.fix);
 
     const text = detailLines(e).join("\n");
-    expect(text).toContain("corpus: [VERY COMMON] SC 1.1.1 — 16/26 orgs");
-    expect(text).toMatch(/fix:\s+Provide alt text/); // corpus fix still rendered
+    expect(text).toContain("coverage: axe baseline rule SC 1.1.1");
+    expect(text).toMatch(/fix:\s+/); // baseline fix still rendered for source findings
   });
 });

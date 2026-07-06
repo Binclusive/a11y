@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildJsonReport } from "../src/cli";
-import { enrichAll } from "../src/corpus";
+import { enrichAll } from "../src/evidence";
 import { scan } from "../src/core";
 import type { Coverage } from "../src/resolve-components";
 

@@ -31,7 +31,7 @@
  */
 import { relative } from "node:path";
 import type { Provenance as ContractProvenance } from "@binclusive/a11y-contract";
-import type { EnrichedFinding } from "./corpus";
+import type { EnrichedFinding } from "./evidence";
 import { scopeChangedTsxFromEnv } from "./diff-scope";
 import { contractSeverity, hasSelector, toContractProvenance } from "./emit-contract";
 

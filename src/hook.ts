@@ -9,7 +9,7 @@
  * wrapper over `scan` + `enrichAll` — no new a11y logic lives here.
  *
  * It handles two ecosystems by file extension: a `.tsx` edit runs the React scan
- * (floor + recall), and a `.prefab`/`.unity` edit runs the Unity finding-emission
+ * (floor only), and a `.prefab`/`.unity` edit runs the Unity finding-emission
  * aggregator (`collectUnityFindings`) over the enclosing project, scoped to the
  * edited asset — Unity reaches the editor surface at parity with React (#92).
  *
@@ -33,9 +33,7 @@ import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { scan, type ScanResult } from "./core";
-import { corpusFix, corpusTier, type CorpusTier, type EnrichedFinding, enrichAll } from "./corpus";
-import { collectIntrinsicElements } from "./intrinsic-elements";
-import { CERTIFIED_RECALL_PATTERN_IDS, type RetrievedPattern, retrieveSlice } from "./retrieve";
+import { evidenceFix, type EnrichedFinding, enrichAll } from "./evidence";
 import { collectUnityFindings } from "./unity-findings";
 
 /**
@@ -65,29 +63,20 @@ export interface HookOutput {
   };
 }
 
-/** Short tier tags — terser than the CLI's full labels (it runs every edit). */
-const TIER_TAG: Record<CorpusTier, string> = {
-  "very-common": "very-common",
-  common: "common",
-  occasional: "occasional",
-  unknown: "unknown",
-};
-
 /** Cap the whisper: a few lines max, top findings only. It runs every edit. */
 const MAX_FINDINGS = 5;
 
 /**
- * One finding → one terse line: `file:line · rule · WCAG SC · [tier] · fix`.
+ * One finding → one terse line: `file:line · rule · WCAG SC · fix`.
  * The rule id is stripped of its `jsx-a11y/` prefix; the fix falls back to the
- * eslint message when the corpus has no representative fix for the SC.
+ * eslint message when the baseline catalog has no representative fix for the SC.
  */
 function formatLine(f: EnrichedFinding, root: string): string {
   const where = `${relative(root, f.file)}:${f.line}`;
   const rule = f.ruleId.replace(/^jsx-a11y\//, "");
   const sc = f.wcag.length > 0 ? `WCAG ${f.wcag.join(", ")}` : "no WCAG mapping";
-  const tier = TIER_TAG[corpusTier(f.corpus)];
-  const fix = corpusFix(f.corpus) ?? f.message;
-  return `  ${where} · ${rule} · ${sc} · [${tier}] · ${fix}`;
+  const fix = evidenceFix(f.corpus) ?? f.message;
+  return `  ${where} · ${rule} · ${sc} · ${fix}`;
 }
 
 /**
@@ -111,93 +100,6 @@ export function formatWhisper(
   return [header, ...lines, ...more].join("\n");
 }
 
-/** Cap the recall self-check: a few of the highest-tier floor-missed shapes. */
-const MAX_RECALL = 3;
-
-/**
- * The ADVISORY recall whisper (Phase 1.5). Where {@link formatWhisper} reports the
- * PRECISE static floor ("fix these"), this surfaces the corpus RECALL grounding —
- * the floor-MISSED failure shapes (a `<Link>` whose text is present but generic /
- * noisy) that only a reading of the code can catch. It is deliberately framed as a
- * SELF-CHECK, not a finding: the deterministic hook cannot run the model's
- * propose→verify loop, so it hands the in-loop model the same grounding the
- * certified `review_a11y` retrieve step produces and asks it to self-review.
- *
- * OWNS its own empty-check: returns null when no shape survives dedup/cap, so the
- * caller hands it the eligible patterns directly and returns the result — one
- * empty-check, not two. Shipped only because the surfaced precision is certified +
- * enforced by `test/recall-certification.test.ts` (pooled Wilson >= 0.95, zero
- * decoy leaks).
- */
-function formatRecall(
-  filePath: string,
-  patterns: readonly RetrievedPattern[],
-  root: string,
-): string | null {
-  // Dedup by failure shape (several link patterns share a shape) and cap.
-  const seen = new Set<string>();
-  const shown: RetrievedPattern[] = [];
-  for (const p of patterns) {
-    if (seen.has(p.failureShape)) continue;
-    seen.add(p.failureShape);
-    shown.push(p);
-    if (shown.length >= MAX_RECALL) break;
-  }
-  if (shown.length === 0) return null;
-
-  const header =
-    `Self-check ${relative(root, filePath)} (corpus, advisory — the static check ` +
-    "can't verify these). Components here show these floor-missed failures in real " +
-    "audits; confirm they don't apply, fix if they do:";
-  const lines = shown.map((p) => `  · ${p.component}: ${p.failureShape}`);
-  return [header, ...lines].join("\n");
-}
-
-/**
- * Build the recall self-check for a file from an EXISTING scan result. PURE over
- * the scan: it reuses `scan().resolved.resolutions` + `scan().findings` for the
- * retrieve slice (R1/R2/R3) and, for R4, the SourceFile `scan()` ALREADY parsed
- * (`resolved.sourceFiles`) — so it never re-reads or re-parses the file on this
- * every-edit hot path (no `readFileSync`/`ts.createSourceFile` here).
- *
- * No file-wide suppressed-line list: that list was file-wide (not anchored to the
- * link patterns it accompanied), cost a SECOND parse on the every-edit hot path
- * (a TOCTOU race against the editor's in-flight write), and the model already
- * reads the actual file in its propose→verify loop. The SC-disjoint filter below
- * plus that reading cover precision for this advisory surface.
- *
- * Fail-safe: any error → null (the floor whisper still stands). Returns null when
- * the file grounds no eligible pattern (the common case — nothing to self-check).
- */
-function recallWhisper(filePath: string, result: ScanResult, root: string): string | null {
-  try {
-    // R4 — reuse scan's parse for this file (no hot-path re-parse). Absent only
-    // if the file couldn't be read, in which case R4 simply contributes nothing.
-    const sf = result.resolved.sourceFiles.get(filePath);
-    const intrinsics = sf === undefined ? [] : collectIntrinsicElements(sf);
-    const slice = retrieveSlice({
-      files: [filePath],
-      resolutions: result.resolved.resolutions,
-      findings: result.findings,
-      intrinsics,
-    });
-    // SC-disjoint: drop any pattern whose SC the floor ALREADY carries, so the
-    // advisory only surfaces SCs the floor was SILENT on. The floor block and this
-    // block become disjoint by SC — no same-SC double-up.
-    const floorScs = new Set(result.findings.flatMap((f) => f.wcag));
-    // Eligible AND certified AND floor-silent: tier-eligibility alone admits
-    // patterns R1 pulls via a shared token (a keyboard pattern on a plain `<Link>`);
-    // the advisory must only surface what we've measured, so it never points the
-    // model at an unmeasured shape.
-    const eligible = slice.patterns.filter(
-      (p) => p.eligibleToFlag && CERTIFIED_RECALL_PATTERN_IDS.has(p.id) && !floorScs.has(p.sc),
-    );
-
-    return formatRecall(filePath, eligible, root);
-  } catch {
-    return null;
-  }
-}
 
 /** Markers of a Unity project root, checked walking up from an edited asset.
  * `Assets` + `ProjectSettings` are the two canonical top-level dirs Unity creates;
@@ -255,7 +157,7 @@ async function runUnityHook(filePath: string, base: string): Promise<HookOutput 
  * Run the checker on ONE edited file and return the `additionalContext`
  * envelope, or null to no-op. Pulls `file_path` from `tool_input`, resolves it
  * against `cwd` if relative, and dispatches by extension: `.tsx` runs the React
- * scan (floor + recall), `.prefab`/`.unity` runs the Unity aggregator; anything
+ * scan (floor only), `.prefab`/`.unity` runs the Unity aggregator; anything
  * else no-ops.
  *
  * Reused by both the CLI entry and the tests — the tests call it directly with
@@ -289,16 +191,12 @@ export async function runHook(raw: unknown): Promise<HookOutput | null> {
     // Relativize against the file's directory so the whisper shows a short path,
     // not the absolute one ESLint reports.
     const root = base;
-    // Two distinct voices: the PRECISE static floor ("fix these") and the ADVISORY
-    // corpus self-check ("the static check can't verify these — confirm/fix"). Either
-    // may be empty; emit nothing only when BOTH are.
+    // The PRECISE static floor ("fix these"). Emit nothing when it is empty.
     const floor = formatWhisper(filePath, findings, root);
-    const recall = recallWhisper(filePath, result, root);
-    if (floor === null && recall === null) return null;
-    const additionalContext = [floor, recall].filter((b): b is string => b !== null).join("\n\n");
+    if (floor === null) return null;
 
     return {
-      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext },
+      hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: floor },
     };
   } catch {
     return null;

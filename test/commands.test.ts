@@ -73,7 +73,10 @@ describe("init / learn / gen (IO) against a temp repo", () => {
     const onDisk = parseContract(JSON.parse(await readFile(join(dir, CONTRACT_FILE), "utf8")));
     expect(onDisk.stack.framework).toBe("next");
     expect(onDisk.stack.language).toBe("ts");
-    expect(onDisk.enforcement.block.length).toBeGreaterThan(0);
+    // The corpus left the engine (ADR 0041 §G): no frequency signal drives a
+    // default block set, so a fresh contract blocks nothing (opt-in per SC).
+    expect(onDisk.enforcement.block).toEqual([]);
+    expect(onDisk.enforcement.warn).toEqual([]);
 
     const claude = await readFile(join(dir, "CLAUDE.md"), "utf8");
     expect(claude).toContain("# Pre-existing");
@@ -220,7 +223,8 @@ describe("init / learn / gen (IO) against a temp repo", () => {
     expect(r.contract.declarations.ignore).toEqual(["good-glob/*"]);
     // The rest of the contract is intact — a bad field never crashed the load.
     expect(r.contract.learned).toEqual([]);
-    expect(r.contract.enforcement.block.length).toBeGreaterThan(0);
+    // Corpus-free default: enforcement blocks nothing by default (ADR 0041 §G).
+    expect(r.contract.enforcement.block).toEqual([]);
   });
 
   it("learn appends, dedupes, and keeps the block in sync", async () => {

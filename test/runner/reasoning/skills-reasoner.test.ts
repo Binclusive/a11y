@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enrich, type EnrichedFinding } from "../../../src/corpus";
+import { enrich, type EnrichedFinding } from "../../../src/evidence";
 import type { Finding } from "../../../src/index";
 import {
   createSkillsReasoner,

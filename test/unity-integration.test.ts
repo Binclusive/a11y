@@ -3,7 +3,7 @@ import { NodeContext } from "@effect/platform-node";
 import { Effect, Exit } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "../src/cli";
-import { corpusTier, type EnrichedFinding, enrichAll } from "../src/corpus";
+import { type EnrichedFinding, enrichAll } from "../src/evidence";
 import { collectUnityFindings } from "../src/unity-findings";
 
 /**
@@ -95,34 +95,32 @@ describe("Unity E2E: producer → aggregator → enrich → render on the real f
       expect(wcagFor(NO_REBIND)).toEqual(["2.1.1", "2.5.1"]);
     });
 
-    it("attaches corpus enrichment (tier/frequency) keyed off the WCAG SC", async () => {
+    it("attaches baseline enrichment keyed off the WCAG SC (ADR 0041 §G — no corpus)", async () => {
       const enriched = enrichAll(await collectUnityFindings(FIXTURE));
 
-      // The missing-label finding maps to a distilled audit SC (4.1.2) — a real
-      // frequency-tier moat hit, not a bare baseline-catalog row.
+      // The missing-label finding resolves to baseline coverage on its first known
+      // SC (1.1.1). No frequency tier is carried anywhere — the corpus left the engine.
       const missing = enriched.find((f) => f.ruleId === MISSING_LABEL);
       expect(missing).toBeDefined();
-      expect(missing!.corpus.source).toBe("audit");
-      expect(corpusTier(missing!.corpus)).toBe("very-common");
-      if (missing!.corpus.source === "audit") {
-        expect(missing!.corpus.sc).toBe("4.1.2");
-        expect(missing!.corpus.orgs).toBeGreaterThan(0);
+      expect(missing!.corpus.source).toBe("baseline");
+      expect(missing!.corpus).not.toHaveProperty("tier");
+      if (missing!.corpus.source === "baseline") {
+        expect(missing!.corpus.sc).toBe("1.1.1");
       }
 
-      // The project-level rules likewise enrich off the corpus (audit-tier SCs).
+      // The project-level rules likewise enrich off the baseline catalog.
       for (const ruleId of [NO_SR, NO_REBIND]) {
         const f = enriched.find((x) => x.ruleId === ruleId);
         expect(f, ruleId).toBeDefined();
-        expect(f!.corpus.source).toBe("audit");
-        expect(corpusTier(f!.corpus)).toBe("very-common");
+        expect(["baseline", "none"]).toContain(f!.corpus.source);
       }
 
-      // color-only (1.4.1) has no distilled audit pattern yet but is covered by the
-      // baseline catalog — enrichment still resolves an SC, never UNMAPPED.
+      // color-only (1.4.1) is covered by the baseline catalog — enrichment still
+      // resolves an SC, never UNMAPPED.
       const colorOnly = enriched.find((f) => f.ruleId === COLOR_ONLY);
       expect(colorOnly).toBeDefined();
-      expect(["audit", "baseline"]).toContain(colorOnly!.corpus.source);
-      if (colorOnly!.corpus.source !== "none") {
+      expect(colorOnly!.corpus.source).toBe("baseline");
+      if (colorOnly!.corpus.source === "baseline") {
         expect(colorOnly!.corpus.sc).toBe("1.4.1");
       }
     });
@@ -180,7 +178,7 @@ describe("Unity E2E: producer → aggregator → enrich → render on the real f
       expect(report.findings.length).toBeGreaterThan(0);
 
       // Every JSON finding is Unity-provenance and carries the canonical Finding fields
-      // the shared contract exposes (id/file/line/ruleId/enforcement/wcag/corpus).
+      // the shared contract exposes (id/file/line/ruleId/enforcement/wcag/evidence).
       expect(report.findings.every((f: { provenance: string }) => f.provenance === "unity")).toBe(
         true,
       );
@@ -188,18 +186,20 @@ describe("Unity E2E: producer → aggregator → enrich → render on the real f
         expect(typeof f.id).toBe("string");
         expect(typeof f.ruleId).toBe("string");
         expect(Array.isArray(f.wcag)).toBe(true);
-        expect(f.corpus).toHaveProperty("tier");
-        expect(f.corpus).toHaveProperty("sc");
+        // The evidence sub-object carries source + sc (no frequency tier — ADR 0041 §G).
+        expect(f.evidence).toHaveProperty("source");
+        expect(f.evidence).toHaveProperty("sc");
+        expect(f.evidence).not.toHaveProperty("tier");
       }
 
-      // The missing-label finding surfaces with its corpus enrichment (audit tier 4.1.2).
+      // The missing-label finding surfaces with its baseline enrichment on SC 4.1.2.
       const ml = report.findings.find(
         (f: { ruleId: string }) => f.ruleId === MISSING_LABEL,
       );
       expect(ml).toBeDefined();
       expect(ml.wcag).toEqual(["1.1.1", "4.1.2"]);
-      expect(ml.corpus.tier).toBe("very-common");
-      expect(ml.corpus.sc).toBe("4.1.2");
+      expect(ml.evidence.source).toBe("baseline");
+      expect(ml.evidence.sc).toBe("1.1.1");
 
       // Blocking floor findings → exit 1.
       expect(report.summary.blocking).toBeGreaterThan(0);

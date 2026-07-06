@@ -19,7 +19,7 @@
  * do writes to the mounted source.
  */
 import type { Finding } from "../../core";
-import { corpusFix, type EnrichedFinding, enrich } from "../../corpus";
+import { evidenceFix, type EnrichedFinding, enrich } from "../../evidence";
 import type { LookupTool } from "../lookup";
 import { type AgentFinding, type AgentReasoner, EMPTY_RESULT, type ReasonContext, type ReasonResult } from "../reasoner";
 import { frameworkGuidanceFor } from "./index";
@@ -98,7 +98,7 @@ export function createSkillsReasoner(options: SkillsReasonerOptions = {}): Agent
 
     const structural = config.useLookup ? await structuralContext(ctx.lookup, ctx.finding) : null;
     const system = buildSystemPrompt(guidance);
-    const user = buildUserPrompt(ctx.finding, corpusFix(ctx.finding.corpus), structural);
+    const user = buildUserPrompt(ctx.finding, evidenceFix(ctx.finding.corpus), structural);
 
     const response = await ctx.provider.complete({
       system,

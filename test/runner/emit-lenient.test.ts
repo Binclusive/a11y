@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseFindingPayload } from "@binclusive/a11y-contract";
-import { enrich } from "../../src/corpus";
+import { enrich } from "../../src/evidence";
 import type { Finding } from "../../src/core";
 import { toFindingPayload, toFindingPayloadLenient } from "../../src/emit-contract";
 

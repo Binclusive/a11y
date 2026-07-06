@@ -21,7 +21,6 @@ import {
   type Stack,
   serializeContract,
 } from "./contract";
-import { corpusCriteria, corpusPatterns } from "./corpus";
 import { detectStack } from "./detect-stack";
 import { resolveComponents } from "./resolve-components";
 import { type SuggestResult, suggestComponentMap } from "./suggest";
@@ -78,12 +77,15 @@ function mergeStack(detected: Stack, existing: Stack | undefined): Stack {
   };
 }
 
-/** Enforcement defaults derived from the corpus: very-common SC block, rest warn. */
-function corpusDefaultEnforcement(): ReturnType<typeof defaultEnforcement> {
-  const criteria = corpusCriteria();
-  const veryCommon = criteria.filter((c) => c.tier === "very-common").map((c) => c.sc);
-  const rest = criteria.filter((c) => c.tier !== "very-common").map((c) => c.sc);
-  return defaultEnforcement(veryCommon, rest);
+/**
+ * The default enforcement policy for a fresh contract. The corpus left the engine
+ * (ADR 0041 §G), so there is no frequency signal to auto-select which SCs block —
+ * a fresh contract blocks nothing by default and the team opts SCs into `block`
+ * explicitly. Severity still gates via the severity-gate; enforcement is the
+ * per-SC override on top of it.
+ */
+function defaultContractEnforcement(): ReturnType<typeof defaultEnforcement> {
+  return defaultEnforcement([], []);
 }
 
 /**
@@ -92,7 +94,7 @@ function corpusDefaultEnforcement(): ReturnType<typeof defaultEnforcement> {
  * when present. Returns the list of written file paths.
  */
 async function writeBlockTargets(dir: string, contract: Contract): Promise<string[]> {
-  const block = renderBlock(contract, corpusPatterns());
+  const block = renderBlock(contract);
   const written: string[] = [];
   for (const name of BLOCK_TARGETS) {
     const path = join(dir, name);
@@ -180,7 +182,7 @@ export async function init(dir: string, opts: InitOptions = {}): Promise<InitRes
   const contract: Contract = {
     version: 1,
     stack: mergeStack(stack, existing?.stack),
-    enforcement: existing?.enforcement ?? corpusDefaultEnforcement(),
+    enforcement: existing?.enforcement ?? defaultContractEnforcement(),
     learned: existing?.learned ?? [],
     declarations,
   };
@@ -291,7 +293,7 @@ export async function gen(dir: string, check: boolean): Promise<GenResult> {
   if (contract === null) {
     throw new Error(`no ${CONTRACT_FILE} in ${dir} — run \`a11y-checker init\` first`);
   }
-  const fresh = renderBlock(contract, corpusPatterns());
+  const fresh = renderBlock(contract);
 
   if (!check) {
     const blockPaths = await writeBlockTargets(dir, contract);

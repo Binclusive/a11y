@@ -22,7 +22,7 @@ import { augmentWithAgentLane } from "../src/agent-lane";
 import { runCheck } from "../src/cli";
 import { toContractFinding } from "../src/emit-contract";
 import { scan } from "../src/core";
-import { enrichAll } from "../src/corpus";
+import { enrichAll } from "../src/evidence";
 import type { Provider } from "../src/runner/provider";
 
 const here = dirname(fileURLToPath(import.meta.url));

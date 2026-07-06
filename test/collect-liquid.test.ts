@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { collectLiquidFiles, scanLiquid } from "../src/collect-liquid";
 import { buildJsonReport } from "../src/cli";
-import { enrichAll } from "../src/corpus";
+import { enrichAll } from "../src/evidence";
 
 /**
  * Coverage for the Liquid collector boundary (L3). Drives the in-process parse +

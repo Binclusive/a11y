@@ -16,13 +16,7 @@ import { scanSwift } from "./collect-swift";
 import { gen, init, type LearnInput, learn } from "./commands";
 import { collectUnityFindings } from "./unity-findings";
 import { type FindingProvenance, scan } from "./core";
-import {
-  type CorpusEvidence,
-  type CorpusTier,
-  type EnrichedFinding,
-  enrichAll,
-  resolveDisplay,
-} from "./corpus";
+import { type Evidence, type EnrichedFinding, enrichAll, resolveDisplay } from "./evidence";
 import { runHookCli } from "./hook";
 import { phoneHome } from "./phone-home";
 import { formatSarif } from "./sarif";
@@ -36,20 +30,13 @@ import {
 import type { ComponentResolution, Coverage } from "./resolve-components";
 import type { SuggestResult } from "./suggest";
 
-const TIER_LABEL: Record<CorpusTier, string> = {
-  "very-common": "VERY COMMON",
-  common: "COMMON",
-  occasional: "OCCASIONAL",
-  unknown: "UNKNOWN",
-};
-
 /**
  * The body of a finding report — everything below the location line. Shared by
  * the source report (`formatFinding`, anchored `file:line`) and the rendered-DOM
- * report (`formatUrlFinding`, anchored on the axe selector) so the corpus
- * cross-ref, fix, and distilled evidence render identically regardless of which
- * collector produced the finding. The `via` tag names the non-structural
- * producers so each one's distinct reach is legible.
+ * report (`formatUrlFinding`, anchored on the axe selector) so the baseline
+ * cross-ref and fix render identically regardless of which collector produced the
+ * finding. The `via` tag names the non-structural producers so each one's
+ * distinct reach is legible.
  */
 export function detailLines(f: EnrichedFinding): string[] {
   const scList =
@@ -75,40 +62,24 @@ export function detailLines(f: EnrichedFinding): string[] {
   const d = resolveDisplay(f);
   if (d.severityLabel !== null) lines.push(`    severity: ${d.severityLabel}`);
 
+  if (d.fixLine !== null) lines.push(`    fix:    ${d.fixLine}`);
+  if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
+
   const c = f.corpus;
   switch (c.source) {
-    case "audit":
-      // The moat: real audit-frequency data — org count + frequency tier. The
-      // tier line is an accurate SC-LEVEL fact and is always shown.
-      lines.push(
-        `    corpus: [${TIER_LABEL[c.tier]}] SC ${c.sc}${c.orgs === null ? "" : ` — ${c.orgs}/26 orgs`}`,
-      );
-      if (d.fixLine !== null) lines.push(`    fix:    ${d.fixLine}`);
-      if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
-      if (d.showPatterns) {
-        lines.push(`    seen-in-the-wild (distilled, SC ${c.sc}):`);
-        for (const p of c.patterns) {
-          lines.push(`      • [${TIER_LABEL[p.frequencyTier]}] ${p.component} — ${p.failureShape}`);
-        }
-      }
-      break;
     case "baseline":
-      // Coverage: axe's published per-rule data, NOT audit-frequency data. Make
-      // that explicit so it never reads as a moat hit.
-      if (d.fixLine !== null) lines.push(`    fix:    ${d.fixLine}`);
-      if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
+      // Coverage: axe's published per-rule data (severity + standard fix + help).
       if (c.bestPractice) {
         // An axe best-practice rule with no WCAG SC — honestly NOT a WCAG failure.
         lines.push("    rule:   best-practice (no WCAG SC)");
       } else {
-        lines.push(`    corpus: baseline rule SC ${c.sc} (no audit-frequency data yet)`);
+        lines.push(`    coverage: axe baseline rule SC ${c.sc}`);
       }
       break;
     case "none":
-      // Neither source knows the SC — but never a bare dead-end: surface whatever
-      // the finding itself carries (an axe finding still has its runtime helpUrl).
-      if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
-      lines.push("    corpus: no SC mapping — not in audit-frequency data or the baseline catalog");
+      // The baseline catalog doesn't know the SC — but never a bare dead-end: the
+      // ref above surfaces whatever runtime help the finding itself carries.
+      lines.push("    coverage: no SC mapping — not in the axe baseline catalog");
       break;
   }
   return lines;
@@ -138,17 +109,12 @@ function reportTotals(findings: readonly EnrichedFinding[]): {
   readonly lines: readonly string[];
   readonly blocking: number;
 } {
-  const tierCounts = new Map<string, number>();
+  const sourceCounts = new Map<string, number>();
   for (const f of findings) {
-    const key =
-      f.corpus.source === "audit"
-        ? TIER_LABEL[f.corpus.tier]
-        : f.corpus.source === "baseline"
-          ? "BASELINE"
-          : "UNMAPPED";
-    tierCounts.set(key, (tierCounts.get(key) ?? 0) + 1);
+    const key = f.corpus.source === "baseline" ? "BASELINE" : "UNMAPPED";
+    sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
   }
-  const rollup = [...tierCounts.entries()].map(([tier, n]) => `${tier}: ${n}`).join("  |  ");
+  const rollup = [...sourceCounts.entries()].map(([src, n]) => `${src}: ${n}`).join("  |  ");
   const blocking = findings.filter((f) => f.enforcement === "block").length;
   const warning = findings.length - blocking;
   return {
@@ -295,12 +261,13 @@ export interface JsonFinding {
    * through the ONE {@link contractSeverity} mapping so this field can never
    * disagree with the wire projection or SARIF. Emitted here so downstream
    * consumers (the CI PR-summary rollup, #2132) count by the canonical contract
-   * severity rather than re-deriving it from `corpus`/axe impact.
+   * severity rather than re-deriving it from the evidence/axe impact.
    */
   readonly severity: ContractSeverity;
   /** The WCAG success-criterion id the finding maps to (contract `criterion` = the first `wcag` tag), e.g. "1.4.3"; "" when the rule carries no SC. */
   readonly criterion: string;
-  readonly corpus: { readonly tier: string; readonly sc: string | null; readonly orgs: number | null };
+  /** The coverage-catalog cross-reference: which source matched, the SC, and whether it is an axe best-practice rule (no WCAG SC). Frequency is platform-derived (ADR 0041 §G), never carried here. */
+  readonly evidence: { readonly source: Evidence["source"]; readonly sc: string | null; readonly bestPractice: boolean };
   readonly message: string;
 }
 
@@ -321,29 +288,25 @@ export interface JsonReport {
     readonly findings: number;
     readonly blocking: number;
     readonly warning: number;
-    readonly byTier: Record<"very-common" | "common" | "occasional" | "unknown", number>;
   };
 }
 
 /**
- * Project the source-discriminated `CorpusEvidence` union into the flat
- * `{ tier, sc, orgs }` shape the JSON contract exposes. Only `audit` findings
- * carry a real frequency tier + org count; `baseline` (axe-catalog coverage) and
- * `none` have no audit-frequency data, so they report `tier: "unknown"`,
- * `orgs: null` — the same "no moat match" marker the report used before the union.
+ * Project the source-discriminated `Evidence` union into the flat
+ * `{ source, sc, bestPractice }` shape the JSON contract exposes. The corpus left
+ * the engine (ADR 0041 §G), so no frequency tier or org count is carried —
+ * frequency is platform-derived and read-joined onto the ticket.
  */
-function jsonCorpus(c: CorpusEvidence): {
-  readonly tier: string;
+function jsonEvidence(c: Evidence): {
+  readonly source: Evidence["source"];
   readonly sc: string | null;
-  readonly orgs: number | null;
+  readonly bestPractice: boolean;
 } {
   switch (c.source) {
-    case "audit":
-      return { tier: c.tier, sc: c.sc, orgs: c.orgs };
     case "baseline":
-      return { tier: "unknown", sc: c.sc, orgs: null };
+      return { source: "baseline", sc: c.sc, bestPractice: c.bestPractice };
     case "none":
-      return { tier: "unknown", sc: null, orgs: null };
+      return { source: "none", sc: null, bestPractice: false };
   }
 }
 
@@ -357,16 +320,6 @@ export function buildJsonReport(
   const blocking = findings.filter((f) => f.enforcement === "block").length;
   const warning = findings.length - blocking;
 
-  const byTier: Record<"very-common" | "common" | "occasional" | "unknown", number> = {
-    "very-common": 0,
-    common: 0,
-    occasional: 0,
-    unknown: 0,
-  };
-  for (const f of findings) {
-    byTier[f.corpus.source === "audit" ? f.corpus.tier : "unknown"] += 1;
-  }
-
   const jsonFindings: JsonFinding[] = findings.map((f) => ({
     id: `${f.ruleId}|${relative(root, f.file)}|${f.line}|${f.wcag.join(",")}`,
     file: relative(root, f.file),
@@ -379,7 +332,7 @@ export function buildJsonReport(
     // report's counts match the wire/SARIF and never re-derive a second mapping.
     severity: contractSeverity(f),
     criterion: f.wcag[0] ?? "",
-    corpus: jsonCorpus(f.corpus),
+    evidence: jsonEvidence(f.corpus),
     message: f.message,
   }));
 
@@ -400,7 +353,6 @@ export function buildJsonReport(
       findings: findings.length,
       blocking,
       warning,
-      byTier,
     },
   };
 }

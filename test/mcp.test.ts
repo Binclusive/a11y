@@ -7,7 +7,7 @@ import { extractBlock } from "../src/agents-block";
 import { CONTRACT_FILE, init } from "../src/commands";
 import { parseContract } from "../src/contract";
 import type { DomScanResult } from "../src/collect-dom";
-import { checkA11y, checkUnity, checkUrl, getA11yRules, learnA11yRule, reviewTool } from "../src/mcp";
+import { checkA11y, checkUnity, checkUrl, getA11yRules, learnA11yRule } from "../src/mcp";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -20,14 +20,13 @@ vi.mock("../src/collect-dom", () => ({
 const { scanUrl } = await import("../src/collect-dom");
 const mockScanUrl = vi.mocked(scanUrl);
 
-describe("check_url handler: axe findings emit axe's rule fix, not the SC corpus fix", () => {
+describe("check_url handler: axe findings emit axe's rule fix", () => {
   afterEach(() => mockScanUrl.mockReset());
 
-  it("emits axe's per-rule guidance for aria-progressbar-name, keeps the corpus tier", async () => {
-    // `aria-progressbar-name` is tagged WCAG 1.1.1 — an SC the audit corpus HAS
-    // (very-common, 16/26 — tier derived from the org integer), whose generic fix
-    // is the image-alt fix. The emitted `fix` must be axe's rule guidance, never
-    // that contradictory corpus fix.
+  it("emits axe's per-rule guidance for aria-progressbar-name", async () => {
+    // `aria-progressbar-name` is tagged WCAG 1.1.1, whose SC-generic fix is the
+    // image-alt fix. The emitted `fix` must be axe's rule guidance, never that
+    // contradictory SC-generic fix.
     const result: DomScanResult = {
       url: "file:///page.html",
       findings: [
@@ -51,11 +50,11 @@ describe("check_url handler: axe findings emit axe's rule fix, not the SC corpus
     const r = await checkUrl("file:///page.html");
     const f = r.findings.find((x) => x.ruleId === "aria-progressbar-name");
     expect(f).toBeDefined();
-    // Corpus SC-level frequency fact survives (the moat).
-    expect(f?.source).toBe("audit");
-    expect(f?.tier).toBe("very-common");
+    // Baseline coverage — no frequency tier is carried (ADR 0041 §G).
+    expect(f?.source).toBe("baseline");
+    expect(f).not.toHaveProperty("tier");
     expect(f?.wcag).toContain("1.1.1");
-    // The EMITTED fix is axe's rule guidance, NOT the 1.1.1 image-alt corpus fix.
+    // The EMITTED fix is axe's rule guidance, NOT the 1.1.1 image-alt fix.
     expect(f?.fix).toBe("ARIA progressbar nodes must have an accessible name");
     expect(f?.fix).not.toMatch(/alt text/i);
     expect(f?.helpUrl).toContain("aria-progressbar-name");
@@ -70,11 +69,12 @@ describe("check_a11y handler", () => {
     expect(r.coverage.total).toBeGreaterThan(0);
     expect(r.findings.length).toBeGreaterThan(0);
 
-    // The two fixture anchors-without-content are very-common 2.4.4 findings.
+    // The two fixture anchors-without-content are 2.4.4 findings.
     const finding = r.findings.find((f) => f.ruleId === "jsx-a11y/anchor-has-content");
     expect(finding).toBeDefined();
     expect(finding?.wcag).toContain("2.4.4");
-    expect(finding?.tier).toBe("very-common");
+    expect(finding?.source).toBe("baseline");
+    expect(finding).not.toHaveProperty("tier");
     expect(finding?.fix).not.toBeNull();
     // Paths are relativized to the scan root — no absolute leakage.
     expect(finding?.file.startsWith("/")).toBe(false);
@@ -104,7 +104,7 @@ describe("check_unity handler", () => {
     expect(r.findings.length).toBeGreaterThan(0);
     expect(r.root).toBe(UNITY_PROJECT);
 
-    // Every finding is a Unity finding, tiered against the same corpus as .tsx.
+    // Every finding is a Unity finding (baseline enrichment, parity with .tsx).
     for (const f of r.findings) {
       expect(f.provenance).toBe("unity");
     }
@@ -138,53 +138,44 @@ describe("check_unity handler", () => {
   });
 });
 
-describe("get_a11y_rules handler", () => {
+describe("get_a11y_rules handler (axe baseline catalog — ADR 0041 §G, no corpus)", () => {
   it("returns the top rules with no filter", () => {
     const r = getA11yRules({});
     expect(r.matchedOn).toBe("top");
-    expect(r.patterns.length).toBeGreaterThan(0);
-    expect(r.count).toBe(r.patterns.length);
+    expect(r.baseline.length).toBeGreaterThan(0);
+    expect(r.count).toBe(r.baseline.length);
   });
 
-  it("filters by component substring (case-insensitive)", () => {
-    const r = getA11yRules({ component: "link" });
+  it("filters by component substring, mapped to an axe ruleId (case-insensitive)", () => {
+    const r = getA11yRules({ component: "image" });
     expect(r.matchedOn).toBe("component");
-    expect(r.patterns.length).toBeGreaterThan(0);
-    expect(r.patterns.every((p) => p.component.toLowerCase().includes("link"))).toBe(true);
+    expect(r.baseline.length).toBeGreaterThan(0);
+    expect(r.baseline.every((b) => b.ruleId.toLowerCase().includes("image"))).toBe(true);
   });
 
   it("filters by exact WCAG SC", () => {
     const r = getA11yRules({ sc: "2.4.4" });
     expect(r.matchedOn).toBe("sc");
-    expect(r.patterns.length).toBeGreaterThan(0);
-    expect(r.patterns.every((p) => p.sc === "2.4.4")).toBe(true);
-  });
-
-  it("component takes precedence over sc when both are given", () => {
-    const r = getA11yRules({ component: "link", sc: "2.4.4" });
-    expect(r.matchedOn).toBe("component");
-  });
-
-  it("backs an SC query with the baseline entry even when distilled (2.4.4)", () => {
-    const r = getA11yRules({ sc: "2.4.4" });
     expect(r.baseline.length).toBeGreaterThan(0);
     expect(r.baseline.every((b) => b.sc.includes("2.4.4"))).toBe(true);
   });
 
-  it("answers for an axe ruleId the corpus never distilled (color-contrast)", () => {
+  it("component takes precedence over sc when both are given", () => {
+    const r = getA11yRules({ component: "image", sc: "2.4.4" });
+    expect(r.matchedOn).toBe("component");
+  });
+
+  it("answers for an axe ruleId (color-contrast)", () => {
     const r = getA11yRules({ ruleId: "color-contrast" });
     expect(r.matchedOn).toBe("ruleId");
-    expect(r.patterns).toEqual([]); // no distilled pattern for it
     const cc = r.baseline.find((b) => b.ruleId === "color-contrast");
     expect(cc?.severity).toBe("serious");
     expect(cc?.sc).toContain("1.4.3");
     expect(cc?.helpUrl).toContain("dequeuniversity.com");
   });
 
-  it("falls back to baseline for an SC the corpus has not distilled (2.4.2)", () => {
-    // 2.4.2 (page-title) has no distilled pattern — pure baseline coverage.
+  it("answers by SC from the baseline catalog (2.4.2 page-title)", () => {
     const r = getA11yRules({ sc: "2.4.2" });
-    expect(r.patterns).toEqual([]);
     expect(r.baseline.some((b) => b.ruleId === "document-title")).toBe(true);
   });
 });
@@ -245,53 +236,3 @@ describe("learn_a11y_rule handler", () => {
   });
 });
 
-describe("review_a11y handler: verify-mode cross-field contract (#5)", () => {
-  const REVIEW_FIXTURE = resolve(
-    fileURLToPath(new URL("./fixtures/enforce/review.tsx", import.meta.url)),
-  );
-  const validCandidate = {
-    file: REVIEW_FIXTURE,
-    line: 11,
-    patternId: "2.4.4-link-no-name",
-    codeQuote: "<a href",
-    wcag: ["2.4.4"],
-    confidence: "high" as const,
-    message: "Link has no discernible name.",
-    justification: "Opaque link the floor missed; the quote is a real <a> with no name.",
-  };
-
-  it("REJECTS verify mode with no `files`, surfacing a clear contract error", async () => {
-    // The vacuous-scan exploit: { verify: true, candidates } with NO files scans
-    // [], so the floor's suppressor/abstention vetoes are empty and an FP would
-    // survive. The shell must reject it BEFORE reviewA11y runs.
-    await expect(
-      reviewTool({ verify: true, candidates: [validCandidate] }),
-    ).rejects.toThrow(/non-empty `files`/);
-  });
-
-  it("REJECTS verify mode with an EMPTY `files` array (same vacuous scan)", async () => {
-    await expect(
-      reviewTool({ verify: true, files: [], candidates: [validCandidate] }),
-    ).rejects.toThrow(/non-empty `files`/);
-  });
-
-  it("REJECTS verify mode with `files` but no `candidates`", async () => {
-    await expect(
-      reviewTool({ verify: true, files: [REVIEW_FIXTURE] }),
-    ).rejects.toThrow(/non-empty `candidates`/);
-  });
-
-  it("ACCEPTS verify mode with both files and candidates (runs the gate stack)", async () => {
-    const r = await reviewTool({
-      verify: true,
-      files: [REVIEW_FIXTURE],
-      candidates: [validCandidate],
-    });
-    expect(r.mode).toBe("verify");
-  });
-
-  it("retrieve mode (no verify) does NOT require files/candidates", async () => {
-    const r = await reviewTool({ dir: FIXTURES });
-    expect(r.mode).toBe("retrieve");
-  });
-});

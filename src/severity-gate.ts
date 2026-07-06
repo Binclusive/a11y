@@ -12,7 +12,7 @@
  * Both knobs are opt-in; there is no severity default.
  */
 import { Severity } from "@binclusive/a11y-contract";
-import type { EnrichedFinding } from "./corpus";
+import type { EnrichedFinding } from "./evidence";
 import { contractSeverity } from "./emit-contract";
 
 /**

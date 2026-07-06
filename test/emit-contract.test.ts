@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { Finding as ContractFinding, parseFindingPayload, Provenance, Severity } from "@binclusive/a11y-contract";
-import { enrich } from "../src/corpus";
+import { enrich } from "../src/evidence";
 import type { Finding, FindingProvenance } from "../src/core";
 import {
   contractSeverity,
@@ -92,16 +92,21 @@ describe("toContractFinding narrows onto the metadata-only DTO", () => {
     expect(projected.element).toBe("main > div.hero");
   });
 
-  it("the deterministic arm carries a corpus tier and no agent fields", () => {
+  it("the deterministic arm carries the required contract `tier` (a placeholder now) and no agent fields", () => {
+    // ADR 0041 §G: the corpus left the engine, so `tier` is no longer corpus-derived.
+    // The published `@binclusive/a11y-contract@0.1.1` still REQUIRES it as a string,
+    // so the engine emits a frozen `"unknown"` placeholder until the parked
+    // contract-field removal (Can's OTP) drops the field and this constant together.
     const projected = toContractFinding(enrich(raw()), "s");
     expect(projected.provenance).toBe("deterministic");
     if (projected.provenance === "deterministic") {
       expect(typeof projected.tier).toBe("string");
+      expect(projected.tier).toBe("unknown");
     }
     expect(projected).not.toHaveProperty("rationale");
   });
 
-  it("the agent arm carries a rationale and no corpus tier", () => {
+  it("the agent arm carries a rationale and no `tier`", () => {
     const f = enrich(raw({ provenance: "corpus-agent", layer: "recall", patternId: "p1", enforcement: "warn" }));
     const projected = toContractFinding(f, "s");
     expect(projected.provenance).toBe("agent");

@@ -36,7 +36,7 @@ export {
   enrich,
   enrichAll,
   resolveDisplay,
-} from "./corpus";
+} from "./evidence";
 // Types that `ScanResult` and the CLI presentation reference (the functions that
 // produce them — `resolveComponents` — stay internal):
 export {
@@ -160,29 +160,16 @@ export {
   startStdioServer,
 } from "./mcp";
 
-// ── 4 · Corpus — the moat, read-only ─────────────────────────────────────────
+// ── 4 · Evidence — the coverage catalog (axe baseline), read-only ────────────
+// The corpus left the engine (ADR 0041 §G): pure detection, baseline everywhere.
 export {
   type BaselineRuleInfo,
   baselineRules,
-  type CorpusCriterion,
-  type CorpusEvidence,
-  type CorpusPattern,
-  corpusBestPractice,
-  corpusCriteria,
-  corpusFix,
-  corpusHelpUrl,
-  corpusPatterns,
-  corpusSeverity,
-  corpusTier,
-  type CorpusTier,
-  type DistilledPatternRef,
-} from "./corpus";
+  type Evidence,
+  evidenceBestPractice,
+  evidenceFix,
+  evidenceHelpUrl,
+  evidenceSeverity,
+} from "./evidence";
 export { BLOCK_BEGIN, BLOCK_END, extractBlock, renderBlock, spliceBlock } from "./agents-block";
-export {
-  type RetrievedPattern,
-  type RetrievedSlice,
-  type RetrieveInput,
-  retrieveSlice,
-  SLICE_CAP,
-} from "./retrieve";
 export { RULE_ID_TO_WCAG, wcagForRuleId } from "./wcag-map";

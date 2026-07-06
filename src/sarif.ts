@@ -15,7 +15,7 @@
 import { relative } from "node:path";
 import type { Severity as ContractSeverity } from "@binclusive/a11y-contract";
 import { contractSeverity, hasSelector, impactToSeverity, toContractProvenance } from "./emit-contract";
-import { corpusHelpUrl, type EnrichedFinding } from "./corpus";
+import { evidenceHelpUrl, type EnrichedFinding } from "./evidence";
 
 // Re-export the severity mapping so a consumer wiring SARIF has the whole
 // severity story from one module. `impactToSeverity` is the axe -> contract
@@ -98,7 +98,7 @@ export function formatSarif(
             informationUri: "https://binclusive.io",
             rules: ruleIds.map((id) => {
               const f = ruleById.get(id);
-              const helpUri = f ? corpusHelpUrl(f) : null;
+              const helpUri = f ? evidenceHelpUrl(f) : null;
               return {
                 id,
                 ...(f ? { shortDescription: { text: f.message } } : {}),
