@@ -2,7 +2,7 @@
   "name": "@binclusive/a11y",
   "version": "0.1.0",
   "type": "module",
-  "description": "Local accessibility checker for React/TSX, grounded in a real-world audit corpus. Runs entirely on your machine — no network, no upload.",
+  "description": "Local accessibility checker for React/TSX, grounded in axe-core's published rule catalog. Runs entirely on your machine — no network, no upload.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "bin": {
@@ -12,9 +12,6 @@
     "bin",
     "src",
     "data/baseline-rules.json"
-  ],
-  "workspaces": [
-    "packages/*"
   ],
   "repository": {
     "type": "git",
@@ -40,8 +37,7 @@
     "matrix:run": "tsx experiments/stack-matrix/run.ts",
     "matrix:report": "tsx experiments/stack-matrix/report.ts",
     "matrix:baseline": "tsx experiments/stack-matrix/baseline.ts",
-    "matrix:check": "tsx experiments/stack-matrix/check.ts",
-    "recall:eval": "tsx experiments/corpus-recall/eval.ts"
+    "matrix:check": "tsx experiments/stack-matrix/check.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.10.2",
@@ -62,9 +58,6 @@
     "tsx": "^4.21.0",
     "typescript": "5.8.3",
     "zod": "4.0.0"
-  },
-  "optionalDependencies": {
-    "@binclusive/a11y-corpus": "^0.1.0"
   },
   "devDependencies": {
     "@types/node": "22.13.5",

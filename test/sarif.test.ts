@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enrich } from "../src/corpus";
+import { enrich } from "../src/evidence";
 import type { Finding } from "../src/core";
 import { formatSarif, severityToLevel } from "../src/sarif";
 

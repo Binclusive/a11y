@@ -9,49 +9,6 @@ import {
 } from "../src/agents-block";
 import type { Contract } from "../src/contract";
 import { emptyDeclarations } from "../src/contract";
-import type { CorpusPattern } from "../src/corpus";
-
-const patterns: readonly CorpusPattern[] = [
-  {
-    id: "1.3.1-label",
-    sc: "1.3.1",
-    orgs: 22,
-    tier: "very-common",
-    component: "form field",
-    failureShape:
-      "A field has no programmatic label. It relies on placeholder text only, which AT does not announce.",
-    fix: "Associate every field with a <label> via id. Do not rely on placeholder text. Add visible instructions where needed.",
-  },
-  {
-    id: "4.1.2-button-no-name",
-    sc: "4.1.2",
-    orgs: 21,
-    tier: "very-common",
-    component: "icon-only button",
-    failureShape: "A button exposes no accessible name, so AT announces an unlabeled button.",
-    fix: "Give every button discernible text or an aria-label for icon-only buttons.",
-  },
-  {
-    id: "3.3.1-error",
-    sc: "3.3.1",
-    orgs: 8,
-    tier: "occasional",
-    component: "error message",
-    failureShape: "Form errors are conveyed by color alone.",
-    fix: "Identify form errors in text and tie them to the field.",
-  },
-];
-
-/** 15 synthetic patterns to exercise the 12-line cap + overflow line. */
-const manyPatterns: readonly CorpusPattern[] = Array.from({ length: 15 }, (_, i) => ({
-  id: `pat-${String(i).padStart(2, "0")}`,
-  sc: "4.1.2",
-  orgs: 21,
-  tier: "very-common" as const,
-  component: `component ${i}`,
-  failureShape: `Shape ${i}. Extra sentence.`,
-  fix: `Fix ${i}.`,
-}));
 
 const contract: Contract = {
   version: 1,
@@ -87,59 +44,41 @@ describe("slugify", () => {
 
 describe("renderBlock", () => {
   it("is delimited by the managed markers", () => {
-    const block = renderBlock(contract, patterns);
+    const block = renderBlock(contract);
     expect(block.startsWith(BLOCK_BEGIN)).toBe(true);
     expect(block.endsWith(BLOCK_END)).toBe(true);
   });
 
-  it("renders each distilled pattern: component, SC, tier, aggregate orgs", () => {
-    const block = renderBlock(contract, patterns);
-    expect(block).toContain("[SC 1.3.1 · VERY COMMON · 22/26 orgs] form field:");
-    expect(block).toContain("[SC 4.1.2 · VERY COMMON · 21/26 orgs] icon-only button:");
+  it("renders the stack + enforcement contract", () => {
+    const block = renderBlock(contract);
+    expect(block).toContain("Stack: next (app router) · @b8e/design · ts");
+    expect(block).toContain("Enforcement — block: 1.3.1, 4.1.2 · warn: 3.3.1");
   });
 
-  it("collapses a multi-sentence failureShape/fix to one terse sentence each", () => {
-    const block = renderBlock(contract, patterns);
-    // First sentence of the shape, then the arrow, then first sentence of fix.
-    expect(block).toContain("A field has no programmatic label.");
-    expect(block).not.toContain("which AT does not announce");
-    expect(block).toContain("Associate every field with a <label> via id.");
-    expect(block).not.toContain("Do not rely on placeholder text");
-  });
-
-  it("caps at 12 pattern lines and summarizes the rest as '+N more'", () => {
-    const block = renderBlock(contract, manyPatterns);
-    // Corpus pattern lines carry " · VERY COMMON]" etc.; the learned line
-    // carries " · learned ·" — count only the corpus failure-shape lines.
-    const patternLines = block
-      .split("\n")
-      .filter((l) => l.startsWith("- [SC") && !l.includes("· learned ·"));
-    expect(patternLines).toHaveLength(12);
-    expect(block).toContain("+3 more in the corpus");
-  });
-
-  it("omits the '+N more' line when at or under the cap", () => {
-    const block = renderBlock(contract, patterns);
-    expect(block).not.toContain("more in the corpus");
+  it("carries no corpus/frequency framing (ADR 0041 §G — the corpus left the engine)", () => {
+    const block = renderBlock(contract);
+    expect(block).not.toContain("Corpus patterns");
+    expect(block).not.toMatch(/orgs/i);
+    expect(block).not.toMatch(/very common/i);
   });
 
   it("includes the learned rules with their source and fix", () => {
-    const block = renderBlock(contract, patterns);
+    const block = renderBlock(contract);
     expect(block).toContain("Label icon-only buttons");
     expect(block).toContain("learned · review");
   });
 
   it("omits the learned section when there are no learned rules", () => {
-    const block = renderBlock({ ...contract, learned: [] }, patterns);
+    const block = renderBlock({ ...contract, learned: [] });
     expect(block).not.toContain("Learned (this repo)");
   });
 
   it("is pure — same inputs yield identical bytes", () => {
-    expect(renderBlock(contract, patterns)).toBe(renderBlock(contract, patterns));
+    expect(renderBlock(contract)).toBe(renderBlock(contract));
   });
 
   it("emits the ROBOT MODE protocol so any AGENTS.md-reading agent runs the same loop", () => {
-    const block = renderBlock(contract, patterns);
+    const block = renderBlock(contract);
     expect(block).toContain("`binclusive-a11y` MCP tools");
     expect(block).toContain("Re-scan after each change");
     expect(block).toContain("never claim compliance");
@@ -147,7 +86,7 @@ describe("renderBlock", () => {
 });
 
 describe("spliceBlock idempotence + preservation", () => {
-  const block = renderBlock(contract, patterns);
+  const block = renderBlock(contract);
 
   it("creates the file content when none exists", () => {
     const out = spliceBlock(null, block);

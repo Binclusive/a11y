@@ -62,10 +62,6 @@ importers:
       zod:
         specifier: 4.0.0
         version: 4.0.0
-    optionalDependencies:
-      '@binclusive/a11y-corpus':
-        specifier: ^0.1.0
-        version: link:packages/a11y-corpus
     devDependencies:
       '@types/node':
         specifier: 22.13.5
@@ -73,18 +69,6 @@ importers:
       fast-check:
         specifier: ^4.8.0
         version: 4.8.0
-      vitest:
-        specifier: 3.0.7
-        version: 3.0.7(@types/node@22.13.5)(tsx@4.22.4)(yaml@2.9.0)
-
-  packages/a11y-corpus:
-    devDependencies:
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.4
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
       vitest:
         specifier: 3.0.7
         version: 3.0.7(@types/node@22.13.5)(tsx@4.22.4)(yaml@2.9.0)

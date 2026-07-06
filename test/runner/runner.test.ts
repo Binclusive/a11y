@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Finding as ContractFinding, parseFindingPayload } from "@binclusive/a11y-contract";
-import { enrich } from "../../src/corpus";
+import { enrich } from "../../src/evidence";
 import type { EnrichedFinding, Finding } from "../../src/index";
 import {
   type AgentFinding,

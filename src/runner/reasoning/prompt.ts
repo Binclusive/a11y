@@ -93,14 +93,14 @@ export function buildSystemPrompt(guidance: FrameworkGuidance): string {
 }
 
 /** The user turn: the single deterministic finding this pass reasons about. */
-export function buildUserPrompt(finding: Finding, corpusFix: string | null, structural: string | null): string {
+export function buildUserPrompt(finding: Finding, evidenceFix: string | null, structural: string | null): string {
   const lines = [
     "Reason about this deterministic finding and suggest fixes:",
     `- rule: ${finding.ruleId}`,
     `- message: ${finding.message}`,
     `- wcag: ${finding.wcag.length > 0 ? finding.wcag.join(", ") : "(none mapped)"}`,
   ];
-  if (corpusFix !== null) lines.push(`- corpus fix hint: ${corpusFix}`);
+  if (evidenceFix !== null) lines.push(`- corpus fix hint: ${evidenceFix}`);
   if (structural !== null) lines.push(`- structural context: ${structural}`);
   return lines.join("\n");
 }

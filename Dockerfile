@@ -18,16 +18,11 @@ RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /engine
 
 # --prod drops vitest/fast-check/@types: tsx executes TS without type-checking,
-# so the runtime needs none of them. --no-optional skips @binclusive/a11y-corpus:
-# it stays declared in package.json (+ both lockfiles) so authed-dev installs link
-# the local workspace, but the public CI image ships corpus-absent (baseline/degraded
-# floor — the engine require-or-empties it). The corpus workspace is not COPYed here,
-# so installing it would dangle; --no-optional is what keeps the frozen install honest.
-# Ordering note: --frozen-lockfile runs the package.json↔lockfile consistency check
-# BEFORE honoring --no-optional, so both lockfiles must already record the corpus
-# (they do) for this to pass.
+# so the runtime needs none of them. The corpus left the engine (ADR 0041 §G) — the
+# engine is pure detection now, with no optional dependency to skip — so a plain
+# frozen install is the whole story.
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --prod --no-optional --frozen-lockfile
+RUN pnpm install --prod --frozen-lockfile
 
 # The browser lane (playwright/@axe-core, the `check-url` path) and the MCP lane
 # (@modelcontextprotocol/sdk, the `mcp` command) are lazy-loaded in the engine —

@@ -149,7 +149,7 @@ describe("@effect/cli dispatch: each subcommand parses + invokes its runner", ()
       expect(report.coverage.total).toBe(0);
       expect(Array.isArray(report.findings)).toBe(true);
       expect(report.findings.length).toBeGreaterThan(0);
-      // Findings are Unity-provenance and corpus-enriched (the SC-keyed enrichAll pass).
+      // Findings are Unity-provenance and baseline-enriched (the SC-keyed enrichAll pass).
       expect(report.findings.every((f) => f.provenance === "unity")).toBe(true);
       expect(report.findings.some((f) => f.ruleId === "unity/missing-accessible-label")).toBe(
         true,

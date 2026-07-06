@@ -170,10 +170,10 @@ export interface ResolvedComponents {
   /**
    * The parsed `ts.SourceFile` for each SCANNED file (keyed by the path passed
    * in), built by the walk this resolver already does. Surfaced so a downstream
-   * consumer (R4's `collectIntrinsicElements`, the edit-time hook's recall
-   * whisper) can reuse the parse instead of re-reading + re-parsing the file —
-   * the no-second-parse guarantee the hot hook path needs. A file that couldn't
-   * be read is absent (the resolver `continue`s on a read failure).
+   * consumer (the edit-time hook) can reuse the parse instead of re-reading +
+   * re-parsing the file — the no-second-parse guarantee the hot hook path needs.
+   * A file that couldn't be read is absent (the resolver `continue`s on a read
+   * failure).
    */
   readonly sourceFiles: ReadonlyMap<string, ts.SourceFile>;
 }

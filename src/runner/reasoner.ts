@@ -13,7 +13,7 @@
  * both so the token ceiling and the per-finding lookup cap are enforced
  * underneath. This keeps #2096/#2098 free of cap plumbing.
  */
-import type { EnrichedFinding } from "../corpus";
+import type { EnrichedFinding } from "../evidence";
 import type { LookupTool } from "./lookup";
 import type { Provider } from "./provider";
 

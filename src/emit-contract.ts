@@ -29,7 +29,7 @@ import {
   type Severity as ContractSeverity,
 } from "@binclusive/a11y-contract";
 import type { FindingProvenance } from "./core";
-import { corpusSeverity, corpusTier, type EnrichedFinding, type Severity as AxeImpact } from "./corpus";
+import { evidenceSeverity, type EnrichedFinding, type Severity as AxeImpact } from "./evidence";
 
 /**
  * The ONE axe-impact -> contract-severity mapping. axe's runtime vocabulary has
@@ -60,7 +60,7 @@ const DEFAULT_SEVERITY: ContractSeverity = "major";
 
 /** The finding's contract severity: its resolved axe impact narrowed to the 3-level enum. */
 export function contractSeverity(f: EnrichedFinding): ContractSeverity {
-  const impact = corpusSeverity(f);
+  const impact = evidenceSeverity(f);
   return impact === null ? DEFAULT_SEVERITY : impactToSeverity(impact);
 }
 
@@ -103,7 +103,12 @@ export function toContractFinding(f: EnrichedFinding, scope: string): ContractFi
   if (toContractProvenance(f.provenance) === "agent") {
     return { provenance: "agent", ...base, rationale: f.message };
   }
-  return { provenance: "deterministic", ...base, tier: corpusTier(f.corpus) };
+  // ADR 0041 §G: the corpus left the engine, so frequency is no longer known
+  // here — it is platform-derived and read-joined onto the ticket. The published
+  // `@binclusive/a11y-contract` still REQUIRES `tier` (a string), so we emit a
+  // frozen `"unknown"` placeholder rather than deriving it. PARKED: once Can's OTP
+  // session republishes the contract with `tier` removed, this constant drops too.
+  return { provenance: "deterministic", ...base, tier: "unknown" };
 }
 
 /**

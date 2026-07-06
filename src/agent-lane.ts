@@ -25,7 +25,7 @@
  * is preserved: agent findings project through the same `toContractFinding` /
  * phone-home path as the deterministic floor, so no file/line ever crosses.
  */
-import type { EnrichedFinding } from "./corpus";
+import type { EnrichedFinding } from "./evidence";
 import { createAnthropicProvider } from "./runner/providers/anthropic";
 import { createCodeGraphLookup } from "./runner/codegraph-lookup";
 import type { Provider } from "./runner/provider";
