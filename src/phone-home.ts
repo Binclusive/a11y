@@ -21,19 +21,20 @@
  * is never interpolated into any log line — the outcome carries only
  * presence/status/reason, never the token value.
  *
- * METADATA-ONLY ON THE WIRE. A finding projects to {@link CiFinding} carrying a
- * scanned target PATH (`url`), a WCAG criterion, a DOM/selector locator, a
- * severity band, and human-readable evidence — never a source line and never a
- * snippet. `url` is the same repo-relative path vocabulary as
- * {@link IngestEnvelope.scannedTargets}, which is what lets platform-side
- * scope-reconcile key `ticket.url ∈ scannedTargets` (issue #2166): a target that
- * was re-scanned and no longer fires is provably fixed.
+ * METADATA-ONLY ON THE WIRE. A finding rides the engine's SINGLE emit projection
+ * (`@binclusive/a11y-contract` `Finding` via `toFindingPayloadLenient`) carrying a
+ * `location` — a page `url` OR a source `{path,lineHash,index}` fingerprint — plus a
+ * WCAG criterion, a DOM/selector locator, a severity band, and human-readable
+ * evidence; never a `file:line`, never a snippet, never a raw line (ADR 0042). A
+ * source finding sends its fingerprint, NOT `url = file-path`, so the platform stores
+ * a real Source(), not a fake page (#2252-B). A page finding's `location.url` is the
+ * same repo/URL vocabulary as {@link IngestEnvelope.scannedTargets}, which is what
+ * lets platform-side scope-reconcile key membership (issue #2166).
  */
-import { relative } from "node:path";
-import type { Provenance as ContractProvenance } from "@binclusive/a11y-contract";
+import type { Finding as ContractFinding, Provenance as ContractProvenance } from "@binclusive/a11y-contract";
 import type { EnrichedFinding } from "./evidence";
 import { scopeChangedTsxFromEnv } from "./diff-scope";
-import { contractSeverity, hasSelector, toContractProvenance } from "./emit-contract";
+import { toFindingPayloadLenient } from "./emit-contract";
 
 /** The production Kontrol GraphQL gateway. Overridable via `B8E_INGEST_URL`. */
 const DEFAULT_INGEST_URL = "https://kontrol.binclusive.io/graphql";
@@ -42,29 +43,19 @@ const DEFAULT_INGEST_URL = "https://kontrol.binclusive.io/graphql";
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
- * One occurrence on the wire — mirrors Kontrol's `CiFindingInput` exactly.
- * Metadata-only by construction: `url` is a scanned PATH (a target id), not
- * `file:line`, and there is no snippet/source field. `description`/`evidence`
- * are the finding's own human-readable message; `recommendation` is left empty
- * on the deterministic floor (an agent enrichment is local-only by design — see
- * `EnrichedFinding.agentNote`).
+ * One occurrence on the wire: the metadata-only contract `Finding` the engine's emit
+ * path projects, PLUS `impact` — a Kontrol transport extra the moat contract omits.
+ *
+ * `impact` carries the axe runtime's 4-level value (`critical|serious|moderate|minor`),
+ * which Kontrol's `CiFindingInput` and the dashboard's `parseImpact` require; the contract
+ * `severity` is deliberately a 3-level band and is NOT a valid `impact` (`major` is dropped
+ * by the UI). The two travel together — a bare `ContractFinding` cannot represent the wire
+ * occurrence, so the 4-level value can never be silently lost to the band again (#153).
  */
-export interface CiFinding {
-  /** The scanned target this occurrence was found in — a repo-relative path. */
-  readonly url: string;
-  /** WCAG success-criterion id, e.g. "1.4.3". */
-  readonly criterion: string;
-  /** DOM selector / accessible-tree path locating the occurrence — not source. */
-  readonly element: string;
-  readonly severity: "critical" | "major" | "minor";
-  /** Free-form impact label (axe runtime impact when present, else the band). */
+interface EnvelopeFinding {
+  readonly contract: ContractFinding;
+  /** 4-level axe runtime impact when the finding carried one, else the 3-level band. */
   readonly impact: string;
-  readonly evidence: string;
-  readonly description: string;
-  /** Remediation prose. Empty on the CI static floor (never a code patch). */
-  readonly recommendation: string;
-  /** ISO-8601 timestamp the run observed the occurrence. */
-  readonly seenAt: string;
 }
 
 /**
@@ -80,7 +71,16 @@ export interface IngestEnvelope {
   readonly provenance: ContractProvenance;
   readonly scope: string;
   readonly scannedTargets: readonly string[];
-  readonly findings: readonly CiFinding[];
+  /**
+   * The occurrences on the wire — each pairs the SAME metadata-only
+   * `@binclusive/a11y-contract` `Finding` the engine's emit path projects (ONE wire
+   * projection, not a phone-home-private second one) with its transport `impact`.
+   * Each contract carries a `location` (page `url` OR source `{path,lineHash,index}`
+   * fingerprint), never a `file:line` (ADR 0042).
+   */
+  readonly findings: readonly EnvelopeFinding[];
+  /** ISO-8601 timestamp the run observed these occurrences (envelope-level: one run). */
+  readonly seenAt: string;
 }
 
 /** Why phone-home did nothing — every arm is a NON-error opt-out or empty run. */
@@ -190,39 +190,21 @@ export function resolveConfig(env: NodeJS.ProcessEnv): ConfigResolution {
   };
 }
 
-// ── Projection: EnrichedFinding → CiFinding (metadata-only, path-as-url) ──
-
-/**
- * Project one rich local finding onto the wire occurrence, dropping `file:line`
- * source but KEEPING the repo-relative path as `url`. The path is a target id
- * (the same vocabulary as `scannedTargets`), not source — so reconcile can match
- * it while no line number or snippet ever leaves the machine. Severity + selector
- * reuse the engine's single mapping (`emit-contract`), so the wire and SARIF can
- * never disagree on a finding's band.
- */
-export function toCiFinding(f: EnrichedFinding, root: string, seenAt: string): CiFinding {
-  const band = contractSeverity(f);
-  return {
-    // `path.relative` emits platform separators (`\` on Windows); force `/` so the
-    // wire `url` stays the same git-style vocabulary as `scannedTargets` and the
-    // `finding.url ∈ scannedTargets` reconcile invariant holds on every OS (#2180).
-    url: relative(root, f.file).replaceAll("\\", "/"),
-    criterion: f.wcag[0] ?? "",
-    element: hasSelector(f.selector) ? f.selector : f.ruleId,
-    severity: band,
-    impact: f.severity ?? band,
-    evidence: f.message,
-    description: f.message,
-    recommendation: "",
-    seenAt,
-  };
-}
+// ── Projection: reuse the ONE emit path (resolveLocations + toContractFinding) ──
 
 /**
  * Group a run's findings into per-provenance envelopes. Kontrol's provenance is
  * envelope-level, so a mixed run yields up to two envelopes (deterministic +
  * agent); an all-deterministic CI run yields one. `scannedTargets` is stamped on
  * every envelope regardless — it describes the RUN, not the findings.
+ *
+ * The occurrences come from the engine's SINGLE emit projection
+ * ({@link toFindingPayloadLenient} — `resolveLocations` + `toContractFinding`), so
+ * phone-home and SARIF can never disagree on a finding's identity or location. Lenient
+ * (not the throwing `toFindingPayload`) because phone-home NEVER blocks: a malformed
+ * finding is dropped, never thrown out of this call. The projection resolves each
+ * finding's `location` — a page `url` or a source `{path,lineHash,index}` fingerprint —
+ * so a source finding rides its moat-safe identity, not a `url = file-path` fake page.
  */
 export function assembleEnvelopes(
   findings: readonly EnrichedFinding[],
@@ -231,14 +213,18 @@ export function assembleEnvelopes(
   scannedTargets: readonly string[],
   seenAt: string,
 ): IngestEnvelope[] {
-  const deterministic: CiFinding[] = [];
-  const agent: CiFinding[] = [];
-  for (const f of findings) {
-    const ci = toCiFinding(f, root, seenAt);
-    (toContractProvenance(f.provenance) === "agent" ? agent : deterministic).push(ci);
-  }
+  const { payload, sources } = toFindingPayloadLenient(findings, config.scope, { root });
 
-  const envelope = (provenance: ContractProvenance, items: CiFinding[]): IngestEnvelope => ({
+  // Pair each wire finding with its source's 4-level axe impact BEFORE the contract's
+  // 3-level band is all that's left. `sources[i]` is the enriched finding `payload.findings[i]`
+  // was projected from (1:1, drops applied). Reproduces origin/main's `impact: f.severity ?? band`
+  // — the raw axe runtime impact when present, else the band (`contract.severity`) as the fallback.
+  const occurrences: EnvelopeFinding[] = payload.findings.map((contract, i) => ({
+    contract,
+    impact: sources[i]?.severity ?? contract.severity,
+  }));
+
+  const envelope = (provenance: ContractProvenance, items: readonly EnvelopeFinding[]): IngestEnvelope => ({
     orgID: config.orgID,
     projectID: config.projectID,
     auditID: config.auditID,
@@ -246,7 +232,11 @@ export function assembleEnvelopes(
     scope: config.scope,
     scannedTargets,
     findings: items,
+    seenAt,
   });
+
+  const deterministic = occurrences.filter((o) => o.contract.provenance === "deterministic");
+  const agent = occurrences.filter((o) => o.contract.provenance === "agent");
 
   const envelopes: IngestEnvelope[] = [];
   if (deterministic.length > 0) envelopes.push(envelope("deterministic", deterministic));
@@ -282,6 +272,16 @@ function readIngestCount(body: unknown): { ok: true; count: number } | { ok: fal
   return { ok: true, count };
 }
 
+/**
+ * Serialize an envelope to the `ingestExternalFindings` variables. The occurrence
+ * fields (location/criterion/severity/element/evidence) come STRAIGHT from the
+ * contract `Finding` — no re-derivation — and only the transport extras Kontrol's
+ * `CiFindingInput` requires but the moat contract omits (`impact`, `description`,
+ * `recommendation`, `seenAt`) are added here, mirroring the platform's own
+ * `ciFindingOccurrenceSchema` split. The contract `location` union IS `CiLocationInput`
+ * (page `{kind,url}` | source `{kind,path,lineHash,index}`), so a source finding sends
+ * its fingerprint and NO top-level `url` — never a `url = path` fake page (ADR 0042, #2252-B).
+ */
 function toInputVariables(envelope: IngestEnvelope) {
   return {
     orgID: envelope.orgID,
@@ -290,7 +290,23 @@ function toInputVariables(envelope: IngestEnvelope) {
     provenance: envelope.provenance,
     scope: envelope.scope,
     scannedTargets: envelope.scannedTargets,
-    findings: envelope.findings.map((f) => ({ ...f })),
+    findings: envelope.findings.map(({ contract, impact }) => ({
+      // The location union — page url or source fingerprint — is what the platform
+      // stores as a real Page()/Source(); no bare `url` arm, so source never fakes a page.
+      location: contract.location,
+      criterion: contract.criterion,
+      element: contract.element,
+      severity: contract.severity,
+      evidence: contract.evidence,
+      description: contract.evidence,
+      // `impact` is the axe 4-level runtime value (`critical|serious|moderate|minor`) when
+      // the finding carried one, else the 3-level band. The moat contract deliberately omits
+      // it, so it is carried as a transport extra — the band alone (`major`) is invalid 4-level
+      // and the dashboard's parseImpact would drop the ticket (#153 regression).
+      impact,
+      recommendation: "",
+      seenAt: envelope.seenAt,
+    })),
   };
 }
 

@@ -12,8 +12,8 @@ importers:
         specifier: ^4.10.2
         version: 4.11.3(playwright-core@1.60.0)
       '@binclusive/a11y-contract':
-        specifier: ^0.1.1
-        version: 0.1.1
+        specifier: ^0.3.0
+        version: 0.3.0
       '@binclusive/code-graph':
         specifier: ^0.0.1
         version: 0.0.1
@@ -83,8 +83,8 @@ packages:
     peerDependencies:
       playwright-core: '>= 1.0.0'
 
-  '@binclusive/a11y-contract@0.1.1':
-    resolution: {integrity: sha512-yYOsuK0z1yXtXjWgolLr2Wo0BkIznGUnd6gLlE9UoXZ9/Tc/ZX/7jfLm3zIw8J0sgGRlLxoNt+KARgNRiq2Tpw==}
+  '@binclusive/a11y-contract@0.3.0':
+    resolution: {integrity: sha512-YgxCUKkwzvPBvGBq1ihLCbIa9Rjw2zMk4ZYH9k5kq2L2QtTT31Uf4wM3+q97cpm9kfK3onb1x7IAh6otDt3L8w==}
     engines: {node: '>=20'}
 
   '@binclusive/code-graph@0.0.1':
@@ -2210,7 +2210,7 @@ snapshots:
       axe-core: 4.11.4
       playwright-core: 1.60.0
 
-  '@binclusive/a11y-contract@0.1.1':
+  '@binclusive/a11y-contract@0.3.0':
     dependencies:
       zod: 4.0.0
 
