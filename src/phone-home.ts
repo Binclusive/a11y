@@ -24,7 +24,8 @@
  * METADATA-ONLY ON THE WIRE. A finding rides the engine's SINGLE emit projection
  * (`@binclusive/a11y-contract` `Finding` via `toFindingPayloadLenient`) carrying a
  * `location` — a page `url` OR a source `{path,lineHash,index}` fingerprint — plus a
- * WCAG criterion, a DOM/selector locator, a severity band, and human-readable
+ * WCAG criterion, a DOM/selector locator, the 4-level `impact` (ADR 0044 slice v(A): the
+ * wire speaks impact, not the 3-level severity band), and human-readable
  * evidence; never a `file:line`, never a snippet, never a raw line (ADR 0042). A
  * source finding sends its fingerprint, NOT `url = file-path`, so the platform stores
  * a real Source(), not a fake page (#2252-B). A page finding's `location.url` is the
@@ -50,12 +51,13 @@ const DEFAULT_TIMEOUT_MS = 10_000;
  * `impact` carries the axe runtime's 4-level value (`critical|serious|moderate|minor`),
  * which Kontrol's `CiFindingInput` and the dashboard's `parseImpact` require; the contract
  * `severity` is deliberately a 3-level band and is NOT a valid `impact` (`major` is dropped
- * by the UI). The two travel together — a bare `ContractFinding` cannot represent the wire
- * occurrence, so the 4-level value can never be silently lost to the band again (#153).
+ * by the UI). The wire sends `impact` only (ADR 0044 slice v(A)) — a bare `ContractFinding`
+ * cannot represent the wire occurrence, so the 4-level value can never be silently lost to
+ * the band again (#153).
  */
 interface EnvelopeFinding {
   readonly contract: ContractFinding;
-  /** 4-level axe runtime impact when the finding carried one, else the 3-level band. */
+  /** 4-level axe runtime impact when the finding carried one, else `"unknown"` (never the band). */
   readonly impact: string;
 }
 
@@ -249,13 +251,14 @@ export function assembleEnvelopes(
 ): IngestEnvelope[] {
   const { payload, sources } = toFindingPayloadLenient(findings, config.scope, { root });
 
-  // Pair each wire finding with its source's 4-level axe impact BEFORE the contract's
-  // 3-level band is all that's left. `sources[i]` is the enriched finding `payload.findings[i]`
-  // was projected from (1:1, drops applied). Reproduces origin/main's `impact: f.severity ?? band`
-  // — the raw axe runtime impact when present, else the band (`contract.severity`) as the fallback.
+  // Pair each wire finding with its source's 4-level axe impact. `sources[i]` is the
+  // enriched finding `payload.findings[i]` was projected from (1:1, drops applied). The
+  // fallback is the valid 4-level `"unknown"`, NOT the contract's 3-level band — a finding
+  // with no axe impact (an agent finding) must not send `major`, which is an invalid
+  // `impact` the dashboard's parseImpact drops (ADR 0044 slice v(A), #153-adjacent).
   const occurrences: EnvelopeFinding[] = payload.findings.map((contract, i) => ({
     contract,
-    impact: sources[i]?.severity ?? contract.severity,
+    impact: sources[i]?.severity ?? "unknown",
   }));
 
   const envelope = (provenance: ContractProvenance, items: readonly EnvelopeFinding[]): IngestEnvelope => ({
@@ -310,11 +313,12 @@ function readIngestCount(body: unknown): { ok: true; count: number } | { ok: fal
 
 /**
  * Serialize an envelope to the `ingestExternalFindings` variables. The occurrence
- * fields (location/criterion/severity/element/evidence) come STRAIGHT from the
- * contract `Finding` — no re-derivation — and only the transport extras Kontrol's
+ * fields (location/criterion/element/evidence) come STRAIGHT from the contract
+ * `Finding` — no re-derivation — and only the transport extras Kontrol's
  * `CiFindingInput` requires but the moat contract omits (`impact`, `description`,
  * `recommendation`, `seenAt`) are added here, mirroring the platform's own
- * `ciFindingOccurrenceSchema` split. The contract `location` union IS `CiLocationInput`
+ * `ciFindingOccurrenceSchema` split. The wire sends the 4-level `impact` only and NO
+ * `severity` band — the engine speaks impact (ADR 0044 slice v(A)). The contract `location` union IS `CiLocationInput`
  * (page `{kind,url}` | source `{kind,path,lineHash,index}`), so a source finding sends
  * its fingerprint and NO top-level `url` — never a `url = path` fake page (ADR 0042, #2252-B).
  */
@@ -337,13 +341,12 @@ function toInputVariables(envelope: IngestEnvelope) {
       location: contract.location,
       criterion: contract.criterion,
       element: contract.element,
-      severity: contract.severity,
       evidence: contract.evidence,
       description: contract.evidence,
       // `impact` is the axe 4-level runtime value (`critical|serious|moderate|minor`) when
-      // the finding carried one, else the 3-level band. The moat contract deliberately omits
-      // it, so it is carried as a transport extra — the band alone (`major`) is invalid 4-level
-      // and the dashboard's parseImpact would drop the ticket (#153 regression).
+      // the finding carried one, else `"unknown"` — always a valid 4-level value. The wire no
+      // longer sends the 3-level `severity` band at all: the engine now speaks impact only,
+      // and CiFindingInput.severity is optional platform-side (ADR 0044 slice v(A)).
       impact,
       recommendation: "",
       seenAt: envelope.seenAt,
