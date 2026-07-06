@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Runnable entry for the PR-summary rollup (`src/pr-summary-cli.ts`), invoked by
- * `entrypoint.sh` after a scan — ALONGSIDE the per-finding inline reconciler
- * (`pr-comment.mjs`). Mirrors that wrapper: the package ships TypeScript source
+ * `entrypoint.sh` after a scan — ALONGSIDE the per-finding inline reporter
+ * (`report.mjs`, the reporter-adapter seam). Mirrors that wrapper: the package ships TypeScript source
  * (no build step), so this thin JS wrapper registers the `tsx` loader (resolved
  * from THIS package's own deps, cwd-proof) and hands off to the CLI, forwarding
  * the findings-report path argument.

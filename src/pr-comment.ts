@@ -24,35 +24,11 @@
  * testable against an in-memory fake.
  */
 
-/** The contract's 3-level severity — the `Severity` enum in `@binclusive/a11y-contract`. */
-export type Severity = "critical" | "major" | "minor";
-
-/** The subset of an a11y finding an inline PR comment is rendered from. */
-export interface Finding {
-  readonly ruleId: string;
-  readonly file: string;
-  readonly line: number;
-  readonly message: string;
-  readonly wcag?: readonly string[];
-  /**
-   * The finding's contract severity, carried through from the report so the
-   * PR-summary rollup (#2132) can count by it. Optional: it plays no part in
-   * {@link findingKey} or {@link renderBody} — the inline comment is unchanged —
-   * and a report predating the field simply buckets the finding as unknown.
-   */
-  readonly severity?: Severity;
-  /** The WCAG success-criterion id (contract `criterion`), e.g. "1.4.3"; used only by the rollup's by-WCAG breakdown. */
-  readonly criterion?: string;
-  /**
-   * The CSS selector of the offending rendered element, on axe/DOM findings
-   * only (source passes anchor by `file:line` and omit it). It is what
-   * distinguishes two same-rule findings co-located at one `file:line` — two
-   * `image-alt` failures on one page, or two `<img>` on one JSX line — so it
-   * MUST survive the boundary into {@link findingKey}, or the second collapses
-   * onto the first's key and is silently dropped.
-   */
-  readonly selector?: string;
-}
+// The canonical finding shape a reporter renders from now lives in the seam
+// (`reporter/finding.ts`), so the platform-neutral input type is not owned by
+// this GitHub-specific surface. Re-exported here for existing importers.
+import { type Finding, parseFindings, type Severity } from "./reporter/finding";
+export { type Finding, parseFindings, type Severity };
 
 /** An existing inline review comment already on the PR (id + rendered body). */
 export interface ReviewComment {
@@ -71,11 +47,6 @@ const MARKER_RE = /<!--\s*binclusive-a11y-agent:(.*?)\s*-->/;
  */
 function hasSelector(selector: string | undefined): selector is string {
   return selector !== undefined && selector.trim() !== "";
-}
-
-/** Narrow an unknown report value to the contract's 3-level severity enum. */
-function isSeverity(value: unknown): value is Severity {
-  return value === "critical" || value === "major" || value === "minor";
 }
 
 /**
@@ -276,43 +247,4 @@ export async function syncCommentsBestEffort(
     log(`sync aborted (best-effort, no-op): ${e instanceof Error ? e.message : String(e)}`);
     return null;
   }
-}
-
-/**
- * Boundary parse of the engine's findings JSON into the minimal shape this
- * module renders from. Unknown in, narrowed out — a malformed entry is dropped
- * rather than smuggling `any` inward (same discipline as the rest of the engine).
- */
-export function parseFindings(raw: unknown): Finding[] {
-  if (typeof raw !== "object" || raw === null) return [];
-  const findings = (raw as { findings?: unknown }).findings;
-  if (!Array.isArray(findings)) return [];
-  const out: Finding[] = [];
-  for (const item of findings) {
-    if (typeof item !== "object" || item === null) continue;
-    const f = item as Record<string, unknown>;
-    if (typeof f.ruleId !== "string" || typeof f.file !== "string") continue;
-    if (typeof f.line !== "number") continue;
-    const wcag = Array.isArray(f.wcag) ? f.wcag.filter((w): w is string => typeof w === "string") : undefined;
-    // Keep the selector across the boundary — it is what distinguishes co-located
-    // same-rule findings in findingKey; dropping it here reintroduces the collision.
-    const selector = typeof f.selector === "string" ? f.selector : undefined;
-    // Narrow severity to the contract enum — an unknown/absent value is dropped
-    // (the rollup buckets it as unknown) rather than smuggled through as a string.
-    const severity = isSeverity(f.severity) ? f.severity : undefined;
-    // criterion is the contract's SC id; fall back to the first wcag tag so an
-    // older report (no criterion field) still yields a by-WCAG breakdown.
-    const criterion = typeof f.criterion === "string" && f.criterion !== "" ? f.criterion : wcag?.[0];
-    out.push({
-      ruleId: f.ruleId,
-      file: f.file,
-      line: f.line,
-      message: typeof f.message === "string" ? f.message : "",
-      ...(wcag ? { wcag } : {}),
-      ...(selector !== undefined ? { selector } : {}),
-      ...(severity !== undefined ? { severity } : {}),
-      ...(criterion !== undefined ? { criterion } : {}),
-    });
-  }
-  return out;
 }
