@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parseChangedFiles, scopeChangedTsx } from "../src/diff-scope";
+import { deletedPaths, parseChangedFiles, scopeChangedTsx } from "../src/diff-scope";
 
 /**
  * Diff-scoping is the ONE shared module the engine and the CI Action import
@@ -62,5 +62,56 @@ describe("scopeChangedTsx — BASE..HEAD git diff", () => {
 
   it("returns [] for a non-git workspace even with SHAs set", () => {
     expect(scopeChangedTsx({ baseSha: "x", headSha: "y", workspace: tmpdir() })).toEqual([]);
+  });
+});
+
+/**
+ * `deletedPaths` = TRUE deletions only (ADR 0043 v2). Rename detection is pinned ON
+ * (`--find-renames`/`-M`) so a MOVE is classified `R` and its old path is EXCLUDED —
+ * the false-resolve hole a renamed file's old path would otherwise open.
+ */
+describe("deletedPaths — true deletions, renames excluded", () => {
+  let repo: string;
+  const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
+
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), "deleted-paths-"));
+    git("init", "-q");
+    git("config", "user.email", "t@t.io");
+    git("config", "user.name", "t");
+    writeFileSync(join(repo, "renameme.tsx"), "export const R = 1;\n");
+    writeFileSync(join(repo, "deleteme.tsx"), "export const D = 2;\n");
+    git("add", ".");
+    git("commit", "-q", "-m", "base");
+  });
+
+  afterEach(() => {
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it("includes a genuinely deleted file, EXCLUDES a renamed file's old path", () => {
+    const base = git("rev-parse", "HEAD");
+    // A rename (git mv → content moved, not gone) and a true deletion (content gone).
+    git("mv", "renameme.tsx", "renamed.tsx");
+    rmSync(join(repo, "deleteme.tsx"));
+    git("add", "-A");
+    git("commit", "-q", "-m", "change");
+    const head = git("rev-parse", "HEAD");
+
+    const deleted = deletedPaths({ baseSha: base, headSha: head, workspace: repo });
+    // The true deletion IS reported…
+    expect(deleted).toContain("deleteme.tsx");
+    // …the rename's OLD path is NOT (it moved, it isn't gone) — the -M pin.
+    expect(deleted).not.toContain("renameme.tsx");
+    expect(deleted).not.toContain("renamed.tsx");
+  });
+
+  it("returns [] with no base ref (full scan — never a fabricated deletion)", () => {
+    expect(deletedPaths({ workspace: repo })).toEqual([]);
+    expect(deletedPaths({ baseSha: "", headSha: "", workspace: repo })).toEqual([]);
+  });
+
+  it("returns [] for a non-git workspace even with SHAs set", () => {
+    expect(deletedPaths({ baseSha: "x", headSha: "y", workspace: tmpdir() })).toEqual([]);
   });
 });

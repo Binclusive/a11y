@@ -33,8 +33,9 @@
  */
 import type { Finding as ContractFinding, Provenance as ContractProvenance } from "@binclusive/a11y-contract";
 import type { EnrichedFinding } from "./evidence";
-import { scopeChangedTsxFromEnv } from "./diff-scope";
+import { deletedPathsFromEnv, scopeChangedTsxFromEnv } from "./diff-scope";
 import { toFindingPayloadLenient } from "./emit-contract";
+import { repoRelativePath } from "./source-identity";
 
 /** The production Kontrol GraphQL gateway. Overridable via `B8E_INGEST_URL`. */
 const DEFAULT_INGEST_URL = "https://kontrol.binclusive.io/graphql";
@@ -71,6 +72,26 @@ export interface IngestEnvelope {
   readonly provenance: ContractProvenance;
   readonly scope: string;
   readonly scannedTargets: readonly string[];
+  /**
+   * The source-scan-scope coverage set (ADR 0043) — the repo-relative paths this run
+   * SUCCESSFULLY ANALYZED (incl zero-finding, excl parse-failed). 4b's source
+   * reconcile resolves a source ticket iff its `path` is in this set AND its
+   * fingerprint wasn't re-emitted. Declared independently of `findings` — it
+   * describes the RUN's coverage, not the findings — the source-side sibling of
+   * `scannedTargets` (which serves the page/url axis).
+   *
+   * PLATFORM FIELD PENDING #2247 (4b): the engine EMITS this now; the platform adds
+   * `scannedPaths` to `IngestExternalFindingsInput` in 4b. Until then Kontrol ignores
+   * the extra input field — sending it early is the matched-pair handoff ADR 0043 calls for.
+   */
+  readonly scannedPaths: readonly string[];
+  /**
+   * The run's TRUE deletions (ADR 0043 v2) — repo-relative paths whose content is
+   * GONE, never MOVED (rename detection pinned ON, so a moved file is excluded).
+   * 4b resolves a source ticket whose `path` is in this set: the code is gone, so the
+   * issue is gone. Also platform-side pending #2247.
+   */
+  readonly deletedPaths: readonly string[];
   /**
    * The occurrences on the wire — each pairs the SAME metadata-only
    * `@binclusive/a11y-contract` `Finding` the engine's emit path projects (ONE wire
@@ -133,6 +154,15 @@ export interface PhoneHomeDeps {
   readonly log: (message: string) => void;
   /** The targets this run actually scanned — the diff-scope (issue #2166). */
   readonly scanTargets: () => readonly string[];
+  /**
+   * The source files this run SUCCESSFULLY ANALYZED — ABSOLUTE paths (relativized
+   * against `root` at assembly). RUN DATA, not env-derivable, so the CLI injects the
+   * real `ScanResult.analyzedFiles` here; the default is the SAFE empty set (an empty
+   * `scannedPaths` resolves nothing — never a false-resolve if the CLI forgets it).
+   */
+  readonly analyzedFiles: () => readonly string[];
+  /** The run's TRUE deletions — git diff `--diff-filter=D -M` (ADR 0043 v2). */
+  readonly deletedPaths: () => readonly string[];
 }
 
 function defaultDeps(env: NodeJS.ProcessEnv): PhoneHomeDeps {
@@ -141,6 +171,8 @@ function defaultDeps(env: NodeJS.ProcessEnv): PhoneHomeDeps {
     now: () => new Date(),
     log: (message) => console.error(`phone-home: ${message}`),
     scanTargets: () => scopeChangedTsxFromEnv(env),
+    analyzedFiles: () => [],
+    deletedPaths: () => deletedPathsFromEnv(env),
   };
 }
 
@@ -211,6 +243,8 @@ export function assembleEnvelopes(
   root: string,
   config: PhoneHomeConfig,
   scannedTargets: readonly string[],
+  scannedPaths: readonly string[],
+  deletedPaths: readonly string[],
   seenAt: string,
 ): IngestEnvelope[] {
   const { payload, sources } = toFindingPayloadLenient(findings, config.scope, { root });
@@ -231,6 +265,8 @@ export function assembleEnvelopes(
     provenance,
     scope: config.scope,
     scannedTargets,
+    scannedPaths,
+    deletedPaths,
     findings: items,
     seenAt,
   });
@@ -290,6 +326,11 @@ function toInputVariables(envelope: IngestEnvelope) {
     provenance: envelope.provenance,
     scope: envelope.scope,
     scannedTargets: envelope.scannedTargets,
+    // The source-scan-scope coverage (analyzed set) + true deletions 4b's reconcile
+    // consumes (ADR 0043). Platform-side `IngestExternalFindingsInput` fields land in
+    // #2247; sent now as the matched-pair engine half.
+    scannedPaths: envelope.scannedPaths,
+    deletedPaths: envelope.deletedPaths,
     findings: envelope.findings.map(({ contract, impact }) => ({
       // The location union — page url or source fingerprint — is what the platform
       // stores as a real Page()/Source(); no bare `url` arm, so source never fakes a page.
@@ -393,8 +434,14 @@ export async function phoneHome(
   const { config } = resolved;
 
   const scannedTargets = deps.scanTargets();
+  // Narrow the analyzed set (ABSOLUTE paths) to repo-relative through the SAME
+  // function that mints a source finding's wire `path`, so `scannedPaths` membership
+  // matches `mf.path` by construction (ADR 0043). Deletions are already repo-relative
+  // (git's native output).
+  const scannedPaths = deps.analyzedFiles().map((abs) => repoRelativePath(abs, root));
+  const deletedPaths = deps.deletedPaths();
   const seenAt = deps.now().toISOString();
-  const envelopes = assembleEnvelopes(findings, root, config, scannedTargets, seenAt);
+  const envelopes = assembleEnvelopes(findings, root, config, scannedTargets, scannedPaths, deletedPaths, seenAt);
 
   // Kontrol's schema requires `findings.min(1)`, so a fully-clean run cannot post
   // an empty batch to activate reconcile — a known ceiling (see #2166 follow-up).

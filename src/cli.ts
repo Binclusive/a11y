@@ -455,7 +455,9 @@ export async function runCheck(
     // the dashboard when the CI env carries a `b8e_` token + org/project. Fully
     // env-gated, so a local `check --json` (no such env) silently skips; a
     // failure here is swallowed inside `phoneHome` and never changes exit code.
-    await phoneHome(findings, root, process.env);
+    // Inject this run's true analyzed set (ADR 0043) so phone-home emits it as
+    // `scannedPaths` — the source-scan-scope coverage 4b's reconcile keys on.
+    await phoneHome(findings, root, process.env, { analyzedFiles: () => result.analyzedFiles });
     process.exitCode = gateExitCode(findings.map(toGateFinding), gate);
     return;
   }

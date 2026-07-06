@@ -63,6 +63,8 @@ function deps(over: Partial<PhoneHomeDeps> & { fetch: PhoneHomeDeps["fetch"] }):
       now: over.now ?? (() => new Date("2026-07-04T00:00:00.000Z")),
       log: over.log ?? ((m) => logs.push(m)),
       scanTargets: over.scanTargets ?? (() => ["src/Button.tsx"]),
+      analyzedFiles: over.analyzedFiles ?? (() => []),
+      deletedPaths: over.deletedPaths ?? (() => []),
     },
   };
 }
@@ -281,7 +283,7 @@ describe("wire is metadata-only and location-keyed", () => {
 
   it("source path ∈ scannedTargets: run stamps both from the same path vocabulary (#2166)", () => {
     const scanned = ["src/Button.tsx", "src/Nav.tsx"];
-    const envelopes = assembleEnvelopes([finding({ file: "/root/src/Button.tsx" })], "/root", CONFIG, scanned, "2026-07-04T00:00:00.000Z");
+    const envelopes = assembleEnvelopes([finding({ file: "/root/src/Button.tsx" })], "/root", CONFIG, scanned, [], [], "2026-07-04T00:00:00.000Z");
     expect(envelopes).toHaveLength(1);
     const [env] = envelopes;
     expect(env.scannedTargets).toEqual(scanned);
@@ -336,6 +338,62 @@ describe("wire `impact` is the 4-level axe runtime value, never the 3-level band
     const wire = await capturePost(finding({ file: "/root/src/Button.tsx", line: 12 }), "/root");
     const [occ] = wire.variables.input.findings;
     expect(occ.impact).toBe(occ.severity);
+  });
+});
+
+// ── Source-scan-scope coverage: scannedPaths (analyzed set) + deletedPaths (ADR 0043) ──
+
+/** Capture the raw POST input for coverage-field assertions (superset of WireVars). */
+async function captureInput(
+  over: Partial<PhoneHomeDeps>,
+): Promise<{ scannedTargets: string[]; scannedPaths: string[]; deletedPaths: string[] }> {
+  let captured: { variables: { input: { scannedTargets: string[]; scannedPaths: string[]; deletedPaths: string[] } } } | undefined;
+  const fetchSpy = vi.fn(async (_url: unknown, init: { body: string }) => {
+    captured = JSON.parse(init.body);
+    return new Response(JSON.stringify({ data: { ingestExternalFindings: { count: 1 } } }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const { deps: d } = deps({ fetch: fetchSpy, ...over });
+  await phoneHome([finding({ file: "/root/src/Button.tsx" })], "/root", FULL_ENV, d);
+  if (captured === undefined) throw new Error("no POST captured");
+  return captured.variables.input;
+}
+
+describe("scannedPaths — the analyzed-set coverage the source reconcile keys on", () => {
+  it("narrows the run's ABSOLUTE analyzed set to repo-relative paths against root", async () => {
+    // The analyzed set arrives absolute (ScanResult convention); it must land on the
+    // wire relativized against the SAME root a source finding's `path` uses, so
+    // membership (`scannedPaths.has(mf.path)`) matches by construction.
+    const input = await captureInput({
+      analyzedFiles: () => ["/root/src/Button.tsx", "/root/src/Nav.tsx"],
+    });
+    expect(input.scannedPaths).toEqual(["src/Button.tsx", "src/Nav.tsx"]);
+  });
+
+  it("scannedPaths shares the emitted finding's path vocabulary (reconcile membership holds)", async () => {
+    // The emitted source finding is at /root/src/Button.tsx → path `src/Button.tsx`.
+    // A clean analyzed sibling must sit in scannedPaths under the SAME vocabulary.
+    const input = await captureInput({
+      analyzedFiles: () => ["/root/src/Button.tsx", "/root/src/Clean.tsx"],
+    });
+    expect(input.scannedPaths).toContain("src/Button.tsx");
+    expect(input.scannedPaths).toContain("src/Clean.tsx");
+  });
+
+  it("empty analyzed set → empty scannedPaths (safe default: resolves nothing)", async () => {
+    const input = await captureInput({ analyzedFiles: () => [] });
+    expect(input.scannedPaths).toEqual([]);
+  });
+});
+
+describe("deletedPaths — TRUE deletions, threaded from the injected git seam", () => {
+  it("threads the deletion set onto the wire verbatim (already repo-relative from git)", async () => {
+    const input = await captureInput({ deletedPaths: () => ["src/Gone.tsx", "src/Removed.tsx"] });
+    expect(input.deletedPaths).toEqual(["src/Gone.tsx", "src/Removed.tsx"]);
+  });
+
+  it("no deletion context → empty deletedPaths (never a fabricated deletion)", async () => {
+    const input = await captureInput({ deletedPaths: () => [] });
+    expect(input.deletedPaths).toEqual([]);
   });
 });
 
