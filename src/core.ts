@@ -279,6 +279,25 @@ export interface ScanResult {
    */
   readonly contract: Contract | null;
   /**
+   * The source files this run SUCCESSFULLY ANALYZED — ABSOLUTE paths, one per
+   * `.tsx` file ESLint parsed without a fatal error (`fatalErrorCount === 0`). This
+   * is the source-scan-scope coverage set 4b's reconcile keys on (ADR 0043): a source
+   * ticket resolves iff its file is in this set AND its fingerprint wasn't re-emitted.
+   *
+   * TWO halves, both load-bearing (the whole no-false-resolve guarantee):
+   *   - INCLUDES zero-finding files — a clean analyzed file MUST be present, else its
+   *     already-open ticket can never resolve.
+   *   - EXCLUDES attempted-but-failed files (`fatalErrorCount > 0` — parse error /
+   *     fatal) — a file we could not analyze must NOT be here, or its ticket
+   *     false-resolves (a compliance lie: "fixed" when we simply never looked).
+   *
+   * Paths are ABSOLUTE here (the local-finding convention — a `Finding.file` is
+   * likewise absolute); they are narrowed to repo-relative at the emit boundary via
+   * the SAME `repoRelativePath(file, root)` that mints a source finding's wire
+   * `path`, so `scannedPaths` membership matches `mf.path` by construction.
+   */
+  readonly analyzedFiles: readonly string[];
+  /**
    * QUARANTINE (RFC Phase 1d). The corpus-agent RECALL findings ride here, in a
    * field SEPARATE from `findings` — never mixed in, never gating the CLI exit
    * code, never `enforcement:"block"`. `scan()` itself ALWAYS leaves this empty
@@ -334,7 +353,7 @@ export async function scan(filePaths: readonly string[]): Promise<ScanResult> {
 
   if (tsxPaths.length === 0) {
     const empty: ResolvedComponents = { map: {}, coverage: EMPTY_COVERAGE, resolutions: [], unresolvedPackages: [], sourceFiles: new Map() };
-    return { findings: [], coverage: empty.coverage, resolved: empty, contract, recall: [] };
+    return { findings: [], coverage: empty.coverage, resolved: empty, contract, analyzedFiles: [], recall: [] };
   }
 
   const resolved = resolveComponents(tsxPaths, declarations?.components ?? {});
@@ -381,6 +400,14 @@ export async function scan(filePaths: readonly string[]): Promise<ScanResult> {
     return ranges;
   };
 
+  // The source-scan-scope coverage set (ADR 0043): the files ESLint SUCCESSFULLY
+  // analyzed. A fatal parse error (`fatalErrorCount > 0`) means the file was
+  // attempted but NOT analyzed — excluded, so its open ticket cannot false-resolve.
+  // Zero-finding files have `fatalErrorCount === 0` and are kept, so a fixed file
+  // is present and its ticket can resolve. This mirrors the Liquid pass's
+  // parse-error partition (`collect-liquid.ts`).
+  const analyzedFiles = results.filter((r) => r.fatalErrorCount === 0).map((r) => r.filePath);
+
   const findings: Finding[] = [];
   for (const result of results) {
     for (const msg of result.messages) {
@@ -426,7 +453,7 @@ export async function scan(filePaths: readonly string[]): Promise<ScanResult> {
   // `scan()` produces NO corpus-agent findings — the recall layer is the only
   // producer, and it rides the quarantined `recall` field, never `findings`.
   // Keeping it empty here is what makes `scan()` output byte-identical.
-  return { findings: merged, coverage: resolved.coverage, resolved, contract, recall: [] };
+  return { findings: merged, coverage: resolved.coverage, resolved, contract, analyzedFiles, recall: [] };
 }
 
 /**

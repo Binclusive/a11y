@@ -53,6 +53,51 @@ function gitDiffNames(workspace: string, baseSha: string, headSha: string): stri
 }
 
 /**
+ * The TRUE deletions in a diff — files whose content is GONE, never MOVED.
+ *
+ * `--diff-filter=D` selects deleted entries; `--find-renames` (`-M`) is pinned ON
+ * EXPLICITLY (never left to git's config/context-dependent default) so a MOVE
+ * classifies as `R` and its old path is EXCLUDED — a rename is not a deletion. This
+ * closes a false-resolve hole (ADR 0043 v2): a renamed file's old path must NOT be
+ * reported deleted, or a move out of scan-scope silently vanishes its finding.
+ * Paths are repo-root-relative, forward-slash (git's native output).
+ */
+function gitDeletedNames(workspace: string, baseSha: string, headSha: string): string[] {
+  try {
+    const out = execFileSync(
+      "git",
+      ["-C", workspace, "diff", "--diff-filter=D", "--find-renames", "--name-only", `${baseSha}...${headSha}`],
+      { encoding: "utf8" },
+    );
+    return out.split("\n").filter((p) => p !== "");
+  } catch {
+    // Advisory gate: a git failure is an empty deletion set, never a throw.
+    return [];
+  }
+}
+
+/**
+ * Resolve the source files DELETED in this run's diff (ADR 0043 v2 — the
+ * `deletedPaths` coverage half). A deleted-file's source ticket resolves because the
+ * code — and so the issue — is gone. Derived ONLY from a real `BASE...HEAD` git diff:
+ * an explicit `CHANGED_FILES` name list cannot classify deleted-vs-added, and a full
+ * scan (no base ref) has no deletion context, so both yield `[]` — never a fabricated
+ * deletion (the safe direction: under-report, never over-report).
+ */
+export function deletedPaths(input: DiffScopeInput): string[] {
+  if (
+    input.baseSha !== undefined &&
+    input.baseSha !== "" &&
+    input.headSha !== undefined &&
+    input.headSha !== "" &&
+    isGitRepo(input.workspace)
+  ) {
+    return gitDeletedNames(input.workspace, input.baseSha, input.headSha);
+  }
+  return [];
+}
+
+/**
  * Resolve the changed `.tsx` files for a run. Returns only `.tsx` paths (the
  * engine's static React surface); an empty array means "no diff context —
  * fall back to a wholesale scan", the same signal the shell encoded as an empty
@@ -84,6 +129,20 @@ export function scopeChangedTsxFromEnv(env: NodeJS.ProcessEnv = process.env): st
   const rawChanged = env.CHANGED_FILES;
   return scopeChangedTsx({
     changedFiles: rawChanged !== undefined && rawChanged !== "" ? parseChangedFiles(rawChanged) : undefined,
+    baseSha: env.BASE_SHA,
+    headSha: env.HEAD_SHA,
+    workspace: env.GITHUB_WORKSPACE ?? process.cwd(),
+  });
+}
+
+/**
+ * Resolve the run's TRUE deletions from the CI env — the sibling of
+ * {@link scopeChangedTsxFromEnv} for the `deletedPaths` coverage half. Reads the same
+ * `BASE_SHA` / `HEAD_SHA` / `GITHUB_WORKSPACE` the diff-scope uses; with no base ref
+ * it yields `[]` (never a fabricated deletion).
+ */
+export function deletedPathsFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  return deletedPaths({
     baseSha: env.BASE_SHA,
     headSha: env.HEAD_SHA,
     workspace: env.GITHUB_WORKSPACE ?? process.cwd(),
