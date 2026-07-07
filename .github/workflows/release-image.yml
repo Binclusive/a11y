@@ -1,0 +1,111 @@
+name: Release a11y engine image
+
+# Builds the @binclusive/a11y engine image and publishes it to GHCR, plus cuts a
+# tagged GitHub Release. Companion to release.yml (npm): the same trigger, the
+# same "bump package.json → merge to main" gesture, so one version bump produces
+# THREE artifacts — the npm package, the GHCR image, and a `v<version>` Release.
+#
+# Idempotent: every push to main touching the manifest runs the job, but each
+#   artifact is guarded by its own "already exists?" probe — the image against
+#   GHCR, the tag/Release against the repo. A push that doesn't bump the version
+#   (or a re-run) is a no-op instead of a failed re-publish, exactly like npm.
+# Auth: the built-in GITHUB_TOKEN (no PAT) — `packages: write` lets it push to
+#   GHCR, `contents: write` lets it create the tag + Release. GHCR trusts this
+#   repo-scoped token for `ghcr.io/binclusive/*`, so no secret lives in the repo.
+# Corpus-free: the private corpus left the engine (ADR 0041 §G); the image COPYs
+#   only the engine sources the .dockerignore lets through (no corpus/moat path),
+#   so the published artifact carries no private data — the AC that release
+#   artifacts exclude the corpus holds by construction.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+      - Dockerfile
+      - .github/workflows/release-image.yml
+
+permissions:
+  contents: write # create the v<version> git tag + GitHub Release
+  packages: write # push the image to GHCR
+
+concurrency:
+  group: release-a11y-engine-image
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/binclusive/a11y
+
+jobs:
+  publish:
+    name: Publish image + Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the package version
+        id: meta
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # GHCR trusts the built-in token for images under this repo's org; no PAT.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Is this image version already in GHCR?
+        id: check
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # `docker manifest inspect` exits non-zero when the tag isn't in the
+          # registry — that (not an error) is the "publish" signal. Any other
+          # failure mode also falls through to publish, which is safe: the push
+          # step is itself idempotent (re-pushing an identical digest is a no-op).
+          if docker manifest inspect "$IMAGE:$VERSION" >/dev/null 2>&1; then
+            echo "$IMAGE:$VERSION already in GHCR — nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$IMAGE:$VERSION is new — publishing."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Buildx
+        if: steps.check.outputs.publish == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      # Tag both :<version> (immutable, what action.yml pins) and :latest (the
+      # floating convenience tag). The .dockerignore already excludes .git, docs,
+      # experiments, and node_modules from the build context — the corpus is not
+      # in the tree at all, so nothing private can reach a layer.
+      - name: Build and push
+        if: steps.check.outputs.publish == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
+            ${{ env.IMAGE }}:latest
+
+      # The tag + Release are guarded independently of the image probe so a
+      # partial prior run (image pushed, Release not) self-heals on the next push.
+      - name: Create the git tag + GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — nothing to cut."
+            exit 0
+          fi
+          # `gh release create` creates the annotated tag at the current SHA and
+          # the Release in one call; --generate-notes fills the body from commits.
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            --target "$GITHUB_SHA"
