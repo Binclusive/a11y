@@ -25,7 +25,7 @@ jobs:
     # macOS; the runner ships the Swift toolchain via Xcode.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # swift-tools-version:6.1 needs Swift 6.1+ — pin the latest stable Xcode so
       # the runner's default toolchain is new enough.
