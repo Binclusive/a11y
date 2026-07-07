@@ -155,6 +155,9 @@ CLI renders to taste.
 | `b8e mcp` | `startStdioServer()` |
 | `b8e hook` | `runHook(<stdin JSON>)` |
 | `b8e check-swift <dir>` | `scanSwift(dir)` |
+| `b8e check-shopify <dir>` | `scanLiquid(dir)` |
+| `b8e check-unity <dir>` | `collectUnityFindings(dir)` |
+| `b8e check-android <dir>` | `scanAndroidXml(dir)` |
 
 ---
 
