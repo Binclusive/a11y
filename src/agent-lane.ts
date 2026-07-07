@@ -27,13 +27,14 @@
  */
 import type { EnrichedFinding } from "./evidence";
 import { createAnthropicProvider } from "./runner/providers/anthropic";
+import { createOpenAIProvider } from "./runner/providers/openai";
 import { createCodeGraphLookup } from "./runner/codegraph-lookup";
 import type { Provider } from "./runner/provider";
 import { createSkillsReasoner } from "./runner/reasoning/skills-reasoner";
 import { type RunnerConfig, runAgentLane } from "./runner/runner";
 
 /** The provider ids this engine ships a concrete implementation for. */
-const SHIPPED_PROVIDERS = new Set(["anthropic"]);
+const SHIPPED_PROVIDERS = new Set(["anthropic", "openai"]);
 
 /**
  * Resolve the concrete {@link Provider} from the CI env, or `null` when the AI
@@ -57,11 +58,14 @@ export function resolveProvider(env: NodeJS.ProcessEnv): Provider | null {
   // `LLM_TIMEOUT_MS` overrides the per-request abort bound (#2192); a bad value
   // stays `undefined` so the provider keeps its safe default — can't disable it.
   const timeoutMs = parseTimeoutMs(env.LLM_TIMEOUT_MS);
-  return createAnthropicProvider({
+  // Both shipped providers take the same vendor-neutral config shape; `providerId`
+  // is already gated to a shipped id above, so this two-arm switch is total.
+  const config = {
     apiKey,
     ...(model !== undefined ? { model } : {}),
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-  });
+  };
+  return providerId === "openai" ? createOpenAIProvider(config) : createAnthropicProvider(config);
 }
 
 /** Parse `LLM_TIMEOUT_MS` to a positive number of milliseconds, else `undefined` (use the provider default). */

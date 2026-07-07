@@ -34,8 +34,14 @@ describe("resolveProvider — env contract for the Action plumbing", () => {
     expect(resolveProvider({ LLM_API_KEY: KEY, LLM_PROVIDER: "  Anthropic  " })).not.toBeNull();
   });
 
+  it("key + explicit `openai` (any case) → a provider (BYOK beyond Anthropic, #2318)", () => {
+    expect(resolveProvider({ LLM_API_KEY: KEY, LLM_PROVIDER: "openai" })).not.toBeNull();
+    expect(resolveProvider({ LLM_API_KEY: KEY, LLM_PROVIDER: "OPENAI" })).not.toBeNull();
+    expect(resolveProvider({ LLM_API_KEY: KEY, LLM_PROVIDER: "  OpenAI  " })).not.toBeNull();
+  });
+
   it("key + unrecognized provider → null (degrade to the floor, never throw)", () => {
-    expect(resolveProvider({ LLM_API_KEY: KEY, LLM_PROVIDER: "openai" })).toBeNull();
+    expect(resolveProvider({ LLM_API_KEY: KEY, LLM_PROVIDER: "gemini" })).toBeNull();
   });
 
   it("an empty LLM_MODEL is tolerated (default model, provider still resolves)", () => {
