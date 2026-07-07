@@ -31,7 +31,9 @@ const IMG_NO_ALT = "liquid/img-no-alt";
  * The first two slots stand in for `node` + the script path, which `Command.run`
  * strips. Mirrors the harness in `cli-swift.e2e.test.ts` / `cli-commands.test.ts`.
  */
-async function runVerb(args: readonly string[]): Promise<{ stdout: string; exit: Exit.Exit<void, unknown> }> {
+async function runVerb(
+  args: readonly string[],
+): Promise<{ stdout: string; exit: Exit.Exit<void, unknown>; exitCode: number | undefined }> {
   const out: string[] = [];
   const logSpy = vi.spyOn(console, "log").mockImplementation((...a) => {
     out.push(a.join(" "));
@@ -42,7 +44,9 @@ async function runVerb(args: readonly string[]): Promise<{ stdout: string; exit:
     const exit = await Effect.runPromiseExit(
       runCli(["node", "a11y-checker", ...args]).pipe(Effect.provide(NodeContext.layer)),
     );
-    return { stdout: out.join("\n"), exit };
+    // Capture the runner's exit code BEFORE the finally restores it — the gate sets
+    // `process.exitCode`, so a caller asserting on the gate must read it here.
+    return { stdout: out.join("\n"), exit, exitCode: process.exitCode };
   } finally {
     logSpy.mockRestore();
     process.exitCode = savedExitCode;
@@ -51,7 +55,7 @@ async function runVerb(args: readonly string[]): Promise<{ stdout: string; exit:
 
 describe("check-shopify → the canonical contract wire path (#163 connected-seam tracer)", () => {
   it("`check-shopify <theme> --format sarif` emits a valid SARIF doc carrying the Liquid finding", async () => {
-    const { stdout, exit } = await runVerb(["check-shopify", themeDir, "--format", "sarif"]);
+    const { stdout, exit, exitCode } = await runVerb(["check-shopify", themeDir, "--format", "sarif"]);
     expect(Exit.isSuccess(exit)).toBe(true);
 
     // The assembled path serialized a real SARIF 2.1.0 doc — not the bespoke report.
@@ -66,8 +70,11 @@ describe("check-shopify → the canonical contract wire path (#163 connected-sea
     expect(imgNoAlt).toBeDefined();
     expect(imgNoAlt?.properties?.provenance).toBe("deterministic");
 
-    // Non-blocking invariant (#163 AC): the stack scan reports, it doesn't gate.
-    expect(process.exitCode ?? 0).toBe(0);
+    // Unified gate (#176): the stack scan now gates EXACTLY like `check` — the
+    // theme's block-level findings (no binclusive.json ⇒ enforcement "block") fail
+    // the run regardless of output format. The old advisory-on-machine-format exit
+    // (which made the sarif/json branch exit 0 while text exited 1) is gone.
+    expect(exitCode).toBe(1);
   });
 
   it("`check-shopify --json` phone-home projects the Liquid scan through `toContractFinding` (ContractFinding.parse succeeds)", async () => {

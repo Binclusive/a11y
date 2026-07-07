@@ -95,4 +95,24 @@ describe("check-swift CLI route (e2e, spawns the real Swift engine)", () => {
       expect(stdout).toContain("No SwiftUI a11y violations found.");
     },
   );
+
+  it(
+    "accepts the unified gate + output-format flags and dispatches identically across formats (#176)",
+    { timeout: SWIFT_E2E_TIMEOUT_MS },
+    async () => {
+      // `check-swift` now mounts the SAME `gateOptions` as `check` — parse `--format`
+      // / `--json` / `--fail-on` / `--max-violations` and route through the shared
+      // `reportStack` gate. An empty dir yields no findings, so the exit is 0 for
+      // every format; the block-level-finding exit-code parity (text=json=sarif)
+      // rides the same shared path proven in `cli-stack-gate.test.ts` on the three
+      // in-process stacks, which never compile Swift.
+      process.exitCode = undefined;
+      const text = await runVerb(["check-swift", emptyDir, "--max-violations", "0"]);
+      const json = await runVerb(["check-swift", emptyDir, "--json", "--max-violations", "0"]);
+      const sarif = await runVerb(["check-swift", emptyDir, "--format", "sarif", "--max-violations", "0"]);
+      expect(Exit.isSuccess(text.exit)).toBe(true);
+      expect(Exit.isSuccess(json.exit)).toBe(true);
+      expect(Exit.isSuccess(sarif.exit)).toBe(true);
+    },
+  );
 });
