@@ -1,0 +1,53 @@
+# a11y-checker on GitLab CI/CD — ready-made config.
+#
+# Runs the published Binclusive engine image over the .tsx files changed in each
+# merge request (and, on plain branch pipelines, vs the default branch).
+#
+# Image: ghcr.io/binclusive/a11y:0.1.1  (static / no-browser variant).
+#   Bump the tag to upgrade. For a live-URL scan (set INPUT_SCAN_URL) swap to the
+#   browser variant ghcr.io/binclusive/a11y:0.1.1-browser — it ships the Chromium
+#   the static image strips.
+#
+# Canon (env var names + knobs are verbatim from here):
+#   .patterns/ci-runners/{run-docker-image,ci-context,checkout-depth,secrets-and-env,exit-codes}.md
+
+variables:
+  # checkout-depth.md: GitLab clones shallow at depth 20; a merge-request base
+  # older than 20 commits is then absent and the diff resolves against nothing.
+  # "0" = full history.
+  GIT_DEPTH: "0"
+  # Branch a non-MR pipeline diffs against when no MR target is set.
+  A11Y_DEFAULT_BRANCH: "main"
+
+a11y:
+  # run-docker-image.md: `image:` runs the whole job inside the container.
+  # `entrypoint: [""]` clears the image ENTRYPOINT so GitLab can run `script:`;
+  # we then invoke the entrypoint ourselves once the diff env is set.
+  image:
+    name: ghcr.io/binclusive/a11y:0.1.1
+    entrypoint: [""]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+  # exit-codes.md: a non-zero container exit fails the job — that is how the
+  # opt-in gate blocks a merge. Default is advisory (exit 0). Soft-fail escape:
+  # uncomment to let a tripped gate only warn, never fail the pipeline.
+  # allow_failure: true
+  script:
+    # ci-context.md: the base is a branch NAME (MR target, else the default
+    # branch); the head is CI_COMMIT_SHA.
+    - BASE_BRANCH="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-$A11Y_DEFAULT_BRANCH}"
+    # checkout-depth.md: the base ref must be in local history before the diff
+    # can resolve — fetch it explicitly.
+    - git fetch --no-tags origin "$BASE_BRANCH"
+    - export GITHUB_WORKSPACE="$CI_PROJECT_DIR"
+    - export BASE_SHA="origin/$BASE_BRANCH"
+    - export HEAD_SHA="$CI_COMMIT_SHA"
+    # Opt-in blocking gate (default OFF = advisory, exit 0). Uncomment ONE:
+    # - export FAIL_ON=serious        # fail when any finding is >= this impact
+    # - export MAX_VIOLATIONS=0       # fail when total finding count exceeds N
+    # secrets-and-env.md: optional phone-home. Add B8E_TOKEN as a MASKED CI/CD
+    # variable (Settings -> CI/CD -> Variables); it is auto-injected into the
+    # job env, so the entrypoint reads it with no wiring here. Absent -> the scan
+    # stays fully local. Pair it with B8E_ORG_ID / B8E_PROJECT_ID if you use it.
+    - /engine/entrypoint.sh

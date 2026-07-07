@@ -1,0 +1,50 @@
+# a11y-checker on Bitbucket Pipelines — ready-made config.
+#
+# Runs the published Binclusive engine image over the .tsx files changed in each
+# PR, falling back to a diff vs the default branch on plain branch builds.
+#
+# Image: ghcr.io/binclusive/a11y:0.1.1  (static / no-browser variant).
+#   Bump the tag to upgrade. For a live-URL scan (set INPUT_SCAN_URL) swap to the
+#   browser variant ghcr.io/binclusive/a11y:0.1.1-browser.
+#
+# Canon: .patterns/ci-runners/{run-docker-image,ci-context,checkout-depth,secrets-and-env,exit-codes}.md
+
+# run-docker-image.md: a top-level `image:` runs every step inside the container.
+image: ghcr.io/binclusive/a11y:0.1.1
+
+definitions:
+  steps:
+    - step: &a11y
+        name: a11y-checker
+        clone:
+          # checkout-depth.md: Bitbucket clones shallow to the last 50 commits;
+          # a PR base older than that is absent. `full` fetches everything (or use
+          # an integer larger than 50).
+          depth: full
+        script:
+          - export A11Y_DEFAULT_BRANCH=main
+          # ci-context.md: base = BITBUCKET_PR_DESTINATION_BRANCH on a PR build,
+          # else the default branch; head = BITBUCKET_COMMIT.
+          - BASE_BRANCH="${BITBUCKET_PR_DESTINATION_BRANCH:-$A11Y_DEFAULT_BRANCH}"
+          - git fetch --no-tags origin "$BASE_BRANCH"
+          - export GITHUB_WORKSPACE="$BITBUCKET_CLONE_DIR"
+          - export BASE_SHA="origin/$BASE_BRANCH"
+          - export HEAD_SHA="$BITBUCKET_COMMIT"
+          # Opt-in blocking gate (default OFF = advisory). Uncomment ONE:
+          # - export FAIL_ON=serious        # fail when any finding is >= this impact
+          # - export MAX_VIOLATIONS=0       # fail when total finding count exceeds N
+          # exit-codes.md: a non-zero exit fails the step — how the opt-in gate
+          # blocks. Bitbucket has NO soft_fail keyword; the advisory escape is to
+          # append `|| true` to the entrypoint line below.
+          - /engine/entrypoint.sh
+          # secrets-and-env.md: optional phone-home. Add B8E_TOKEN as a SECURED
+          # repository/workspace variable (auto-injected, masked). Absent -> the
+          # scan stays fully local. Pair with B8E_ORG_ID / B8E_PROJECT_ID.
+
+pipelines:
+  pull-requests:
+    '**':
+      - step: *a11y
+  branches:
+    '**':
+      - step: *a11y

@@ -11,6 +11,10 @@ generic mode — Buildkite (annotations) and GitLab (Code Quality / MR widget) a
 separate adapters. Until (or unless) you want one, the generic mode below already
 gives every platform the same SARIF/JSON artifact.
 
+> **Want a copy-paste config instead of the generic recipe?** Ready-made,
+> per-platform configs for GitLab, CircleCI, Buildkite, Jenkins, and Bitbucket
+> live in [`examples/ci/`](../examples/ci/).
+
 ## The three guarantees
 
 1. **Universal output — `--format sarif | json`.** `--format sarif` emits a valid
@@ -41,14 +45,14 @@ however you pull the engine image in your registry:
 docker run --rm \
   -v "$PWD:/workspace" -w /workspace \
   -e A11Y_PLATFORM=null \
-  ghcr.io/binclusive/a11y-checker:latest \
+  ghcr.io/binclusive/a11y:latest \
   check /workspace/src --ci --format sarif > a11y.sarif
 
 # …or emit JSON instead:
 docker run --rm \
   -v "$PWD:/workspace" -w /workspace \
   -e A11Y_PLATFORM=null \
-  ghcr.io/binclusive/a11y-checker:latest \
+  ghcr.io/binclusive/a11y:latest \
   check /workspace/src --ci --format json > a11y.json
 ```
 
@@ -63,7 +67,7 @@ exits 0, the step is always green — the report is advisory.
 jobs:
   a11y:
     docker:
-      - image: ghcr.io/binclusive/a11y-checker:latest
+      - image: ghcr.io/binclusive/a11y:latest
     environment:
       A11Y_PLATFORM: "null"
     steps:
@@ -79,7 +83,7 @@ jobs:
 
 ```groovy
 pipeline {
-  agent { docker { image 'ghcr.io/binclusive/a11y-checker:latest' } }
+  agent { docker { image 'ghcr.io/binclusive/a11y:latest' } }
   environment { A11Y_PLATFORM = 'null' }
   stages {
     stage('a11y') {
@@ -98,7 +102,7 @@ pipeline {
 ```yaml
 steps:
   a11y:
-    image: ghcr.io/binclusive/a11y-checker:latest
+    image: ghcr.io/binclusive/a11y:latest
     environment:
       A11Y_PLATFORM: "null"
     commands:
