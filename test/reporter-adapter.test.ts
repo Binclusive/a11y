@@ -31,7 +31,7 @@ const finding = (over: Partial<Finding> = {}): Finding => ({
   line: 12,
   message: "Image missing alt text.",
   wcag: ["1.1.1"],
-  severity: "critical",
+  impact: "critical",
   ...over,
 });
 
@@ -177,12 +177,12 @@ describe("parseFindings — the canonical reporter input (re-exported by the sea
   it("narrows the engine report JSON to Finding[], dropping malformed entries", () => {
     const parsed = parseFindings({
       findings: [
-        { ruleId: "image-alt", file: "src/A.tsx", line: 4, message: "m", wcag: ["1.1.1"], severity: "critical" },
+        { ruleId: "image-alt", file: "src/A.tsx", line: 4, message: "m", wcag: ["1.1.1"], impact: "critical" },
         { ruleId: "no-line" }, // dropped — no numeric line
       ],
     });
     expect(parsed).toHaveLength(1);
-    expect(parsed[0]).toMatchObject({ ruleId: "image-alt", file: "src/A.tsx", line: 4, severity: "critical" });
+    expect(parsed[0]).toMatchObject({ ruleId: "image-alt", file: "src/A.tsx", line: 4, impact: "critical" });
   });
 });
 

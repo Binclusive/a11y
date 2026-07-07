@@ -316,9 +316,9 @@ describe("wire sends the 4-level `impact` only — never the 3-level `severity` 
   // (`critical|serious|moderate|minor|unknown`), and the 3-level `severity` band is no
   // longer sent at all (CiFindingInput.severity is optional platform-side).
   it("axe finding with runtime impact → POST `impact` is the 4-level value (`moderate`), and NO `severity`", async () => {
-    // `moderate` is the sharp discriminator: contractSeverity maps it to the `major` band,
-    // so if `impact` were sourced from the band it would read `major` (invalid 4-level).
-    const wire = await capturePost(finding({ provenance: "axe", file: "https://example.com/p", line: 0, selector: "button", severity: "moderate" }), "/root");
+    // `moderate` is the sharp discriminator: the retired band collapsed it to `major`,
+    // so if `impact` were still sourced from a band it would read `major` (an invalid impact).
+    const wire = await capturePost(finding({ provenance: "axe", file: "https://example.com/p", line: 0, selector: "button", impact: "moderate" }), "/root");
     const [occ] = wire.variables.input.findings;
     expect(occ.impact).toBe("moderate");
     expect(occ.impact).not.toBe("major");
@@ -326,7 +326,7 @@ describe("wire sends the 4-level `impact` only — never the 3-level `severity` 
   });
 
   it("axe finding with `serious` impact → POST `impact` is `serious`", async () => {
-    const wire = await capturePost(finding({ provenance: "axe", file: "https://example.com/p", line: 0, selector: "button", severity: "serious" }), "/root");
+    const wire = await capturePost(finding({ provenance: "axe", file: "https://example.com/p", line: 0, selector: "button", impact: "serious" }), "/root");
     const [occ] = wire.variables.input.findings;
     expect(occ.impact).toBe("serious");
   });

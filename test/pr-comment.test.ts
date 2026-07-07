@@ -295,16 +295,16 @@ describe("parseFindings — boundary parse of the report JSON", () => {
     ]);
   });
 
-  it("carries the contract severity + criterion through for the rollup, narrowing an unknown severity out", () => {
+  it("carries the contract impact + criterion through for the rollup, narrowing an unknown impact out", () => {
     const parsed = parseFindings({
       findings: [
-        { ruleId: "img-alt", file: "a.tsx", line: 3, message: "m", wcag: ["1.1.1"], severity: "critical", criterion: "1.1.1" },
-        { ruleId: "bogus-sev", file: "b.tsx", line: 4, message: "m", severity: "catastrophic" }, // severity dropped: not the contract enum
+        { ruleId: "img-alt", file: "a.tsx", line: 3, message: "m", wcag: ["1.1.1"], impact: "critical", criterion: "1.1.1" },
+        { ruleId: "bogus-imp", file: "b.tsx", line: 4, message: "m", impact: "catastrophic" }, // impact dropped: not the contract enum
       ],
     });
-    expect(parsed[0]?.severity).toBe("critical");
+    expect(parsed[0]?.impact).toBe("critical");
     expect(parsed[0]?.criterion).toBe("1.1.1");
-    expect(parsed[1]?.severity).toBeUndefined();
+    expect(parsed[1]?.impact).toBeUndefined();
   });
 
   it("preserves the selector across the boundary so it can distinguish co-located findings (#2131 grill #1)", () => {

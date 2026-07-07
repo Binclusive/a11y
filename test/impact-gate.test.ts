@@ -1,36 +1,36 @@
 import { describe, expect, it } from "vitest";
-import type { Severity } from "@binclusive/a11y-contract";
+import type { Impact } from "@binclusive/a11y-contract";
 import {
   GATE_ADVISORY,
   GATE_OFF,
   type GateFinding,
   gateExitCode,
-  SEVERITY_ORDER,
-} from "../src/severity-gate";
+  IMPACT_ORDER,
+} from "../src/impact-gate";
 
 /**
  * The opt-in blocking gate (#2134). The invariant the whole feature rests on is
- * DEFAULT-OFF BY CONSTRUCTION: with no gate set, findings — of any severity or
- * volume — never fail the check on severity alone; only a contract-BLOCKING
+ * DEFAULT-OFF BY CONSTRUCTION: with no gate set, findings — of any impact or
+ * volume — never fail the check on impact alone; only a contract-BLOCKING
  * finding does, exactly as before. Setting `--fail-on` / `--max-violations`
  * opts into a failing exit.
  */
 
-/** A gate finding at `severity`, warn-level (never contract-blocking). */
-const warn = (severity: Severity): GateFinding => ({ severity, blocking: false });
-/** A gate finding at `severity`, contract-blocking (`enforcement === "block"`). */
-const block = (severity: Severity): GateFinding => ({ severity, blocking: true });
+/** A gate finding at `impact`, warn-level (never contract-blocking). */
+const warn = (impact: Impact): GateFinding => ({ impact, blocking: false });
+/** A gate finding at `impact`, contract-blocking (`enforcement === "block"`). */
+const block = (impact: Impact): GateFinding => ({ impact, blocking: true });
 
-describe("SEVERITY_ORDER — sourced from the contract, not hand-rolled", () => {
-  it("is the contract's own critical < major < minor ordering", () => {
-    expect(SEVERITY_ORDER).toEqual(["critical", "major", "minor"]);
+describe("IMPACT_ORDER — sourced from the contract, not hand-rolled", () => {
+  it("is the contract's own critical < serious < moderate < minor < unknown ordering", () => {
+    expect(IMPACT_ORDER).toEqual(["critical", "serious", "moderate", "minor", "unknown"]);
   });
 });
 
 describe("gateExitCode — DEFAULT OFF (unset gate ⇒ today's behavior exactly)", () => {
-  it("findings present + no gate ⇒ exit 0 (never fails on severity)", () => {
-    // A critical + a major warn-level finding, gate unset: still a clean exit.
-    const findings = [warn("critical"), warn("major"), warn("minor")];
+  it("findings present + no gate ⇒ exit 0 (never fails on impact)", () => {
+    // A critical + a serious warn-level finding, gate unset: still a clean exit.
+    const findings = [warn("critical"), warn("serious"), warn("minor")];
     expect(gateExitCode(findings, GATE_OFF)).toBe(0);
   });
 
@@ -43,17 +43,17 @@ describe("gateExitCode — DEFAULT OFF (unset gate ⇒ today's behavior exactly)
   });
 });
 
-describe("gateExitCode — OPT-IN --fail-on severity threshold", () => {
+describe("gateExitCode — OPT-IN --fail-on impact threshold", () => {
   it("at threshold ⇒ non-zero (a critical finding fails fail-on=critical)", () => {
     expect(gateExitCode([warn("critical")], { failOn: "critical", maxViolations: null, advisory: false })).toBe(1);
   });
 
-  it("above threshold ⇒ non-zero (a critical finding fails fail-on=major)", () => {
-    expect(gateExitCode([warn("critical")], { failOn: "major", maxViolations: null, advisory: false })).toBe(1);
+  it("above threshold ⇒ non-zero (a critical finding fails fail-on=serious)", () => {
+    expect(gateExitCode([warn("critical")], { failOn: "serious", maxViolations: null, advisory: false })).toBe(1);
   });
 
   it("below threshold ⇒ 0 (a minor finding stays green under fail-on=critical)", () => {
-    expect(gateExitCode([warn("minor"), warn("major")], { failOn: "critical", maxViolations: null, advisory: false })).toBe(0);
+    expect(gateExitCode([warn("minor"), warn("serious")], { failOn: "critical", maxViolations: null, advisory: false })).toBe(0);
   });
 
   it("the SAME findings pass when the gate is unset and fail when opted in", () => {
@@ -63,7 +63,7 @@ describe("gateExitCode — OPT-IN --fail-on severity threshold", () => {
   });
 
   it("opt-in but no finding reaches the threshold ⇒ 0 even with a blocking warn-below finding", () => {
-    // fail-on gates on severity, not on contract-block: a blocking minor does not
+    // fail-on gates on impact, not on contract-block: a blocking minor does not
     // reach fail-on=critical, so the opt-in gate result is 0 (the gate REPLACES
     // the default block-exit when set).
     expect(gateExitCode([block("minor")], { failOn: "critical", maxViolations: null, advisory: false })).toBe(0);
@@ -78,8 +78,8 @@ describe("gateExitCode — GENERIC CI advisory mode (#2236): non-blocking exit-0
     expect(gateExitCode([block("critical")], GATE_ADVISORY)).toBe(0);
   });
 
-  it("advisory + any severity/volume of findings ⇒ exit 0 (never fails on its own)", () => {
-    const findings = [block("critical"), warn("major"), warn("minor")];
+  it("advisory + any impact/volume of findings ⇒ exit 0 (never fails on its own)", () => {
+    const findings = [block("critical"), warn("serious"), warn("minor")];
     expect(gateExitCode(findings, GATE_ADVISORY)).toBe(0);
   });
 
@@ -111,9 +111,9 @@ describe("gateExitCode — OPT-IN --max-violations volume gate", () => {
   });
 
   it("fail-on and max-violations together ⇒ either tripping fails", () => {
-    const belowSeverityButOverCount = [warn("minor"), warn("minor")];
+    const belowImpactButOverCount = [warn("minor"), warn("minor")];
     expect(
-      gateExitCode(belowSeverityButOverCount, { failOn: "critical", maxViolations: 1, advisory: false }),
+      gateExitCode(belowImpactButOverCount, { failOn: "critical", maxViolations: 1, advisory: false }),
     ).toBe(1);
   });
 });

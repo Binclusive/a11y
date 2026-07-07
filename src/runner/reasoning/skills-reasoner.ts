@@ -79,7 +79,7 @@ function toAgentFinding(source: EnrichedFinding, d: Discovery): AgentFinding {
       : source.selector !== undefined
         ? { selector: source.selector }
         : {}),
-    ...(source.severity !== undefined ? { severity: source.severity } : {}),
+    ...(source.impact !== undefined ? { impact: source.impact } : {}),
   };
   return { ...enrich(base), provenance: "corpus-agent" };
 }

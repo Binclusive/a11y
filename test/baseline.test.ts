@@ -7,7 +7,7 @@ import {
   evidenceBestPractice,
   evidenceFix,
   evidenceHelpUrl,
-  evidenceSeverity,
+  evidenceImpact,
   enrich,
   resolveDisplay,
 } from "../src/evidence";
@@ -46,10 +46,10 @@ describe("baseline generator: buildBaselineCatalog output shape", () => {
     expect(catalog._meta.axeVersion).toBe(axe.version);
   });
 
-  it("each rule carries a valid severity, a fix (help), and a helpUrl", () => {
+  it("each rule carries a valid impact, a fix (help), and a helpUrl", () => {
     const levels = new Set(["minor", "moderate", "serious", "critical"]);
     for (const r of catalog.rules) {
-      expect(levels.has(r.severity)).toBe(true);
+      expect(levels.has(r.impact)).toBe(true);
       expect(r.help.length).toBeGreaterThan(0);
       expect(r.helpUrl).toMatch(/^https?:\/\//);
       expect(Array.isArray(r.sc)).toBe(true);
@@ -63,11 +63,11 @@ describe("baseline generator: buildBaselineCatalog output shape", () => {
     }
   });
 
-  it("color-contrast → SC 1.4.3, severity serious, with a Deque helpUrl", () => {
+  it("color-contrast → SC 1.4.3, impact serious, with a Deque helpUrl", () => {
     const cc = catalog.rules.find((r) => r.ruleId === "color-contrast");
     expect(cc).toBeDefined();
     expect(cc?.sc).toContain("1.4.3");
-    expect(cc?.severity).toBe("serious");
+    expect(cc?.impact).toBe("serious");
     expect(cc?.helpUrl).toContain("dequeuniversity.com");
   });
 
@@ -86,7 +86,7 @@ describe("baselineRules: query the catalog by ruleId / SC", () => {
     const rules = baselineRules({ sc: "1.4.3" });
     expect(rules.length).toBeGreaterThan(0);
     const cc = rules.find((r) => r.ruleId === "color-contrast");
-    expect(cc?.severity).toBe("serious");
+    expect(cc?.impact).toBe("serious");
     expect(cc?.fix.length).toBeGreaterThan(0);
     expect(cc?.helpUrl).toContain("dequeuniversity.com");
   });
@@ -98,8 +98,8 @@ describe("baselineRules: query the catalog by ruleId / SC", () => {
 });
 
 describe("enrich: baseline coverage, never a dead end (ADR 0041 §G — pure detection)", () => {
-  it("resolves an axe finding to baseline by SC, carrying severity + fix + helpUrl", () => {
-    const e = enrich(axeFinding({ severity: undefined }));
+  it("resolves an axe finding to baseline by SC, carrying impact + fix + helpUrl", () => {
+    const e = enrich(axeFinding({ impact: undefined }));
     expect(e.corpus.source).toBe("baseline");
     if (e.corpus.source !== "baseline") throw new Error("unreachable");
     expect(e.corpus.sc).toBe("1.4.6");
@@ -107,15 +107,15 @@ describe("enrich: baseline coverage, never a dead end (ADR 0041 §G — pure det
     // detection; frequency is platform-derived (ADR 0041 §G).
     expect("tier" in e.corpus).toBe(false);
     expect("orgs" in e.corpus).toBe(false);
-    expect(e.corpus.severity).toBe("serious"); // axe's published default impact
+    expect(e.corpus.impact).toBe("serious"); // axe's published default impact
     expect(e.corpus.fix).not.toBeNull();
     expect(e.corpus.helpUrl).toContain("dequeuniversity.com");
   });
 
-  it("prefers the axe runtime impact over the baseline default severity", () => {
-    const e = enrich(axeFinding({ severity: "critical" }));
+  it("prefers the axe runtime impact over the baseline default impact", () => {
+    const e = enrich(axeFinding({ impact: "critical" }));
     expect(e.corpus.source).toBe("baseline");
-    expect(evidenceSeverity(e)).toBe("critical"); // runtime impact wins
+    expect(evidenceImpact(e)).toBe("critical"); // runtime impact wins
   });
 
   it("baseline-matches a source-pass finding by SC (no axe ruleId)", () => {
@@ -129,7 +129,7 @@ describe("enrich: baseline coverage, never a dead end (ADR 0041 §G — pure det
       provenance: "jsx-a11y",
     });
     expect(e.corpus.source).toBe("baseline");
-    expect(evidenceSeverity(e)).toBe("serious");
+    expect(evidenceImpact(e)).toBe("serious");
     expect(evidenceHelpUrl(e)).toContain("dequeuniversity.com");
   });
 
@@ -157,25 +157,25 @@ describe("enrich: baseline coverage, never a dead end (ADR 0041 §G — pure det
         ruleId: "region",
         wcag: [], // best-practice rules emit no wcag tag → no SC to key on
         message: "All page content should be contained by landmarks",
-        severity: undefined,
+        impact: undefined,
       }),
     );
     expect(e.corpus.source).toBe("baseline");
     if (e.corpus.source !== "baseline") throw new Error("unreachable");
     expect(e.corpus.bestPractice).toBe(true);
     expect(e.corpus.sc).toBeNull(); // honest: not a WCAG failure
-    expect(e.corpus.severity).toBe("moderate"); // axe's published default impact
+    expect(e.corpus.impact).toBe("moderate"); // axe's published default impact
     expect(e.corpus.fix).not.toBeNull();
     expect(e.corpus.helpUrl).toContain("dequeuniversity.com");
   });
 
   it("best-practice by-ruleId still lets axe runtime impact win", () => {
     const e = enrich(
-      axeFinding({ ruleId: "landmark-unique", wcag: [], severity: "serious" }),
+      axeFinding({ ruleId: "landmark-unique", wcag: [], impact: "serious" }),
     );
     expect(e.corpus.source).toBe("baseline");
     expect(evidenceBestPractice(e.corpus)).toBe(true);
-    expect(evidenceSeverity(e)).toBe("serious"); // runtime impact over catalog default
+    expect(evidenceImpact(e)).toBe("serious"); // runtime impact over catalog default
   });
 
   it("returns source 'none' only when the ruleId is absent from the catalog", () => {
@@ -190,9 +190,9 @@ describe("enrich: baseline coverage, never a dead end (ADR 0041 §G — pure det
     });
     expect(e.corpus.source).toBe("none");
     // The `none` variant carries NO catalog evidence at all — the union has only
-    // its `source` tag; severity/helpUrl come off the finding via the accessors.
+    // its `source` tag; impact/helpUrl come off the finding via the accessors.
     expect(Object.keys(e.corpus)).toEqual(["source"]);
-    expect(evidenceSeverity(e)).toBeNull();
+    expect(evidenceImpact(e)).toBeNull();
     expect(evidenceBestPractice(e.corpus)).toBe(false);
   });
 });
@@ -207,18 +207,18 @@ describe("rule-accurate fix: axe findings show axe guidance, source findings sho
       ruleId: "aria-progressbar-name",
       message: "ARIA progressbar nodes must have an accessible name",
       wcag: ["1.1.1"],
-      severity: "serious",
+      impact: "serious",
       helpUrl:
         "https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name?application=axeAPI",
       ...over,
     });
 
-  it("enriches to baseline on SC 1.1.1, carrying axe's severity + help", () => {
+  it("enriches to baseline on SC 1.1.1, carrying axe's impact + help", () => {
     const e = enrich(progressbar());
     expect(e.corpus.source).toBe("baseline");
     if (e.corpus.source !== "baseline") throw new Error("unreachable");
     expect(e.corpus.sc).toBe("1.1.1");
-    expect(evidenceSeverity(e)).toBe("serious");
+    expect(evidenceImpact(e)).toBe("serious");
   });
 
   it("resolveDisplay.fix returns axe's rule guidance for an axe finding", () => {
@@ -229,7 +229,7 @@ describe("rule-accurate fix: axe findings show axe guidance, source findings sho
     expect(resolveDisplay(e).fixLine).toBe(evidenceFix(e.corpus));
   });
 
-  it("the rendered axe finding shows a Deque ref + severity, no contradictory audit tier", () => {
+  it("the rendered axe finding shows a Deque ref + impact, no contradictory audit tier", () => {
     const lines = detailLines(enrich(progressbar()));
     const text = lines.join("\n");
     // No corpus/frequency tier line survives (ADR 0041 §G).
@@ -240,7 +240,7 @@ describe("rule-accurate fix: axe findings show axe guidance, source findings sho
       "ref:    https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name?application=axeAPI",
     );
     expect(text).toContain("ARIA progressbar nodes must have an accessible name");
-    expect(text).toContain("severity: SERIOUS");
+    expect(text).toContain("impact: SERIOUS");
     // The coverage annotation replaces the old corpus line.
     expect(text).toContain("coverage: axe baseline rule SC 1.1.1");
   });

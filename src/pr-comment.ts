@@ -27,8 +27,8 @@
 // The canonical finding shape a reporter renders from now lives in the seam
 // (`reporter/finding.ts`), so the platform-neutral input type is not owned by
 // this GitHub-specific surface. Re-exported here for existing importers.
-import { type Finding, parseFindings, type Severity } from "./reporter/finding";
-export { type Finding, parseFindings, type Severity };
+import { type Finding, type Impact, parseFindings } from "./reporter/finding";
+export { type Finding, type Impact, parseFindings };
 
 /** An existing inline review comment already on the PR (id + rendered body). */
 export interface ReviewComment {

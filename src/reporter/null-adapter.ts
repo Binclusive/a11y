@@ -24,8 +24,8 @@ export interface NullPostTarget {
 /** One finding as a single stdout line — the generic, UI-less rendering. */
 export function renderLine(f: Finding): string {
   const wcag = (f.wcag ?? []).length > 0 ? ` [${(f.wcag ?? []).map((s) => `WCAG ${s}`).join(", ")}]` : "";
-  const severity = f.severity ? `${f.severity}: ` : "";
-  return `${f.file}:${f.line} ${severity}${f.ruleId}${wcag} — ${f.message}`;
+  const impact = f.impact ? `${f.impact}: ` : "";
+  return `${f.file}:${f.line} ${impact}${f.ruleId}${wcag} — ${f.message}`;
 }
 
 /** Build a null adapter over `sink` (defaults to stdout). */

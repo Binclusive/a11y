@@ -4,13 +4,10 @@ import {
   Finding as ContractFinding,
   parseFindingPayload,
   Provenance,
-  Severity,
 } from "@binclusive/a11y-contract";
 import { enrich } from "../src/evidence";
 import type { Finding, FindingProvenance } from "../src/core";
 import {
-  contractSeverity,
-  impactToSeverity,
   toContractFinding,
   toContractProvenance,
   toFindingPayload,
@@ -71,31 +68,22 @@ describe("provenance projection (7-value -> binary)", () => {
   });
 });
 
-describe("severity projection (axe impact -> contract enum)", () => {
-  it("collapses the 4-level axe impact onto critical|major|minor", () => {
-    expect(impactToSeverity("critical")).toBe("critical");
-    expect(impactToSeverity("serious")).toBe("major");
-    expect(impactToSeverity("moderate")).toBe("major");
-    expect(impactToSeverity("minor")).toBe("minor");
-  });
-
-  it("always yields a valid contract severity for any enriched finding", () => {
-    const f = enrich(raw({ provenance: "axe", file: "https://x", line: 0, selector: "div", severity: "serious" }));
-    expect(() => Severity.parse(contractSeverity(f))).not.toThrow();
-  });
-});
-
 describe("toContractFinding narrows onto the metadata-only DTO", () => {
   const src = (over: Partial<Finding> = {}) => {
     const f = raw(over);
     return toContractFinding(enrich(f), "changed-files", locationOf(f, linesWith("<img src=x>", 12)));
   };
 
-  it("drops every source locator (file / line / ruleId as keys)", () => {
+  it("drops every source locator (file / line / ruleId as keys) and carries NO severity/impact", () => {
     const projected = src();
     expect(projected).not.toHaveProperty("file");
     expect(projected).not.toHaveProperty("line");
     expect(projected).not.toHaveProperty("ruleId");
+    // The wire Finding is impact-only-by-absence: it carries neither the old
+    // 3-level `severity` band nor an `impact` field (ADR 0044 slice v — impact
+    // rides the phone-home transport extra, not the moat contract).
+    expect(projected).not.toHaveProperty("severity");
+    expect(projected).not.toHaveProperty("impact");
     // A strict re-parse proves no foreign key survived.
     expect(() => ContractFinding.parse(projected)).not.toThrow();
   });
@@ -222,7 +210,7 @@ describe("toFindingPayload — the emit boundary", () => {
   it("produces a payload that validates against the canonical schema", () => {
     const findings = [
       enrich(raw()),
-      enrich(raw({ provenance: "axe", file: "https://x", line: 0, selector: "a.link", severity: "critical", wcag: ["1.4.3"] })),
+      enrich(raw({ provenance: "axe", file: "https://x", line: 0, selector: "a.link", impact: "critical", wcag: ["1.4.3"] })),
       enrich(raw({ provenance: "corpus-agent", layer: "recall", patternId: "p1", wcag: ["2.4.4"] })),
     ];
     const payload = toFindingPayload(findings, "pr-1291", { lineSource, root: "" });

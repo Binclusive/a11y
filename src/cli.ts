@@ -3,10 +3,9 @@ import { pathToFileURL } from "node:url";
 import { Args, Command, Options } from "@effect/cli";
 import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import { Effect, Option } from "effect";
-import type { Severity as ContractSeverity } from "@binclusive/a11y-contract";
+import type { Impact } from "@binclusive/a11y-contract";
 import { type AgentLaneOverrides, augmentWithAgentLane } from "./agent-lane";
 import { collectTsx } from "./collect";
-import { contractSeverity } from "./emit-contract";
 // Type-only: the rendered-DOM lane (playwright/@axe-core) is loaded lazily inside
 // `runCheckUrl` so the static `check` path carries no eager browser-stack import
 // and the CI image can ship without it (issue #2133).
@@ -16,7 +15,7 @@ import { scanSwift } from "./collect-swift";
 import { gen, init, type LearnInput, learn } from "./commands";
 import { collectUnityFindings } from "./unity-findings";
 import { type FindingProvenance, scan } from "./core";
-import { type Evidence, type EnrichedFinding, enrichAll, resolveDisplay } from "./evidence";
+import { type Evidence, type EnrichedFinding, enrichAll, evidenceImpact, resolveDisplay } from "./evidence";
 import { runHookCli } from "./hook";
 import { phoneHome } from "./phone-home";
 import { formatSarif } from "./sarif";
@@ -24,9 +23,8 @@ import {
   GATE_OFF,
   type GateConfig,
   gateExitCode,
-  SEVERITY_ORDER,
   toGateFinding,
-} from "./severity-gate";
+} from "./impact-gate";
 import type { ComponentResolution, Coverage } from "./resolve-components";
 import type { SuggestResult } from "./suggest";
 
@@ -56,11 +54,11 @@ export function detailLines(f: EnrichedFinding): string[] {
   ];
 
   // The display contract resolves the axe-vs-SC policy once (see resolveDisplay):
-  // WHAT severity / fix-line / ref / patterns to show. This printer only places
+  // WHAT impact / fix-line / ref / patterns to show. This printer only places
   // those resolved values in each source's layout — no policy, no provenance
   // checks.
   const d = resolveDisplay(f);
-  if (d.severityLabel !== null) lines.push(`    severity: ${d.severityLabel}`);
+  if (d.impactLabel !== null) lines.push(`    impact: ${d.impactLabel}`);
 
   if (d.fixLine !== null) lines.push(`    fix:    ${d.fixLine}`);
   if (d.refUrl !== null) lines.push(`    ref:    ${d.refUrl}`);
@@ -68,7 +66,7 @@ export function detailLines(f: EnrichedFinding): string[] {
   const c = f.corpus;
   switch (c.source) {
     case "baseline":
-      // Coverage: axe's published per-rule data (severity + standard fix + help).
+      // Coverage: axe's published per-rule data (impact + standard fix + help).
       if (c.bestPractice) {
         // An axe best-practice rule with no WCAG SC — honestly NOT a WCAG failure.
         lines.push("    rule:   best-practice (no WCAG SC)");
@@ -257,13 +255,13 @@ export interface JsonFinding {
   readonly provenance: FindingProvenance;
   readonly wcag: readonly string[];
   /**
-   * The contract's 3-level severity (`critical`/`major`/`minor`), resolved
-   * through the ONE {@link contractSeverity} mapping so this field can never
-   * disagree with the wire projection or SARIF. Emitted here so downstream
-   * consumers (the CI PR-summary rollup, #2132) count by the canonical contract
-   * severity rather than re-deriving it from the evidence/axe impact.
+   * The contract's canonical impact (`critical`/`serious`/`moderate`/`minor`, or
+   * `unknown` when the finding carries no axe impact), read through the ONE
+   * {@link evidenceImpact} accessor so this field can never disagree with SARIF.
+   * Emitted here so downstream consumers (the CI PR-summary rollup, #2132) count
+   * by the canonical impact rather than re-deriving it from the evidence.
    */
-  readonly severity: ContractSeverity;
+  readonly impact: Impact;
   /** The WCAG success-criterion id the finding maps to (contract `criterion` = the first `wcag` tag), e.g. "1.4.3"; "" when the rule carries no SC. */
   readonly criterion: string;
   /** The coverage-catalog cross-reference: which source matched, the SC, and whether it is an axe best-practice rule (no WCAG SC). Frequency is platform-derived (ADR 0041 §G), never carried here. */
@@ -328,9 +326,9 @@ export function buildJsonReport(
     enforcement: f.enforcement,
     provenance: f.provenance,
     wcag: f.wcag,
-    // Resolve severity + criterion through the ONE contract projection so the
-    // report's counts match the wire/SARIF and never re-derive a second mapping.
-    severity: contractSeverity(f),
+    // Read impact + criterion through the ONE evidence accessor so the report's
+    // counts match SARIF and never re-derive a second mapping. Absent ⇒ `unknown`.
+    impact: evidenceImpact(f) ?? "unknown",
     criterion: f.wcag[0] ?? "",
     evidence: jsonEvidence(f.corpus),
     message: f.message,
@@ -402,7 +400,7 @@ function renderReport(
 
   // Default (unset gate): exit non-zero only when something the contract BLOCKS
   // fired — a warn-only scan is a clean build. When the opt-in gate is set, the
-  // exit reflects the gate (severity threshold / max-violations) instead (#2134).
+  // exit reflects the gate (impact threshold / max-violations) instead (#2134).
   process.exitCode = gateExitCode(findings.map(toGateFinding), gate);
 }
 
@@ -776,13 +774,17 @@ const dirArg = Args.text({ name: "dir" });
 const optionalDir = Args.text({ name: "dir" }).pipe(Args.withDefault("."));
 
 // OPT-IN blocking gate (issue #2134), default OFF. `--fail-on` is a choice over
-// the contract's own severity vocabulary (SEVERITY_ORDER) so the flag can never
-// name a severity the contract doesn't; both are `optional` (no default) so an
-// unset gate is the safe state — findings never fail the check on severity/volume.
-const failOnOption = Options.choice("fail-on", SEVERITY_ORDER).pipe(
+// the four ACTIONABLE contract impact levels (`unknown` is excluded — a "fail at
+// or above unknown" threshold would fail on everything). The `satisfies readonly
+// Impact[]` binds the choice to the contract enum, so a future rename of a level
+// fails to compile here rather than drifting. Both knobs are `optional` (no
+// default) so an unset gate is the safe state — findings never fail on
+// impact/volume alone.
+const FAIL_ON_CHOICES = ["critical", "serious", "moderate", "minor"] as const satisfies readonly Impact[];
+const failOnOption = Options.choice("fail-on", FAIL_ON_CHOICES).pipe(
   Options.optional,
   Options.withDescription(
-    "OPT-IN blocking gate (default OFF): fail the check when any finding's severity is at or above this threshold (critical | major | minor). Unset ⇒ non-blocking — findings never fail the check on severity.",
+    "OPT-IN blocking gate (default OFF): fail the check when any finding's impact is at or above this threshold (critical | serious | moderate | minor). Unset ⇒ non-blocking — findings never fail the check on impact.",
   ),
 );
 const maxViolationsOption = Options.integer("max-violations").pipe(

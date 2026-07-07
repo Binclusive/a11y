@@ -1,8 +1,7 @@
 import baselineCatalog from "../data/baseline-rules.json" with { type: "json" };
-import type { Finding } from "./core";
+import type { AxeImpact, Finding } from "./core";
 
-/** Severity levels, ordered least → most severe. axe's runtime impact vocabulary. */
-export type Severity = "minor" | "moderate" | "serious" | "critical";
+export type { AxeImpact };
 
 /**
  * The evidence attached to a finding — a DISCRIMINATED UNION on `source`. The
@@ -13,7 +12,7 @@ export type Severity = "minor" | "moderate" | "serious" | "critical";
  *
  *   - `"baseline"` — axe-core's baseline catalog (`data/baseline-rules.json`)
  *                    knows the rule. Coverage, NOT audit-frequency data: carries
- *                    axe's `severity` + standard `fix` + `helpUrl`. Matched by the
+ *                    axe's `impact` + standard `fix` + `helpUrl`. Matched by the
  *                    finding's SC, OR — for axe best-practice rules that carry no
  *                    WCAG SC tag (`region`, `landmark-unique`, …) — by the axe
  *                    ruleId, in which case `sc` is null and `bestPractice` is true
@@ -21,8 +20,8 @@ export type Severity = "minor" | "moderate" | "serious" | "critical";
  *                    never be dressed up with a fabricated SC.
  *   - `"none"`     — the finding's ruleId is genuinely absent from the catalog
  *                    (and no SC matched). It carries NO catalog evidence at all;
- *                    any severity/helpUrl to display comes off the finding's own
- *                    runtime axe metadata (read via {@link evidenceSeverity} /
+ *                    any impact/helpUrl to display comes off the finding's own
+ *                    runtime axe metadata (read via {@link evidenceImpact} /
  *                    {@link evidenceHelpUrl}), not off this variant.
  *
  * The axe-vs-SC DISPLAY policy ("for axe findings show the rule's own help, not
@@ -33,7 +32,7 @@ export type Evidence =
   | {
       readonly source: "baseline";
       readonly sc: string | null;
-      readonly severity: Severity;
+      readonly impact: AxeImpact;
       readonly fix: string;
       readonly helpUrl: string | null;
       /** `sc === null` ⇔ `bestPractice` — an axe rule with no WCAG SC tag. */
@@ -54,7 +53,7 @@ export interface EnrichedFinding extends Finding {
 interface BaselineRuleEntry {
   readonly ruleId: string;
   readonly sc: readonly string[];
-  readonly severity: Severity;
+  readonly impact: AxeImpact;
   readonly help: string;
   readonly helpUrl: string;
 }
@@ -73,7 +72,7 @@ function readBaseline(raw: unknown): {
 } {
   const byRule = new Map<string, BaselineRuleEntry>();
   const bySc = new Map<string, BaselineRuleEntry>();
-  const isSeverity = (s: unknown): s is Severity =>
+  const isImpact = (s: unknown): s is AxeImpact =>
     s === "minor" || s === "moderate" || s === "serious" || s === "critical";
 
   if (typeof raw !== "object" || raw === null || !("rules" in raw)) return { byRule, bySc };
@@ -82,18 +81,18 @@ function readBaseline(raw: unknown): {
 
   for (const r of list) {
     if (typeof r !== "object" || r === null) continue;
-    const { ruleId, sc, severity, help, helpUrl } = r as Record<string, unknown>;
+    const { ruleId, sc, impact, help, helpUrl } = r as Record<string, unknown>;
     if (
       typeof ruleId !== "string" ||
       !Array.isArray(sc) ||
-      !isSeverity(severity) ||
+      !isImpact(impact) ||
       typeof help !== "string" ||
       typeof helpUrl !== "string"
     ) {
       continue;
     }
     const scList = sc.filter((s): s is string => typeof s === "string");
-    const entry: BaselineRuleEntry = { ruleId, sc: scList, severity, help, helpUrl };
+    const entry: BaselineRuleEntry = { ruleId, sc: scList, impact, help, helpUrl };
     byRule.set(ruleId, entry);
     for (const oneSc of scList) {
       if (!bySc.has(oneSc)) bySc.set(oneSc, entry);
@@ -119,21 +118,21 @@ function baselineBySc(finding: Finding): { sc: string; entry: BaselineRuleEntry 
 
 /**
  * Cross-reference a finding against the coverage catalog, most-authoritative
- * first, so every finding surfaces with a severity and a fix instead of
+ * first, so every finding surfaces with an impact and a fix instead of
  * dead-ending at null:
  *
  *   1. BASELINE (by SC) — coverage for the finding's WCAG SCs. axe's published
- *      per-rule severity + standard fix + helpUrl. → `source: "baseline"`,
+ *      per-rule impact + standard fix + helpUrl. → `source: "baseline"`,
  *      `bestPractice: false`.
  *   2. BASELINE (by ruleId) — the axe best-practice rules that carry NO WCAG SC
  *      tag (`region`, `landmark-unique`, …). Matched by the finding's axe ruleId,
  *      reported honestly: `sc: null`, `bestPractice: true`, still carrying
- *      severity + fix + helpUrl. → `source: "baseline"`.
+ *      impact + fix + helpUrl. → `source: "baseline"`.
  *   3. NONE — the ruleId is genuinely absent from the catalog (and no SC
- *      matched). An axe finding may still surface its own runtime severity/helpUrl.
+ *      matched). An axe finding may still surface its own runtime impact/helpUrl.
  *
  * For axe findings the runtime impact already on the finding always wins over
- * the catalog's static severity.
+ * the catalog's static impact.
  */
 export function enrich(finding: Finding): EnrichedFinding {
   // 1. BASELINE by SC — coverage for the finding's WCAG SCs. Runtime axe impact
@@ -144,7 +143,7 @@ export function enrich(finding: Finding): EnrichedFinding {
       source: "baseline",
       sc: bySc.sc,
       fix: bySc.entry.help,
-      severity: finding.severity ?? bySc.entry.severity,
+      impact: finding.impact ?? bySc.entry.impact,
       helpUrl: finding.helpUrl ?? bySc.entry.helpUrl,
       bestPractice: false,
     });
@@ -160,14 +159,14 @@ export function enrich(finding: Finding): EnrichedFinding {
       source: "baseline",
       sc: byRule.sc[0] ?? null,
       fix: byRule.help,
-      severity: finding.severity ?? byRule.severity,
+      impact: finding.impact ?? byRule.impact,
       helpUrl: finding.helpUrl ?? byRule.helpUrl,
       bestPractice: byRule.sc.length === 0,
     });
   }
 
   // 3. NONE — the ruleId is absent from the catalog and no SC matched. No catalog
-  //    evidence; any displayable severity/helpUrl comes off the finding.
+  //    evidence; any displayable impact/helpUrl comes off the finding.
   return withEvidence(finding, { source: "none" });
 }
 
@@ -192,16 +191,16 @@ export function evidenceFix(c: Evidence): string | null {
 }
 
 /**
- * The severity to display for a finding: the catalog/runtime value the variant
+ * The impact to display for a finding: the catalog/runtime value the variant
  * carries, falling back to the finding's own runtime axe impact for `none`.
  */
-export function evidenceSeverity(f: EnrichedFinding): Severity | null {
+export function evidenceImpact(f: EnrichedFinding): AxeImpact | null {
   const c = f.corpus;
   switch (c.source) {
     case "baseline":
-      return c.severity;
+      return c.impact;
     case "none":
-      return f.severity ?? null;
+      return f.impact ?? null;
   }
 }
 
@@ -236,8 +235,8 @@ export function evidenceBestPractice(c: Evidence): boolean {
  * and shown verbatim.
  */
 export interface DisplayContract {
-  /** Uppercased severity for the `severity:` line, or null to omit it. */
-  readonly severityLabel: string | null;
+  /** Uppercased impact for the `impact:` line, or null to omit it. */
+  readonly impactLabel: string | null;
   /** Text for the CLI `fix:` line, or null to suppress it. */
   readonly fixLine: string | null;
   /**
@@ -253,7 +252,7 @@ export interface DisplayContract {
 export function resolveDisplay(f: EnrichedFinding): DisplayContract {
   const c = f.corpus;
   const isAxe = f.provenance === "axe";
-  const severity = evidenceSeverity(f);
+  const impact = evidenceImpact(f);
   // axe → rule-accurate help (its own message); source → SC-keyed baseline fix.
   const ruleFix = isAxe ? (f.message ?? null) : evidenceFix(c);
   // A baseline fix is axe's per-rule help (rule-accurate), so it is shown for axe
@@ -262,7 +261,7 @@ export function resolveDisplay(f: EnrichedFinding): DisplayContract {
   // `ref:` shows for every axe finding, and for every finding carrying a help URL.
   const refUrl = evidenceHelpUrl(f);
   return {
-    severityLabel: severity === null ? null : severity.toUpperCase(),
+    impactLabel: impact === null ? null : impact.toUpperCase(),
     fixLine,
     fix: ruleFix,
     refUrl,
@@ -271,13 +270,13 @@ export function resolveDisplay(f: EnrichedFinding): DisplayContract {
 
 /**
  * A baseline-catalog rule surfaced for `get_a11y_rules`: axe's published
- * per-rule data (ruleId, SC, severity, standard fix, helpUrl) for ANY axe/WCAG
+ * per-rule data (ruleId, SC, impact, standard fix, helpUrl) for ANY axe/WCAG
  * rule. Carries NO org count and NO frequency tier (it is not audit data).
  */
 export interface BaselineRuleInfo {
   readonly ruleId: string;
   readonly sc: readonly string[];
-  readonly severity: Severity;
+  readonly impact: AxeImpact;
   readonly fix: string;
   readonly helpUrl: string;
 }
@@ -291,7 +290,7 @@ export function baselineRules(filter: { ruleId?: string; sc?: string } = {}): Ba
   const toInfo = (e: BaselineRuleEntry): BaselineRuleInfo => ({
     ruleId: e.ruleId,
     sc: e.sc,
-    severity: e.severity,
+    impact: e.impact,
     fix: e.help,
     helpUrl: e.helpUrl,
   });
