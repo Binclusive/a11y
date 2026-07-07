@@ -18,9 +18,10 @@ import { collectUnityFindings } from "./unity-findings";
 import { type FindingProvenance, scan } from "./core";
 import { type Evidence, type EnrichedFinding, enrichAll, evidenceImpact, resolveDisplay } from "./evidence";
 import { runHookCli } from "./hook";
-import { phoneHome } from "./phone-home";
+import { type PhoneHomeDeps, phoneHome } from "./phone-home";
 import { formatSarif } from "./sarif";
 import {
+  GATE_ADVISORY,
   GATE_OFF,
   type GateConfig,
   gateExitCode,
@@ -361,6 +362,66 @@ export function buildJsonReport(
 }
 
 /**
+ * The zeroed coverage literal for a stack with no component resolver (Liquid,
+ * Unity) or an empty scan — the `--json`/`buildJsonReport` shape stays identical
+ * to `check` even when there is nothing to resolve.
+ */
+const EMPTY_COVERAGE: Coverage = {
+  total: 0,
+  declared: 0,
+  registry: 0,
+  traced: 0,
+  opaque: 0,
+  trusted: 0,
+  icons: 0,
+  structural: 0,
+  declare: 0,
+};
+
+/** The run context a machine-readable emit needs, threaded from each stack runner. */
+interface EmitContext {
+  readonly root: string;
+  readonly runId: string;
+  readonly filesScanned: number;
+  readonly coverage: Coverage;
+  /** ABSOLUTE paths this run analyzed — phone-home relativizes them into `scannedPaths` (ADR 0043). */
+  readonly analyzedFiles: readonly string[];
+  readonly gate: GateConfig;
+  /** Test-only seam: override phone-home transport deps to capture the projected wire batch (#163 tracer). */
+  readonly phoneHome?: Partial<PhoneHomeDeps>;
+}
+
+/**
+ * The ONE machine-readable emit path, shared by every stack runner (#163). SARIF
+ * and phone-home are the only two consumers that carry findings off the machine,
+ * and both narrow through the canonical `@binclusive/a11y-contract` vocabulary —
+ * so a new stack (`check-shopify`, and next `check-swift`/`check-unity`/…) reaches
+ * the wire by routing HERE, never by re-forking a bespoke `buildJsonReport`→stdout
+ * path. `text` is intentionally excluded: the human report differs per stack and
+ * stays in each runner.
+ */
+async function emitFindings(
+  format: "json" | "sarif",
+  findings: readonly EnrichedFinding[],
+  ctx: EmitContext,
+): Promise<void> {
+  if (format === "sarif") {
+    console.log(formatSarif(findings, ctx.runId, { root: ctx.root }));
+  } else {
+    console.log(JSON.stringify(buildJsonReport(ctx.root, ctx.filesScanned, ctx.coverage, findings), null, 2));
+    // OPTIONAL, non-blocking phone-home (#2108): file metadata-only findings to the
+    // dashboard when the CI env carries a `b8e_` token + org/project. Env-gated, so a
+    // local run silently skips; a failure is swallowed inside `phoneHome` and never
+    // changes the exit code. Inject this run's analyzed set (ADR 0043) as `scannedPaths`.
+    await phoneHome(findings, ctx.root, process.env, {
+      analyzedFiles: () => [...ctx.analyzedFiles],
+      ...ctx.phoneHome,
+    });
+  }
+  process.exitCode = gateExitCode(findings.map(toGateFinding), ctx.gate);
+}
+
+/**
  * The shared report tail for both runners (source + rendered-DOM): empty-state,
  * grouped findings, the totals rollup, and the blocking-gated exit code. Each
  * runner keeps its own PREAMBLE (the scan header / coverage block) and supplies
@@ -435,14 +496,13 @@ export async function runCheck(
     // Non-blocking — agent findings are warn-only, so the block-gated exit is
     // computed on the augmented list and can only reflect the deterministic floor.
     const findings = await augmentWithAgentLane(deterministic, root, process.env, agentOverrides);
-    console.log(formatSarif(findings, runId, { root }));
-    process.exitCode = gateExitCode(findings.map(toGateFinding), gate);
+    await emitFindings("sarif", findings, { root, runId, filesScanned: files.length, coverage: EMPTY_COVERAGE, analyzedFiles: [], gate });
     return;
   }
 
   if (json) {
     if (files.length === 0) {
-      const report = buildJsonReport(root, 0, { total: 0, declared: 0, registry: 0, traced: 0, opaque: 0, trusted: 0, icons: 0, structural: 0, declare: 0 }, []);
+      const report = buildJsonReport(root, 0, EMPTY_COVERAGE, []);
       console.log(JSON.stringify(report, null, 2));
       return;
     }
@@ -450,18 +510,17 @@ export async function runCheck(
     const deterministic = enrichAll(result.findings);
     // AI lane (issue #2182): agent findings flow through the SAME JSON report and
     // phone-home envelope as the deterministic floor. When no key is present this
-    // returns `deterministic` unchanged.
+    // returns `deterministic` unchanged. Inject this run's true analyzed set (ADR
+    // 0043) so phone-home emits it as `scannedPaths` — 4b's reconcile keys on it.
     const findings = await augmentWithAgentLane(deterministic, root, process.env, agentOverrides);
-    const report = buildJsonReport(root, files.length, result.coverage, findings);
-    console.log(JSON.stringify(report, null, 2));
-    // OPTIONAL, non-blocking phone-home (#2108): file metadata-only findings to
-    // the dashboard when the CI env carries a `b8e_` token + org/project. Fully
-    // env-gated, so a local `check --json` (no such env) silently skips; a
-    // failure here is swallowed inside `phoneHome` and never changes exit code.
-    // Inject this run's true analyzed set (ADR 0043) so phone-home emits it as
-    // `scannedPaths` — the source-scan-scope coverage 4b's reconcile keys on.
-    await phoneHome(findings, root, process.env, { analyzedFiles: () => result.analyzedFiles });
-    process.exitCode = gateExitCode(findings.map(toGateFinding), gate);
+    await emitFindings("json", findings, {
+      root,
+      runId,
+      filesScanned: files.length,
+      coverage: result.coverage,
+      analyzedFiles: result.analyzedFiles,
+      gate,
+    });
     return;
   }
 
@@ -582,22 +641,32 @@ async function runCheckSwift(dir: string): Promise<void> {
  * has no component resolver, so coverage is zeroed in the `--json` shape. A file
  * the parser rejects is skipped (surfaced as a count), never fatal.
  */
-async function runCheckShopify(dir: string, json = false): Promise<void> {
+export async function runCheckShopify(
+  dir: string,
+  format: OutputFormat = "text",
+  runId = "local",
+  phoneHomeOverrides: Partial<PhoneHomeDeps> = {},
+): Promise<void> {
   const { root, files, findings: raw, parseErrors } = await scanLiquid(dir);
   const findings = enrichAll(raw);
 
-  if (json) {
-    // Liquid carries no resolver coverage — emit the zeroed coverage literal so
-    // the JSON shape stays identical to `check`.
-    const report = buildJsonReport(
+  if (format !== "text") {
+    // Route the Liquid scan through the SAME canonical emit path `check` uses
+    // (#163): SARIF or the JSON report + `toContractFinding` phone-home projection,
+    // so a Shopify scan hands real `@binclusive/a11y-contract` findings to a real
+    // consumer instead of a bespoke `buildJsonReport`→stdout report. Liquid carries
+    // no component resolver (zeroed coverage) and the whole scanned set is analyzed.
+    // Non-blocking (`GATE_ADVISORY`): the stack scan reports, it doesn't gate (exit
+    // 0 even with findings) — the opt-in blocking gate is a noted follow-up (#163 AC).
+    await emitFindings(format, findings, {
       root,
-      files.length,
-      { total: 0, declared: 0, registry: 0, traced: 0, opaque: 0, trusted: 0, icons: 0, structural: 0, declare: 0 },
-      findings,
-    );
-    console.log(JSON.stringify(report, null, 2));
-    const blocking = findings.filter((f) => f.enforcement === "block").length;
-    process.exitCode = blocking > 0 ? 1 : 0;
+      runId,
+      filesScanned: files.length,
+      coverage: EMPTY_COVERAGE,
+      analyzedFiles: files,
+      gate: GATE_ADVISORY,
+      phoneHome: phoneHomeOverrides,
+    });
     return;
   }
 
@@ -905,11 +974,21 @@ const checkSwiftCommand = Command.make(
 
 const checkShopifyCommand = Command.make(
   "check-shopify",
-  { dir: dirArg, json: Options.boolean("json") },
-  ({ dir, json }) => Effect.promise(() => runCheckShopify(dir, json)),
+  {
+    dir: dirArg,
+    json: Options.boolean("json"),
+    sarif: Options.boolean("sarif"),
+    format: formatOption,
+    runId: Options.text("run-id").pipe(Options.withDefault("local")),
+  },
+  ({ dir, json, sarif, format, runId }) =>
+    // Reuse the CANONICAL `--format text|json|sarif` selector (`--json`/`--sarif`
+    // aliases) the default `check` uses, so the Shopify scan reaches SARIF + the
+    // phone-home contract projection through the SAME path, not a bespoke flag (#163).
+    Effect.promise(() => runCheckShopify(dir, resolveFormat(format, json, sarif), runId)),
 ).pipe(
   Command.withDescription(
-    "scan .liquid Shopify theme source for structural a11y findings (static, no browser; --json: machine-readable)",
+    "scan .liquid Shopify theme source for structural a11y findings (static, no browser; --format text|json|sarif, canonical — routes findings through the same canonical contract wire path as `check`)",
   ),
 );
 
