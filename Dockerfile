@@ -14,8 +14,11 @@ FROM node:20.18.1-alpine AS deps
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     CI=1
 
-# lockfileVersion 9.0 → pnpm 9.
-RUN corepack enable && corepack prepare pnpm@9 --activate
+# lockfileVersion 9.0 → pnpm 9. Upgrade corepack first: node's bundled corepack
+# has the pre-rotation pnpm signing key baked in and rejects the current
+# registry signature ("Cannot find matching keyid"); corepack@latest ships the
+# rotated keys.
+RUN npm install --global corepack@latest && corepack enable && corepack prepare pnpm@9 --activate
 
 WORKDIR /engine
 
