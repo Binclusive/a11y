@@ -34,6 +34,7 @@ import { collectTsx } from "./collect";
 import { scanUrl } from "./collect-dom";
 import { learn } from "./commands";
 import { scan } from "./core";
+import { VERSION } from "./version";
 import {
   type BaselineRuleInfo,
   baselineRules,
@@ -328,7 +329,7 @@ export function registerTools(server: McpServer): void {
 /** Build the configured server (no transport attached). */
 export function buildServer(): McpServer {
   const server = new McpServer(
-    { name: "binclusive-a11y", version: "0.1.0" },
+    { name: "binclusive-a11y", version: VERSION },
     {
       capabilities: { tools: {} },
       instructions: [

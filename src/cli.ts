@@ -28,6 +28,7 @@ import {
 } from "./impact-gate";
 import type { ComponentResolution, Coverage } from "./resolve-components";
 import type { SuggestResult } from "./suggest";
+import { VERSION } from "./version";
 
 /**
  * The body of a finding report — everything below the location line. Shared by
@@ -1226,7 +1227,7 @@ const rootCommand = Command.make("a11y-checker", { dir: rootDir }, ({ dir }) =>
  */
 export const runCli = Command.run(rootCommand, {
   name: "a11y-checker",
-  version: "0.1.0",
+  version: VERSION,
 });
 
 /**
