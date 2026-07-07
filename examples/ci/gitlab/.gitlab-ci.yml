@@ -24,7 +24,7 @@ a11y:
   # `entrypoint: [""]` clears the image ENTRYPOINT so GitLab can run `script:`;
   # we then invoke the entrypoint ourselves once the diff env is set.
   image:
-    name: ghcr.io/binclusive/a11y:0.1.2 # x-release-please-version
+    name: ghcr.io/binclusive/a11y:0.1.3 # x-release-please-version
     entrypoint: [""]
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
