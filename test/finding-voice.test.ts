@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { detailLines } from "../src/cli";
-import { enrich } from "../src/corpus";
+import { enrich } from "../src/evidence";
 import type { Finding } from "../src/core";
 import { type EnforceContext, enforceContent } from "../src/enforce";
 import { impactFirstJsxA11yMessage } from "../src/finding-voice";
