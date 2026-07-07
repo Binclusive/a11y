@@ -24,6 +24,20 @@ log() { echo "a11y-agent: $*" >&2; }
 # (silently falling back to a no-op scan). Trust the mounted workspace.
 git config --global --add safe.directory "$WORKSPACE" 2>/dev/null || true
 
+# ---- URL/browser scan mode (opt-in, #2336) --------------------------------
+# The dedicated url-scan action (action-url.yml, pinned to the :-browser image)
+# injects INPUT_SCAN_URL. When set, render that live URL with axe-core and exit —
+# this path needs the Chromium the static image strips, so it only resolves under
+# the browser image. Empty (the static action) → fall through to the diff-scoped
+# static `check` below, unchanged. `check-url` is advisory too: it exits 0 on
+# findings and only non-zero on an unreachable target (a bad URL is a usage error,
+# not a swallowed finding), so propagating its code is the right gate.
+if [ -n "${INPUT_SCAN_URL:-}" ]; then
+  log "URL scan mode: rendering $INPUT_SCAN_URL with axe-core"
+  node "$ENGINE_DIR/bin/a11y.mjs" check-url "$INPUT_SCAN_URL"
+  exit $?
+fi
+
 # The runner passes the GITHUB_* defaults into a Docker action but NOT the PR
 # context — derive PR_NUMBER / BASE_SHA / HEAD_SHA from the event payload at
 # GITHUB_EVENT_PATH. Explicit env still wins, so `docker run -e ...` works too.
