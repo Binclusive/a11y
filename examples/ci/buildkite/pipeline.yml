@@ -43,7 +43,7 @@ steps:
       # run-docker-image.md: Buildkite runs the container via the docker plugin on
       # the agent host; the checkout dir is mounted as the workdir.
       - docker#v5.11.0:
-          image: "ghcr.io/binclusive/a11y:0.1.3" # x-release-please-version
+          image: "ghcr.io/binclusive/a11y:0.1.4" # x-release-please-version
           # secrets-and-env.md: Buildkite is the outlier — NO managed secret store.
           # The agent injects B8E_TOKEN via an environment / pre-command hook (or
           # Vault/S3). Omit for a fully-local scan.

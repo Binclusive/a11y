@@ -1,6 +1,6 @@
 {
   "name": "@binclusive/a11y",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "Local accessibility checker for React/TSX, grounded in axe-core's published rule catalog. Runs entirely on your machine — no network, no upload.",
   "main": "./src/index.ts",
