@@ -56,8 +56,11 @@ fi
 [ -n "${LLM_API_KEY:-}" ] && log "AI lane: LLM key present" || log "AI lane: no LLM key — deterministic floor only"
 # Surface any model/provider override so a customer who sets one sees it took
 # (the #2188 complaint was a silently-ignored override). Empty → engine default.
-[ -n "${LLM_PROVIDER:-}" ] && log "AI lane: provider override -> $LLM_PROVIDER"
-[ -n "${LLM_MODEL:-}" ]    && log "AI lane: model override -> $LLM_MODEL"
+# Log presence only, never the raw env value: an untrusted whitespace/control-char
+# value would forge or garble the log (#2199). Blank-or-whitespace → treated as
+# unset, matching resolveProvider's `.trim()` semantics.
+[ -n "$(printf %s "${LLM_PROVIDER:-}" | tr -d '[:space:]')" ] && log "AI lane: provider override set"
+[ -n "$(printf %s "${LLM_MODEL:-}" | tr -d '[:space:]')" ]    && log "AI lane: model override set"
 [ -n "${B8E_TOKEN:-}" ]   && log "phone-home: b8e_ token present" || log "phone-home: no token — local-only"
 
 # ---- Opt-in blocking gate (#2134), DEFAULT OFF -----------------------------
