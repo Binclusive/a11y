@@ -159,3 +159,18 @@ clone depth, and turns an exit code into a build result.
 | Read commit SHA / branch / PR number / base branch | `.patterns/ci-runners/ci-context.md` |
 | Get enough clone history for a `git diff base...head` | `.patterns/ci-runners/checkout-depth.md` |
 | Make findings fail the build (or only warn) | `.patterns/ci-runners/exit-codes.md` |
+
+### GitHub Actions — authoring a native action (metadata, docker, SARIF)
+
+Before authoring or editing an `action.yml`, wiring how the action is invoked via
+`uses:`, releasing it for consumers, or uploading SARIF to code scanning, read
+`.patterns/github-actions/index.md`. These are platform canon derived from
+GitHub's own Actions docs — they teach GitHub Actions itself, not any one action.
+
+| Task | Read |
+|------|------|
+| Understand where `uses:` finds an action (root vs subdir vs local vs docker) | `.patterns/github-actions/uses-resolution.md` |
+| Write/edit an `action.yml` (schema + the three action types) | `.patterns/github-actions/action-metadata.md` |
+| Author a Docker container action (image, args, `INPUT_*`, Dockerfile rules) | `.patterns/github-actions/docker-actions.md` |
+| Release an action so consumers pin `@v1` / `@<sha>`; publish to Marketplace | `.patterns/github-actions/publishing-and-pinning.md` |
+| Upload SARIF to code scanning (permissions + checkout) | `.patterns/github-actions/sarif-upload.md` |
