@@ -54,8 +54,14 @@ jobs:
       fail-fast: false
       matrix:
         variant:
-          - { name: static, dockerfile: Dockerfile, suffix: "" }
-          - { name: browser, dockerfile: Dockerfile.browser, suffix: "-browser" }
+          # `platforms` is single-sourced per variant here — the build step reads
+          # matrix.variant.platforms — so the static image ships multi-arch
+          # (amd64+arm64) for arm64 CI runners + Apple-Silicon dev (#196), while
+          # the browser image stays amd64-only until its Chromium/Playwright arm64
+          # path is validated.
+          - { name: static, dockerfile: Dockerfile, suffix: "", platforms: "linux/amd64,linux/arm64" }
+          # arm64 pending chromium/playwright arm64 validation — tracked in #196; don't red the release on an unproven browser-arm64 build
+          - { name: browser, dockerfile: Dockerfile.browser, suffix: "-browser", platforms: "linux/amd64" }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -103,6 +109,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.variant.dockerfile }}
+          platforms: ${{ matrix.variant.platforms }}
           push: true
           tags: |
             ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}${{ matrix.variant.suffix }}
