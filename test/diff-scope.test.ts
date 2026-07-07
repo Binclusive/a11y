@@ -63,6 +63,37 @@ describe("scopeChangedTsx — BASE..HEAD git diff", () => {
   it("returns [] for a non-git workspace even with SHAs set", () => {
     expect(scopeChangedTsx({ baseSha: "x", headSha: "y", workspace: tmpdir() })).toEqual([]);
   });
+
+  /**
+   * Shallow-checkout regression (#198): when the merge-base commit is absent (the
+   * defining trait of a shallow clone whose base was self-fetched at depth 1), the
+   * three-dot `base...head` range fails "no merge base". The scoper MUST degrade to
+   * the two-dot `base..head` tree comparison and still report the changed .tsx —
+   * never swallow the error into an empty (silently-green) scope. Two disconnected
+   * root commits (no common ancestor) reproduce the missing-merge-base condition.
+   */
+  it("falls back to two-dot when there is no merge base (shallow clone) and still finds the .tsx", () => {
+    git("checkout", "-q", "--orphan", "baseline");
+    writeFileSync(join(repo, "Widget.tsx"), "export const W = 1;\n");
+    git("add", ".");
+    git("commit", "-q", "-m", "orphan base");
+    const base = git("rev-parse", "HEAD");
+
+    git("checkout", "-q", "--orphan", "topic");
+    // A fresh orphan tree with a DIFFERENT .tsx content — no shared history, so
+    // `base...head` has no merge base, exactly like a shallow-fetched base.
+    writeFileSync(join(repo, "Widget.tsx"), "export const W = 2;\n");
+    git("add", ".");
+    git("commit", "-q", "-m", "orphan head");
+    const head = git("rev-parse", "HEAD");
+
+    // Sanity: three-dot really is broken here (the condition we degrade from).
+    expect(() =>
+      execFileSync("git", ["-C", repo, "diff", "--name-only", `${base}...${head}`], { stdio: "ignore" }),
+    ).toThrow();
+
+    expect(scopeChangedTsx({ baseSha: base, headSha: head, workspace: repo })).toEqual(["Widget.tsx"]);
+  });
 });
 
 /**
