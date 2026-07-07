@@ -39,11 +39,12 @@ those from the platform's own variables:
 
 ## How to adapt
 
-1. **Bump the image tag.** Every config pins `ghcr.io/binclusive/a11y:0.1.1`.
+1. **Bump the image tag.** Every config pins `ghcr.io/binclusive/a11y:<version>`.
    Change the tag to upgrade. To scan a **live URL** instead of source, set
    `INPUT_SCAN_URL` and switch to the browser variant
-   `ghcr.io/binclusive/a11y:0.1.1-browser` (it ships the Chromium the static
-   image strips).
+   `ghcr.io/binclusive/a11y:browser-<version>` — the canonical prefix form; the
+   legacy `ghcr.io/binclusive/a11y:<version>-browser` (e.g. `:0.1.1-browser`) is
+   still published for back-compat. It ships the Chromium the static image strips.
 2. **Set the default branch.** Configs assume `main` (the `A11Y_DEFAULT_BRANCH`
    var) for non-PR builds and for CircleCI's derived base — change it if yours
    differs.

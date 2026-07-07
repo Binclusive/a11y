@@ -3,9 +3,9 @@
 // Runs the published Binclusive engine image over the .tsx files changed in each
 // PR (multibranch), falling back to a diff vs the default branch.
 //
-// Image: ghcr.io/binclusive/a11y:0.1.1  (static / no-browser variant).
+// Image: ghcr.io/binclusive/a11y:<version>  (static / no-browser variant).
 //   Bump the tag to upgrade. For a live-URL scan (set INPUT_SCAN_URL) swap to the
-//   browser variant ghcr.io/binclusive/a11y:0.1.1-browser.
+//   browser variant ghcr.io/binclusive/a11y:browser-<version> (legacy :<version>-browser still published).
 //
 // Canon: .patterns/ci-runners/{run-docker-image,ci-context,checkout-depth,secrets-and-env,exit-codes}.md
 
@@ -14,7 +14,7 @@ pipeline {
   // container on the executing node, with the Jenkins workspace mounted.
   agent {
     docker {
-      image 'ghcr.io/binclusive/a11y:0.1.1'
+      image 'ghcr.io/binclusive/a11y:0.1.2' // x-release-please-version
       // Run as root so git trusts the mounted workspace (the entrypoint sets
       // safe.directory on it); the Docker container's .git is owned by the node.
       args '-u root:root'

@@ -27,11 +27,15 @@ inputs:
 runs:
   using: "docker"
   # Pinned to the pre-published browser image (release-image.yml's `browser` matrix
-  # row pushes :<version>-browser on every version bump), NOT a local build — same
-  # fast-pull rationale as action.yml (#2133). The VERSION portion tracks
-  # package.json in lockstep (the action-pin drift gate enforces it, tolerating the
-  # `-browser` suffix); a consumer at ref v<version> resolves this exact digest.
-  image: "docker://ghcr.io/binclusive/a11y:0.1.2-browser"
+  # row), NOT a local build — same fast-pull rationale as action.yml (#2133). Uses
+  # the CANONICAL variant-PREFIX tag `:browser-<version>`: the version trails the
+  # variant so release-please's generic updater (the `x-release-please-version`
+  # annotation below) repins it in lockstep with package.json — a `:<version>-browser`
+  # suffix would be misread as a semver pre-release and dropped on bump. The legacy
+  # `:<version>-browser` alias is still published (back-compat), so older refs keep
+  # resolving. The action-pin drift gate enforces the exact form; a consumer at ref
+  # v<version> resolves this exact digest.
+  image: "docker://ghcr.io/binclusive/a11y:browser-0.1.2" # x-release-please-version
   # A Docker action auto-injects each input as INPUT_<NAME> — the entrypoint reads
   # INPUT_SCAN_URL to branch into `check-url`. The token is the one value the runner
   # does not pass by default, so map it explicitly like the static action.

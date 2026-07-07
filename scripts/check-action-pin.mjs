@@ -1,15 +1,16 @@
 // Drift gate for the action manifests' image pins (issue #2109).
 //
-// Each action*.yml pins an EXACT image tag — docker://ghcr.io/binclusive/a11y:<V>
-// (or :<V>-<variant>, e.g. action-url/action.yml's :<V>-browser) — for reproducibility:
-// a consumer resolving the Action at ref v<V> gets that exact digest. But the
-// version of record is package.json. Nothing structurally forces them to move
-// together, so a bump to 0.1.1 that publishes the new image while a manifest
-// still serves 0.1.0 would silently ship a stale image. This gate makes that
-// drift fail CI: bumping package.json REQUIRES a matching edit to every action
-// manifest. It covers the root action.yml AND any subdirectory action.yml
-// (e.g. action-url/action.yml, pinned :<V>-browser) — the subdir form is how a
-// second action is published (uses: owner/repo/<dir>@ref → <dir>/action.yml; see
+// Each action*.yml pins an EXACT image tag for reproducibility — the root
+// action.yml pins the static image :<version>, and a variant manifest pins the
+// CANONICAL prefix form :<variant>-<version> (action-url/action.yml → :browser-<V>).
+// The version TRAILS the variant so release-please's generic updater can repin it
+// in lockstep (release-please-config.json), which is what removes the manual bump.
+// The version of record is package.json; nothing else forces the pins to move with
+// it, so this gate fails CI on drift and now asserts the FULL expected tag (not just
+// the version portion — the old suffix-strip let a static-image pin slip onto the
+// browser manifest and pass). It covers the root action.yml AND any subdirectory
+// action.yml — the subdir form is how a second action is published (uses:
+// owner/repo/<dir>@ref → <dir>/action.yml; see
 // .patterns/github-actions/uses-resolution.md).
 // Runnable locally (`pnpm check:action-pin`) and in CI.
 import { readFileSync, readdirSync } from "node:fs";
@@ -20,6 +21,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
 
 const pkgVersion = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")).version;
+
+// Canonical tag per manifest: :<prefix><version>. The root action.yml is the static
+// image (no prefix); action-url/action.yml is the browser variant (:browser-<V>).
+// The version TRAILS the variant so release-please repins it, and so this gate can
+// assert the FULL expected tag. A new variant manifest registers its prefix here —
+// an unregistered one defaults to "" and fails until added (intended fail-loud).
+const expectedPrefix = (file) => (file === "action-url/action.yml" ? "browser-" : "");
 
 // Every action manifest: the root action.yml plus each subdirectory's action.yml
 // (action-url/action.yml). A GitHub action manifest is ALWAYS named action.yml /
@@ -50,15 +58,15 @@ for (const file of manifests) {
     errors.push(`${file}: no \`docker://ghcr.io/binclusive/a11y:<version>\` pin found.`);
     continue;
   }
-  // Strip an optional trailing "-<variant>" (e.g. "-browser") so both :0.1.0 and
-  // :0.1.0-browser validate against package.json 0.1.0 — the VERSION portion is
-  // what must match; the variant suffix is free.
+  // EXACT match against the canonical form :<prefix><version> — no stripping. The
+  // previous suffix-strip let a variant manifest pinning the bare :<version> (the
+  // static image) pass, since only the version portion was compared; asserting the
+  // full tag closes that hole.
   const tag = m[1];
-  const version = tag.replace(/-[a-z0-9]+$/, "");
-  if (version !== pkgVersion) {
+  const expected = `${expectedPrefix(file)}${pkgVersion}`;
+  if (tag !== expected) {
     errors.push(
-      `${file}: DRIFT — pins a11y:${tag} (version ${version}) but package.json is ${pkgVersion}. ` +
-        `Re-pin to :${pkgVersion}${tag.length > version.length ? tag.slice(version.length) : ""}.`,
+      `${file}: DRIFT — pins a11y:${tag} but must pin a11y:${expected} (package.json is ${pkgVersion}).`,
     );
   }
 }
