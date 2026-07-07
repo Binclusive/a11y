@@ -7,6 +7,8 @@ A local accessibility checker for React/TSX code, grounded in a real-world audit
 This is a private review build. Clone it, point it at any React codebase (yours or ours), and see what it finds — no setup, no explanation needed.
 
 > **New here? Start with the [Getting Started](docs/GETTING-STARTED.md) walkthrough.** Zero to your first fix — install, `init`, wire your editor, read a finding, clear it, gate CI.
+>
+> **Just want it on your PRs?** The [CI Quickstart](docs/QUICKSTART-CI.md) is the 5-minute path — copy [`examples/github-actions/a11y.yml`](examples/github-actions/a11y.yml), open a PR, read the findings. No account, no secret.
 
 ---
 
@@ -136,7 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: a11y
-        uses: Binclusive/a11y@main
+        uses: Binclusive/a11y@v0.1.1
       - if: always()  # advisory gate exits 0; upload regardless of findings
         uses: github/codeql-action/upload-sarif@v3
         with:
@@ -148,11 +150,11 @@ provenance (`deterministic` vs `agent`) in the SARIF property bag. The SARIF
 file exists only to render on **your** GitHub — it carries file/line for local
 annotation and is never sent to the Binclusive dashboard.
 
-> **Pin for supply-chain safety.** The examples use `@main` for readability, but
-> production workflows should pin the Action to a commit SHA — `uses:
-> Binclusive/a11y@<sha>  # v0.1.0` — rather than a floating tag or
-> branch, so a compromised upstream tag can't silently change what runs in your
-> CI. Dependabot (`github-actions` ecosystem) will bump the pin for you.
+> **Pin for supply-chain safety.** The examples pin to the released tag
+> `@v0.1.1`. For production, pin to a commit SHA — `uses:
+> Binclusive/a11y@<sha>  # v0.1.1` — rather than a floating tag or branch, so a
+> moved tag can't silently change what runs in your CI. Dependabot
+> (`github-actions` ecosystem) will bump the pin for you.
 
 ### Optional — opt into a blocking check (default off)
 
@@ -169,7 +171,7 @@ way.
 
 ```yaml
       - id: a11y
-        uses: Binclusive/a11y@main
+        uses: Binclusive/a11y@v0.1.1
         with:
           fail-on: critical    # optional — block only on critical findings
           # max-violations: 0  # optional — block on any finding at all
@@ -194,7 +196,7 @@ means "lane off", never an error; the scan still exits 0.
 
 ```yaml
       - id: a11y
-        uses: Binclusive/a11y@main
+        uses: Binclusive/a11y@v0.1.1
         with:
           llm-api-key:  ${{ secrets.LLM_API_KEY }}  # optional — your BYOK model key
           llm-model:    ""                          # optional — override the model
@@ -224,7 +226,7 @@ does not, and nothing new crosses the wire.
 
 ```yaml
       - id: a11y
-        uses: Binclusive/a11y@main
+        uses: Binclusive/a11y@v0.1.1
         with:
           binclusive-app-id:          ${{ vars.BINCLUSIVE_APP_ID }}
           binclusive-app-private-key: ${{ secrets.BINCLUSIVE_APP_PRIVATE_KEY }}
