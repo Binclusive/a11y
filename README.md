@@ -267,6 +267,7 @@ native platform adapters build on, are in **[`docs/CI.md`](docs/CI.md)**.
 |---|---|
 | **Adopt it with your own design system** | **`WALKTHROUGH.md`** |
 | **Run it on any CI/CD (CircleCI / Jenkins / Drone / generic)** | **`docs/CI.md`** |
+| **Ready-made configs for GitLab / CircleCI / Buildkite / Jenkins / Bitbucket** | **[`examples/ci/`](examples/ci/)** |
 | **Audit a live URL or HTML page (non-React)** | **`docs/AUDIT-URL.md`** |
 | The pitch + the moat, with numbers | `docs/decks/numbers.html` |
 | Real findings on real OSS projects | `docs/decks/showcase.html` |

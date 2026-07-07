@@ -1,0 +1,50 @@
+# a11y-checker on Buildkite — ready-made config.
+#
+# Runs the published Binclusive engine image (via the docker plugin) over the
+# .tsx files changed in each PR, falling back to a diff vs the default branch.
+#
+# Image: ghcr.io/binclusive/a11y:0.1.1  (static / no-browser variant).
+#   Bump the tag to upgrade. For a live-URL scan (set INPUT_SCAN_URL) swap to the
+#   browser variant ghcr.io/binclusive/a11y:0.1.1-browser.
+#
+# Canon: .patterns/ci-runners/{run-docker-image,ci-context,checkout-depth,secrets-and-env,exit-codes}.md
+
+steps:
+  - label: ":axe: a11y-checker"
+    env:
+      A11Y_DEFAULT_BRANCH: "main"
+      # checkout-depth.md: Buildkite has NO fixed shallow default — it depends on
+      # the agent's clone flags. Set them explicitly so the base ref / merge-base
+      # is present. `-v` for verbose; add `--depth=NN` only if you deliberately
+      # want shallow (then the base must be within NN commits).
+      BUILDKITE_GIT_CLONE_FLAGS: "-v"
+    # exit-codes.md: a non-zero container exit fails the step — how the opt-in
+    # gate blocks. Default is advisory (exit 0). Soft-fail escape: uncomment to
+    # pass the build (marked soft-failed) on any non-zero.
+    # soft_fail: true
+    command: |
+      # ci-context.md: base = BUILDKITE_PULL_REQUEST_BASE_BRANCH on a PR build,
+      # else the default branch; head = BUILDKITE_COMMIT.
+      BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-$A11Y_DEFAULT_BRANCH}"
+      # checkout-depth.md: fetch the base ref (unshallow first if the agent cloned
+      # shallow) so the diff can resolve.
+      git fetch --no-tags --unshallow origin "$BASE_BRANCH" 2>/dev/null || git fetch --no-tags origin "$BASE_BRANCH"
+      export GITHUB_WORKSPACE="$(pwd)"
+      export BASE_SHA="origin/$BASE_BRANCH"
+      export HEAD_SHA="$BUILDKITE_COMMIT"
+      # Opt-in blocking gate (default OFF = advisory). Uncomment ONE:
+      # export FAIL_ON=serious        # fail when any finding is >= this impact
+      # export MAX_VIOLATIONS=0       # fail when total finding count exceeds N
+      /engine/entrypoint.sh
+    plugins:
+      # run-docker-image.md: Buildkite runs the container via the docker plugin on
+      # the agent host; the checkout dir is mounted as the workdir.
+      - docker#v5.11.0:
+          image: "ghcr.io/binclusive/a11y:0.1.1"
+          # secrets-and-env.md: Buildkite is the outlier — NO managed secret store.
+          # The agent injects B8E_TOKEN via an environment / pre-command hook (or
+          # Vault/S3); propagate it into the container to enable optional phone-home.
+          # Omit for a fully-local scan.
+          propagate-environment: true
+          environment:
+            - "B8E_TOKEN"
