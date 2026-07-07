@@ -29,7 +29,7 @@ runs:
   # fast-pull rationale as action.yml (#2133). The VERSION portion tracks
   # package.json in lockstep (the action-pin drift gate enforces it, tolerating the
   # `-browser` suffix); a consumer at ref v<version> resolves this exact digest.
-  image: "docker://ghcr.io/binclusive/a11y:0.1.0-browser"
+  image: "docker://ghcr.io/binclusive/a11y:0.1.1-browser"
   # A Docker action auto-injects each input as INPUT_<NAME> — the entrypoint reads
   # INPUT_SCAN_URL to branch into `check-url`. The token is the one value the runner
   # does not pass by default, so map it explicitly like the static action.
