@@ -115,7 +115,16 @@ function makeClient(target: GithubPostTarget, token: string, log: Logger): PrCom
             typeof (c as { id?: unknown }).id === "number" &&
             typeof (c as { body?: unknown }).body === "string"
           ) {
-            out.push({ id: (c as { id: number }).id, body: (c as { body: string }).body });
+            const user = (c as { user?: unknown }).user;
+            const author =
+              user && typeof user === "object" && typeof (user as { login?: unknown }).login === "string"
+                ? (user as { login: string }).login
+                : undefined;
+            out.push({
+              id: (c as { id: number }).id,
+              body: (c as { body: string }).body,
+              ...(author !== undefined ? { author } : {}),
+            });
           }
         }
         if (batch.length < 100) break;
@@ -170,8 +179,13 @@ export const githubReporter: FindingsReporter<GithubPostTarget> = {
     }
     log(`posting inline comments as ${identity}`);
     const client = makeClient(target, token, log);
+    // The author guard needs the login our comments carry. GITHUB_TOKEN posts as
+    // `github-actions[bot]` (statically known); the branded App's bot login is not
+    // known here, so leave `self` undefined for it — the guard degrades to
+    // marker-only rather than risk skipping our own App-authored comments.
+    const self = identity === "github-actions" ? "github-actions[bot]" : undefined;
     // Best-effort by contract: swallows any throw so the entrypoint always exits 0.
-    await syncCommentsBestEffort(findings, client, log);
+    await syncCommentsBestEffort(findings, client, log, self);
   },
 };
 

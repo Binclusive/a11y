@@ -5,7 +5,9 @@
 # in the final layer. See issue #2133 (slim the CI image for faster pulls).
 
 # ---- deps: resolve the production dependency closure the static path needs ----
-FROM node:20-alpine AS deps
+# Pin the patch (not the floating node:20-alpine tag) to the engines.node floor
+# (>=20.18.1) so the image can never drift below what package.json requires.
+FROM node:20.18.1-alpine AS deps
 
 # pnpm's `onlyBuiltDependencies` (esbuild only) already blocks playwright's
 # browser download; belt-and-suspenders so no Chromium is ever fetched.
@@ -42,7 +44,7 @@ RUN rm -rf \
  && find node_modules -type f \( -name '*.map' -o -name '*.md' -o -name '*.markdown' \) -delete 2>/dev/null || true
 
 # ---- runtime: minimal final image, no build tooling ----
-FROM node:20-alpine
+FROM node:20.18.1-alpine
 
 # git         — the entrypoint diffs BASE..HEAD to find changed .tsx files.
 # ca-certs    — HTTPS to the GitHub REST API when posting review comments.

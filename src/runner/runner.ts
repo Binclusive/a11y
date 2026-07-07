@@ -175,6 +175,9 @@ export async function runAgentLane(input: RunInput): Promise<RunOutcome> {
   // (cross-dedup by file:line:sc) or that duplicates another discovery (self-dedup
   // by file:line:patternId). Reuse the engine's `dedupeRecall` verbatim — one dedup
   // discipline, not a second one. Survivors keep identity, so re-narrow to agent.
+  // Note (#2180): self-dedup keys on patternId, so two byte-identical PATTERNLESS
+  // discoveries at one file:line do NOT collapse here — each survives as its own
+  // agent finding (a patternless candidate has no identity to safely key on).
   const survivors = new Set(dedupeRecall(discoveries, input.findings));
   const agentFindings = discoveries.filter((d) => survivors.has(d));
 

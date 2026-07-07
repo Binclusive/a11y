@@ -34,10 +34,20 @@ export { type Finding, type Impact, parseFindings };
 export interface ReviewComment {
   readonly id: number;
   readonly body: string;
+  /**
+   * The comment author's login (GitHub `user.login`), when the platform supplies
+   * it. Feeds the {@link reconcile} author guard: our marker is public text anyone
+   * could paste, so a marker on a comment authored by someone other than us is not
+   * actually ours. Absent ⇒ the guard falls back to marker-only matching.
+   */
+  readonly author?: string;
 }
 
 const MARKER_TAG = "binclusive-a11y-agent";
-const MARKER_RE = /<!--\s*binclusive-a11y-agent:(.*?)\s*-->/;
+// Composed from MARKER_TAG so the tag lives in exactly one place — the marker we
+// WRITE (markerFor) and the marker we READ (keyOf) can never drift apart. Safe to
+// interpolate raw: MARKER_TAG is a fixed [a-z-] literal with no regex metachars.
+const MARKER_RE = new RegExp(`<!--\\s*${MARKER_TAG}:(.*?)\\s*-->`);
 
 /**
  * A live rendered element locator. Mirrors `emit-contract.ts`'s `hasSelector`:
@@ -99,7 +109,11 @@ export function markerFor(f: Finding): string {
  */
 export function keyOf(body: string): string | null {
   const m = MARKER_RE.exec(body);
-  return m && m[1] !== undefined ? m[1] : null;
+  // An empty/whitespace-only key (`<!-- ...agent: -->`) identifies no finding, so
+  // it can't be reconciled against one — treat it as not-ours rather than let a
+  // degenerate "" key collide in the reconcile maps.
+  if (!m || m[1] === undefined || m[1] === "") return null;
+  return m[1];
 }
 
 /** Render the full comment body for `f`, marker appended so it round-trips. */
@@ -130,10 +144,17 @@ export interface ReconcilePlan {
  * alone. A pre-dedup PR may hold several comments for one key (the old spamming
  * behavior); the canonical one (first seen) is kept/updated and the rest are
  * folded into `remove`, so the very first reconciling run also cleans up.
+ *
+ * `self` is the login we post under: when given, a marker comment authored by a
+ * DIFFERENT login is not treated as ours (someone pasted our marker) — we never
+ * update or delete it. Omitted, or a comment with no known author, keeps the
+ * marker-only behavior, so passing an unknown `self` can never make us skip our
+ * own comments and re-post duplicates.
  */
 export function reconcile(
   findings: readonly Finding[],
   existing: readonly ReviewComment[],
+  self?: string,
 ): ReconcilePlan {
   // Desired findings keyed by identity; first occurrence wins on collision.
   const desired = new Map<string, Finding>();
@@ -148,7 +169,9 @@ export function reconcile(
   const remove: number[] = [];
   for (const c of existing) {
     const k = keyOf(c.body);
-    if (k === null) continue; // not ours — never touch human comments
+    if (k === null) continue; // no marker — never touch human comments
+    // Author guard: a marker on a comment someone else authored is not ours.
+    if (self !== undefined && c.author !== undefined && c.author !== self) continue;
     if (ours.has(k)) remove.push(c.id);
     else ours.set(k, c);
   }
@@ -205,9 +228,10 @@ export async function syncComments(
   findings: readonly Finding[],
   client: PrCommentClient,
   log: (msg: string) => void = () => {},
+  self?: string,
 ): Promise<ReconcilePlan> {
   const existing = await client.list();
-  const plan = reconcile(findings, existing);
+  const plan = reconcile(findings, existing, self);
 
   for (const f of plan.create) {
     await client.create(f);
@@ -240,9 +264,10 @@ export async function syncCommentsBestEffort(
   findings: readonly Finding[],
   client: PrCommentClient,
   log: (msg: string) => void = () => {},
+  self?: string,
 ): Promise<ReconcilePlan | null> {
   try {
-    return await syncComments(findings, client, log);
+    return await syncComments(findings, client, log, self);
   } catch (e) {
     log(`sync aborted (best-effort, no-op): ${e instanceof Error ? e.message : String(e)}`);
     return null;
