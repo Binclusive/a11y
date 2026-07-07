@@ -63,7 +63,12 @@ export function parseFindings(raw: unknown): Finding[] {
     if (typeof item !== "object" || item === null) continue;
     const f = item as Record<string, unknown>;
     if (typeof f.ruleId !== "string" || typeof f.file !== "string") continue;
-    if (typeof f.line !== "number") continue;
+    // A line must be a real number: NaN/Infinity would anchor a review comment on a
+    // nonexistent line, and `renderBody`/the marker would carry the junk value.
+    if (typeof f.line !== "number" || !Number.isFinite(f.line)) continue;
+    // Drop rather than synthesize an empty message: a comment with no body text is
+    // noise on the PR, and the boundary shouldn't invent content the report lacks.
+    if (typeof f.message !== "string" || f.message.trim() === "") continue;
     const wcag = Array.isArray(f.wcag) ? f.wcag.filter((w): w is string => typeof w === "string") : undefined;
     // Keep the selector across the boundary — it is what distinguishes co-located
     // same-rule findings; dropping it here reintroduces the collision.
@@ -76,7 +81,7 @@ export function parseFindings(raw: unknown): Finding[] {
       ruleId: f.ruleId,
       file: f.file,
       line: f.line,
-      message: typeof f.message === "string" ? f.message : "",
+      message: f.message,
       ...(wcag ? { wcag } : {}),
       ...(selector !== undefined ? { selector } : {}),
       ...(impact !== undefined ? { impact } : {}),

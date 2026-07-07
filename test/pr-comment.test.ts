@@ -50,6 +50,13 @@ describe("marker identity", () => {
     expect(keyOf("Looks good to me, ship it!")).toBeNull();
     expect(keyOf("**a11y** but hand-written, no marker")).toBeNull();
   });
+
+  it("returns null for a marker with an empty/whitespace key — a keyless marker identifies no finding", () => {
+    expect(keyOf("<!-- binclusive-a11y-agent: -->")).toBeNull();
+    expect(keyOf("<!-- binclusive-a11y-agent:   -->")).toBeNull();
+    // a non-empty key still parses, so the guard doesn't over-reach
+    expect(keyOf("<!-- binclusive-a11y-agent:img-alt:a.tsx:1 -->")).toBe("img-alt:a.tsx:1");
+  });
 });
 
 describe("marker identity — selector disambiguates co-located same-rule findings (#2131 review grill #1)", () => {
@@ -154,6 +161,38 @@ describe("reconcile — create vs update vs delete", () => {
     expect(plan.unchanged).toEqual([1]);
     expect(plan.create).toEqual([fresh]);
     expect(plan.remove).toEqual([2]);
+  });
+});
+
+describe("reconcile — author guard (a pasted marker isn't ours)", () => {
+  it("ignores a marker-carrying comment authored by someone else when `self` is given", () => {
+    const f = finding();
+    // a human (or foreign bot) pasted our marker into their own comment
+    const impostor: ReviewComment = { ...ourComment(1, f), author: "some-human" };
+    const plan = reconcile([], [impostor], "github-actions[bot]");
+    // it would be removed as a fixed finding if treated as ours — the guard spares it
+    expect(plan.remove).toHaveLength(0);
+    expect(plan.create).toHaveLength(0);
+    expect(plan.update).toHaveLength(0);
+  });
+
+  it("still reconciles our own marker comment when the author matches `self`", () => {
+    const f = finding();
+    const mine: ReviewComment = { ...ourComment(1, f), author: "github-actions[bot]" };
+    // finding fixed this run ⇒ our own comment is removed
+    expect(reconcile([], [mine], "github-actions[bot]").remove).toEqual([1]);
+  });
+
+  it("falls back to marker-only when `self` is omitted (backward compatible)", () => {
+    const f = finding();
+    const withAuthor: ReviewComment = { ...ourComment(1, f), author: "anyone" };
+    expect(reconcile([], [withAuthor]).remove).toEqual([1]);
+  });
+
+  it("falls back to marker-only for a comment with no known author, even when `self` is given", () => {
+    const f = finding();
+    // author absent (platform didn't supply it) ⇒ can't guard ⇒ marker wins
+    expect(reconcile([], [ourComment(1, f)], "github-actions[bot]").remove).toEqual([1]);
   });
 });
 
@@ -330,5 +369,30 @@ describe("parseFindings — boundary parse of the report JSON", () => {
     expect(parseFindings(null)).toEqual([]);
     expect(parseFindings({})).toEqual([]);
     expect(parseFindings({ findings: "nope" })).toEqual([]);
+  });
+
+  it("drops a finding whose line is NaN or Infinity — no comment anchored on a nonexistent line", () => {
+    const parsed = parseFindings({
+      findings: [
+        { ruleId: "r", file: "a.tsx", line: Number.NaN, message: "m" },
+        { ruleId: "r", file: "b.tsx", line: Number.POSITIVE_INFINITY, message: "m" },
+        { ruleId: "r", file: "c.tsx", line: 5, message: "m" }, // the only survivor
+      ],
+    });
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.file).toBe("c.tsx");
+  });
+
+  it("drops a finding with an empty/whitespace or missing message rather than synthesizing one", () => {
+    const parsed = parseFindings({
+      findings: [
+        { ruleId: "r", file: "a.tsx", line: 1, message: "" },
+        { ruleId: "r", file: "b.tsx", line: 2, message: "   " },
+        { ruleId: "r", file: "c.tsx", line: 3 }, // message missing
+        { ruleId: "r", file: "d.tsx", line: 4, message: "real" }, // the only survivor
+      ],
+    });
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.file).toBe("d.tsx");
   });
 });
