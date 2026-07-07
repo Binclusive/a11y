@@ -6,6 +6,7 @@
     ".": {
       "extra-files": [
         { "type": "generic", "path": "action.yml" },
+        { "type": "generic", "path": "action-url/action.yml" },
         { "type": "generic", "path": "README.md" }
       ]
     }
