@@ -5,7 +5,7 @@
 #
 # Image: ghcr.io/binclusive/a11y:0.1.1  (static / no-browser variant).
 #   Bump the tag to upgrade. For a live-URL scan (set INPUT_SCAN_URL) swap to the
-#   browser variant ghcr.io/binclusive/a11y:0.1.1-browser.
+#   browser variant ghcr.io/binclusive/a11y:browser-<version> (legacy :<version>-browser still published).
 #
 # Canon: .patterns/ci-runners/{run-docker-image,ci-context,checkout-depth,secrets-and-env,exit-codes}.md
 
