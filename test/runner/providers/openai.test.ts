@@ -43,6 +43,53 @@ describe("createOpenAIProvider — reply text is extracted from choices", () => 
   });
 });
 
+describe("createOpenAIProvider — the output-token field is picked by model family", () => {
+  /** A 200-returning fetch stub that records each request's raw JSON body. */
+  function capturingFetch(): { bodies: string[]; fetchImpl: typeof fetch } {
+    const bodies: string[] = [];
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      bodies.push(String(init?.body ?? ""));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } }),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+    return { bodies, fetchImpl };
+  }
+
+  async function fieldsSentFor(model: string): Promise<string[]> {
+    const { bodies, fetchImpl } = capturingFetch();
+    await createOpenAIProvider({ apiKey: "test", model, fetchImpl }).complete({ messages: [] });
+    return Object.keys(JSON.parse(bodies[0]));
+  }
+
+  it.each(["o1", "o1-mini", "o3-mini", "gpt-5", "gpt-5-mini", "GPT-5-nano"])(
+    "reasoning model %s → sends max_completion_tokens (not max_tokens)",
+    async (model) => {
+      const fields = await fieldsSentFor(model);
+      expect(fields).toContain("max_completion_tokens");
+      expect(fields).not.toContain("max_tokens");
+    },
+  );
+
+  it.each(["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"])(
+    "standard model %s → sends max_tokens (not max_completion_tokens)",
+    async (model) => {
+      const fields = await fieldsSentFor(model);
+      expect(fields).toContain("max_tokens");
+      expect(fields).not.toContain("max_completion_tokens");
+    },
+  );
+
+  it("the shipped default model uses max_tokens (a bare BYOK key still runs)", async () => {
+    const { bodies, fetchImpl } = capturingFetch();
+    // No `model` override → DEFAULT_OPENAI_MODEL, which must take the legacy field.
+    await createOpenAIProvider({ apiKey: "test", fetchImpl }).complete({ messages: [] });
+    expect(Object.keys(JSON.parse(bodies[0]))).toContain("max_tokens");
+  });
+});
+
 describe("createOpenAIProvider — malformed usage fails the ceiling closed", () => {
   it.each([
     { name: "NaN counts", usage: { prompt_tokens: Number.NaN, completion_tokens: Number.NaN } },

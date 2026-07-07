@@ -78,6 +78,20 @@ interface OpenAIResponseBody {
   readonly usage?: { readonly prompt_tokens?: number; readonly completion_tokens?: number };
 }
 
+/**
+ * The output-token request field for a given model id. OpenAI's reasoning-model
+ * families (`o1` / `o3` / `o4` … and `gpt-5`) REJECT the legacy `max_tokens`
+ * field with a 400 and require `max_completion_tokens`; the `gpt-4o` line and
+ * older still take `max_tokens`. Pick by id so a customer who points `LLM_MODEL`
+ * at a reasoning model gets a well-formed request instead of a soft-degrade on
+ * every pass. An unrecognized id falls through to `max_tokens` — the field the
+ * widest set of models (and the shipped default) accept, so an ambiguous id
+ * still runs (issue #2318).
+ */
+function outputTokenField(model: string): "max_tokens" | "max_completion_tokens" {
+  return /^(o[1-9]|gpt-5)/i.test(model) ? "max_completion_tokens" : "max_tokens";
+}
+
 /** Concatenate the message content of the returned choices into one string. */
 function textOf(body: OpenAIResponseBody): string {
   if (!Array.isArray(body.choices)) return "";
@@ -145,7 +159,9 @@ export function createOpenAIProvider(config: OpenAIProviderConfig): Provider {
           },
           body: JSON.stringify({
             model,
-            max_tokens: request.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+            // Reasoning models require `max_completion_tokens`; the gpt-4o line
+            // and older take `max_tokens`. Pick the field by id (outputTokenField).
+            [outputTokenField(model)]: request.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
             // OpenAI carries the system framing as a leading message, not a
             // top-level field (the one shape divergence from Anthropic).
             messages: [
