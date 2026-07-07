@@ -143,3 +143,19 @@ renderer.
 | Propose a fix (`fixes[]` → artifactChanges → replacements) | `.patterns/sarif/fixes.md` |
 | Point a finding at a second spot (`relatedLocations[]`, embedded links) | `.patterns/sarif/related-locations.md` |
 | Decide auto-fixable vs advisory / what Copilot Autofix reads | `.patterns/sarif/autofix-consumption.md` |
+
+### CI runners — running a published image as a build step (any CI/CD)
+
+Before writing a runner config that pulls and runs a Docker image (GitLab CI,
+CircleCI, Buildkite primary; Jenkins, Bitbucket secondary), read
+`.patterns/ci-runners/index.md`. These are tool-agnostic — they teach how each
+CI system runs *any* image, injects a secret, exposes git/PR context, controls
+clone depth, and turns an exit code into a build result.
+
+| Task | Read |
+|------|------|
+| Run the tool image as a build step | `.patterns/ci-runners/run-docker-image.md` |
+| Inject a masked secret / API token | `.patterns/ci-runners/secrets-and-env.md` |
+| Read commit SHA / branch / PR number / base branch | `.patterns/ci-runners/ci-context.md` |
+| Get enough clone history for a `git diff base...head` | `.patterns/ci-runners/checkout-depth.md` |
+| Make findings fail the build (or only warn) | `.patterns/ci-runners/exit-codes.md` |
