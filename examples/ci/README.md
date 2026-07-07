@@ -39,7 +39,7 @@ those from the platform's own variables:
 
 ## How to adapt
 
-1. **Bump the image tag.** Every config pins `ghcr.io/binclusive/a11y:0.1.1`.
+1. **Bump the image tag.** Every config pins `ghcr.io/binclusive/a11y:<version>`.
    Change the tag to upgrade. To scan a **live URL** instead of source, set
    `INPUT_SCAN_URL` and switch to the browser variant
    `ghcr.io/binclusive/a11y:browser-<version>` — the canonical prefix form; the

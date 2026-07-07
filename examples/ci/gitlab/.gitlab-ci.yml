@@ -3,7 +3,7 @@
 # Runs the published Binclusive engine image over the .tsx files changed in each
 # merge request (and, on plain branch pipelines, vs the default branch).
 #
-# Image: ghcr.io/binclusive/a11y:0.1.1  (static / no-browser variant).
+# Image: ghcr.io/binclusive/a11y:<version>  (static / no-browser variant).
 #   Bump the tag to upgrade. For a live-URL scan (set INPUT_SCAN_URL) swap to the
 #   browser variant ghcr.io/binclusive/a11y:browser-<version> (legacy :<version>-browser still published) — it ships the Chromium
 #   the static image strips.
@@ -24,7 +24,7 @@ a11y:
   # `entrypoint: [""]` clears the image ENTRYPOINT so GitLab can run `script:`;
   # we then invoke the entrypoint ourselves once the diff env is set.
   image:
-    name: ghcr.io/binclusive/a11y:0.1.1
+    name: ghcr.io/binclusive/a11y:0.1.2 # x-release-please-version
     entrypoint: [""]
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'

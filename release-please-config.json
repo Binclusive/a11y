@@ -7,7 +7,15 @@
       "extra-files": [
         { "type": "generic", "path": "action.yml" },
         { "type": "generic", "path": "action-url/action.yml" },
-        { "type": "generic", "path": "README.md" }
+        { "type": "generic", "path": "README.md" },
+        { "type": "generic", "path": "docs/QUICKSTART-CI.md" },
+        { "type": "generic", "path": "examples/github-actions/a11y.yml" },
+        { "type": "generic", "path": "examples/github-actions/a11y-advanced.yml" },
+        { "type": "generic", "path": "examples/ci/gitlab/.gitlab-ci.yml" },
+        { "type": "generic", "path": "examples/ci/circleci/config.yml" },
+        { "type": "generic", "path": "examples/ci/bitbucket/bitbucket-pipelines.yml" },
+        { "type": "generic", "path": "examples/ci/jenkins/Jenkinsfile" },
+        { "type": "generic", "path": "examples/ci/buildkite/pipeline.yml" }
       ]
     }
   }

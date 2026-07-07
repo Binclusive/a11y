@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0
       - id: a11y
-        uses: Binclusive/a11y@v0.1.2
+        uses: Binclusive/a11y@v0.1.2 # x-release-please-version
       - if: always() # advisory gate exits 0; upload regardless of findings
         uses: github/codeql-action/upload-sarif@v3
         with:
