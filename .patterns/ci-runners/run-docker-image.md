@@ -124,6 +124,7 @@ pipelines:
 
 - A public registry image needs no auth block in any of these systems. A private image needs system-specific registry credentials (out of scope).
 - The image must contain a shell for the `script`/`run`/`sh` steps to execute inside it.
+- **A native `image:`/docker-executor keyword runs the job's own `script`/steps *inside* the container, which replaces the image's `ENTRYPOINT`.** The runner starts the container with your step commands, not the image's declared entrypoint. If the image relies on its `ENTRYPOINT` to orchestrate its work, that orchestration is bypassed — you must invoke the entrypoint (or the underlying tool) explicitly in the step. GitLab's `entrypoint: [""]` is the same effect made explicit: it blanks the entrypoint so only `script` runs.
 - GitLab needs `entrypoint: [""]` whenever the image sets an `ENTRYPOINT` that would otherwise consume the `script`.
 - Buildkite runs on the host by default — a container is opt-in per step via a plugin, unlike the others where the image is the environment.
 
@@ -132,6 +133,7 @@ pipelines:
 | Don't do this | Why it breaks |
 |---|---|
 | GitLab `image:` with an entrypoint image and no `entrypoint: [""]` | The declared ENTRYPOINT prepends to `script`; job hangs or runs the wrong process |
+| Running an entrypoint-orchestrated image via a native `image:`/docker executor and expecting its ENTRYPOINT to run | The runner replaces the ENTRYPOINT with the job's `script`/steps; the image's own orchestration never fires — call the entrypoint or the tool explicitly in the step |
 | CircleCI: expecting `run` to execute in the 2nd `docker:` image | Only the first image is primary; the rest are service containers |
 | Buildkite `command:` with no `docker` plugin, expecting the image | The command runs on the agent host, not in the container |
 | Buildkite plugin ref without a version (`docker:`) | Plugins resolve by ref; an unpinned/missing version fails resolution |
