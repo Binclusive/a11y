@@ -131,7 +131,7 @@ runs:
   # defeating the slim-image / fast-pull goal (#2133). This tag is the exact
   # package.json version and is bumped in lockstep with it, so the Action a
   # consumer resolves at ref `v<version>` always maps to that same image digest.
-  image: "docker://ghcr.io/binclusive/a11y:0.1.0"
+  image: "docker://ghcr.io/binclusive/a11y:0.1.1"
   # Only `inputs` is available in an action's metadata env — the `github`
   # context is not. GITHUB_REPOSITORY / GITHUB_API_URL / GITHUB_EVENT_PATH /
   # GITHUB_WORKSPACE are auto-injected into Docker actions; the entrypoint reads
