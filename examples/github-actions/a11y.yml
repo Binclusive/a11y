@@ -18,7 +18,10 @@ jobs:
   a11y:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 — the a11y diff scan needs base history; a shallow clone finds 0 changed files (a11y#198)
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - id: a11y
         uses: Binclusive/a11y@v0.1.1
       - if: always() # advisory gate exits 0; upload regardless of findings
