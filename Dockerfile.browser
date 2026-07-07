@@ -3,7 +3,7 @@
 # playwright/@axe-core to stay slim for the source-only `check`; this variant is
 # the opposite trade — it KEEPS the browser lane and ships a real Chromium so a
 # URL scan can actually run. Consumed only by the dedicated url-scan action
-# (action-url.yml, pinned to :<version>-browser). See issue #2336.
+# (action-url/action.yml, pinned to :<version>-browser). See issue #2336.
 
 # Base is Debian (node:20), NOT the static image's node:20-alpine: Playwright's
 # bundled Chromium is a glibc build and does not run on Alpine/musl, and

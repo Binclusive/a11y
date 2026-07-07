@@ -6,8 +6,10 @@ author: "Binclusive"
 # `runs.image` is fixed per manifest, so the browser lane cannot be a runtime flag
 # on the static action — it is a SEPARATE action pinned to the `-browser` image.
 # The static action stays lean and never pulls Chromium; a consumer opts into the
-# URL scan by referencing THIS action (`Binclusive/a11y/action-url.yml@v<version>`)
-# and passing `scan-url`.
+# URL scan by referencing THIS action (`Binclusive/a11y/action-url@v<version>`)
+# and passing `scan-url`. It lives in the `action-url/` subdirectory because
+# `uses: owner/repo/<dir>@ref` resolves `<dir>/action.yml`; a second action cannot
+# live under a custom root filename (see .patterns/github-actions/uses-resolution.md).
 
 inputs:
   scan-url:
