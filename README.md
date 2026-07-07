@@ -148,6 +148,12 @@ provenance (`deterministic` vs `agent`) in the SARIF property bag. The SARIF
 file exists only to render on **your** GitHub — it carries file/line for local
 annotation and is never sent to the Binclusive dashboard.
 
+> **Pin for supply-chain safety.** The examples use `@main` for readability, but
+> production workflows should pin the Action to a commit SHA — `uses:
+> Binclusive/a11y-checker-plugin@<sha>  # v0.1.0` — rather than a floating tag or
+> branch, so a compromised upstream tag can't silently change what runs in your
+> CI. Dependabot (`github-actions` ecosystem) will bump the pin for you.
+
 ### Optional — opt into a blocking check (default off)
 
 The check is **non-blocking by default**: it exits 0 on any severity or volume of

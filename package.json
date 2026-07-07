@@ -31,6 +31,7 @@
     "gen:baseline": "tsx ./src/baseline/gen-baseline.ts",
     "typecheck": "tsc --noEmit",
     "decisions:check": "tsx ./scripts/check-decisions.ts",
+    "check:action-pin": "node ./scripts/check-action-pin.mjs",
     "test": "vitest run",
     "//test:e2e": "Rendered-DOM e2e (real Chromium). Excluded from `test`. CI must run `npx playwright install chromium` first.",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
