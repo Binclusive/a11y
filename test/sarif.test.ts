@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enrich } from "../src/evidence";
+import { enrich, resolveDisplay } from "../src/evidence";
 import type { Finding } from "../src/core";
 import { formatSarif, impactToLevel } from "../src/sarif";
 import { lineContentHash, resolveLocations } from "../src/source-identity";
@@ -145,5 +145,111 @@ describe("partialFingerprints.primaryLocationLineHash (code-scanning alert track
     expect(sarif.version).toBe("2.1.0");
     expect(sarif.runs).toHaveLength(1);
     expect(sarif.runs[0].results[0].locations).toHaveLength(1);
+  });
+});
+
+/**
+ * Agent-DX enrichment (#2339). The renderer invests in the fields Copilot Autofix
+ * actually reads to GENERATE a fix — rule `help`/`fullDescription`, a specific
+ * `result.message`, and `relatedLocations` — and deliberately never emits
+ * `fixes[]`: Autofix ignores it, and a schema-valid fix requires fabricated
+ * `artifactChanges`, which would violate suggestions-not-patches. The fix prose is
+ * single-sourced through {@link resolveDisplay} (axe → the per-node message;
+ * source → the SC-keyed baseline fix), so text and SARIF can never disagree.
+ */
+describe("agent-DX: rule help / fullDescription — the Autofix lever (#2339)", () => {
+  it("carries the finding's fix prose in BOTH help and fullDescription (what Autofix reads)", () => {
+    const f = enrich(raw());
+    const fix = resolveDisplay(f).fix;
+    expect(fix).not.toBeNull(); // alt-text (SC 1.1.1) resolves to a baseline fix
+    const rule = JSON.parse(formatSarif([f], "r")).runs[0].tool.driver.rules[0];
+    expect(rule.help.text).toBe(fix);
+    expect(rule.fullDescription.text).toBe(fix);
+    // shortDescription stays the finding message — the enrichment is additive.
+    expect(rule.shortDescription.text).toBe(f.message);
+  });
+
+  it("draws an axe finding's rule help from its per-node message (resolveDisplay axe policy)", () => {
+    const f = enrich(raw({ provenance: "axe", file: "https://x.com", line: 0, message: "Contrast is too low", impact: "serious" }));
+    const rule = JSON.parse(formatSarif([f], "r")).runs[0].tool.driver.rules[0];
+    expect(rule.help.text).toBe("Contrast is too low");
+    expect(rule.fullDescription.text).toBe("Contrast is too low");
+  });
+
+  it('omits help/fullDescription when the finding resolves to no fix prose (never emits "")', () => {
+    // No WCAG SC and a non-catalog rule id → no baseline evidence → fix is null.
+    const f = enrich(raw({ ruleId: "jsx-a11y/no-such-rule", wcag: [] }));
+    expect(resolveDisplay(f).fix).toBeNull();
+    const rule = JSON.parse(formatSarif([f], "r")).runs[0].tool.driver.rules[0];
+    expect(rule.help).toBeUndefined();
+    expect(rule.fullDescription).toBeUndefined();
+  });
+});
+
+describe("agent-DX: result.message carries the rationale/suggestion (#2339)", () => {
+  it("uses the finding message verbatim when there is no agent enrichment", () => {
+    const result = JSON.parse(formatSarif([enrich(raw())], "r")).runs[0].results[0];
+    expect(result.message.text).toBe("img is missing an alt attribute");
+  });
+
+  it("folds an enriched deterministic finding's agentNote into the SARIF message", () => {
+    // A discovery already folds its rationale into `message`; an enriched
+    // deterministic finding carries the suggestion in `agentNote` — append it so
+    // the SARIF message carries the agent's reasoning either way.
+    const f = enrich(raw({ agentNote: "Use the product name as the alt text." }));
+    const result = JSON.parse(formatSarif([f], "r")).runs[0].results[0];
+    expect(result.message.text).toBe("img is missing an alt attribute Use the product name as the alt text.");
+  });
+});
+
+describe("agent-DX: relatedLocations for a distinct second node (#2339)", () => {
+  it("surfaces the rendered element as a related location when a SOURCE finding names one", () => {
+    // A corpus-agent discovery grounded in a source line (line > 0) that also
+    // names an element: the code line is the site, the element is context.
+    const f = enrich(raw({ provenance: "corpus-agent", file: "src/Nav.tsx", line: 5, selector: "nav > a.brand" }));
+    const result = JSON.parse(formatSarif([f], "r")).runs[0].results[0];
+    expect(result.relatedLocations).toHaveLength(1);
+    expect(result.relatedLocations[0].logicalLocations[0]).toEqual({ fullyQualifiedName: "nav > a.brand", kind: "element" });
+    expect(result.relatedLocations[0].message.text).toContain("nav > a.brand");
+    // Nothing links to it → no id (canon §3.28.2); it is context, so it carries
+    // no physicalLocation and never usurps the primary site (§3.27.22).
+    expect(result.relatedLocations[0].id).toBeUndefined();
+    expect(result.relatedLocations[0].physicalLocation).toBeUndefined();
+    // The primary stays the code region; the selector is NOT a primary logicalLocation.
+    expect(result.locations[0].physicalLocation.region.startLine).toBe(5);
+    expect(result.locations[0].logicalLocations).toBeUndefined();
+  });
+
+  it("is graceful-empty (omitted) for a source finding with no rendered node", () => {
+    const result = JSON.parse(formatSarif([enrich(raw())], "r")).runs[0].results[0];
+    expect(result.relatedLocations).toBeUndefined();
+  });
+
+  it("keeps an axe (page) finding's selector on the PRIMARY node, never in relatedLocations", () => {
+    const f = enrich(raw({ provenance: "axe", file: "https://x.com", line: 0, selector: "button.cta", impact: "serious" }));
+    const result = JSON.parse(formatSarif([f], "r")).runs[0].results[0];
+    expect(result.relatedLocations).toBeUndefined();
+    expect(result.locations[0].logicalLocations[0]).toEqual({ fullyQualifiedName: "button.cta", kind: "element" });
+  });
+});
+
+describe("agent-DX: never emits fixes[] (#2339 corrected scope)", () => {
+  // A SARIF `fix` REQUIRES `artifactChanges` — a concrete code edit. A prose-only
+  // fix is schema-invalid, and Autofix ignores `fixes[]` regardless. Emitting one
+  // means fabricating edits — the exact thing suggestions-not-patches forbids.
+  it("emits no fixes[] (and no artifactChanges) anywhere, across every finding shape", () => {
+    const json = formatSarif(
+      [
+        enrich(raw()),
+        enrich(raw({ provenance: "corpus-agent", file: "src/Nav.tsx", line: 5, selector: "a.brand" })),
+        enrich(raw({ provenance: "axe", file: "https://x.com", line: 0, selector: "button", impact: "serious" })),
+      ],
+      "r",
+    );
+    for (const result of JSON.parse(json).runs[0].results) {
+      expect(result.fixes).toBeUndefined();
+    }
+    expect(json).not.toMatch(/"fixes"/);
+    expect(json).not.toMatch(/artifactChanges/);
   });
 });
