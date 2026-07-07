@@ -10,8 +10,15 @@
  *   - runUnityBaselineRules — `UnityProjectFinding[]`, adapted at the seam (stamp `layer:"floor"`).
  *   - the new missing-accessible-label rule (`scanMissingLabel`).
  *
- * The `unity-project` fixture holds four prefabs (Button / ButtonNoLabel /
- * LocalizedButton, all ColorTint; Binary, opaque) and NO `.cs` / `.inputactions`, so:
+ * This test owns its project-scan fixture subtree — `unity-projects/aggregate/` — rather
+ * than asserting the global contents of the shared `unity-project/` dir. Those exact-count
+ * assertions ("3 color-only / 6 total") couple to *every* prefab in the scanned dir, so a
+ * sibling PR adding an unrelated prefab to a shared dir turns them red on combined `main`
+ * even though each PR was green alone (#84; same class as #77). Per the fixture-ownership
+ * convention (CLAUDE.md → Conventions), a dir-level scan test that asserts global contents
+ * owns a dedicated subtree no sibling mutates. The `aggregate/` fixture holds four prefabs
+ * (Button / ButtonNoLabel / LocalizedButton, all ColorTint; Binary, opaque) and NO
+ * `.cs` / `.inputactions`, so:
  *   - color-only fires on all 3 graph prefabs (each `m_Transition: 1`) → 3 findings.
  *   - missing-label fires on ButtonNoLabel only (Absent) → 1 finding.
  *   - baseline fires both project rules (no Accessibility ref, no rebinding) → 2 findings.
@@ -23,7 +30,8 @@ import { describe, expect, it } from "vitest";
 import type { Finding } from "../src/core";
 import { collectUnityFindings } from "../src/unity-findings";
 
-const projectDir = join(__dirname, "fixtures", "unity-project");
+// Dedicated, sibling-proof project dir owned by this test (#84 fixture-ownership convention).
+const projectDir = join(__dirname, "fixtures", "unity-projects", "aggregate");
 const PROJECTS = join(__dirname, "fixtures", "unity-projects");
 
 const ruleIds = (findings: readonly Finding[]): string[] => findings.map((f) => f.ruleId).sort();

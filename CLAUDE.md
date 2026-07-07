@@ -80,6 +80,21 @@ it green, and extend its generators when you add resolver capability.
   rule → a case in `test/enforce.test.ts` + a fixture in `test/fixtures/`).
 - The corpus is SHA-pinned (`experiments/stack-matrix/manifest.json`); the only
   thing that may move the baseline numbers is this checker's own code.
+- **Dir-level scan tests own a dedicated fixture subtree — never assert the
+  *global contents* of a shared fixture dir.** A test that scans a directory and
+  asserts its global findings ("exactly N findings", "only `X.prefab` fires", a
+  total count) is coupled to *every* file in that dir. When the dir is shared
+  across rules/features (e.g. `test/fixtures/unity-project/`), a parallel PR that
+  adds an unrelated fixture to it silently invalidates that assertion: each PR is
+  green alone, but the combined `main` goes red — a cross-PR collision no per-PR
+  review gate can see (#84; same class as #77's ADR-number collision). So give
+  such a test its **own** fixture subtree that no sibling mutates (e.g.
+  `test/fixtures/unity-color-only-project/`, `test/fixtures/unity-projects/aggregate/`),
+  and reserve global-content assertions for that owned dir. A per-file test
+  (scan one named fixture) is already immune and needs no dedicated dir. The
+  broader systemic guard for this class — a post-merge combined-tree test gate
+  that runs the suite on the *merge result* of fanned-out PRs — is tracked under
+  #77 / #84 for a future plan-epic; this convention is the per-test half.
 
 ## Library patterns (read before writing code against these libs)
 
