@@ -22,6 +22,7 @@ import {
 } from "./config-scan";
 import type { Contract } from "./contract";
 import { enforceContent } from "./enforce";
+import { impactFirstJsxA11yMessage } from "./finding-voice";
 import { isRouterLinkControl } from "./registry";
 import {
   type ComponentResolution,
@@ -440,7 +441,9 @@ export async function scan(filePaths: readonly string[]): Promise<ScanResult> {
         file: result.filePath,
         line: msg.line,
         ruleId: msg.ruleId,
-        message: msg.message,
+        // Impact-first voice (#14): rewrite the upstream eslint message to lead
+        // with the harmed user. Unmapped rules keep their original message.
+        message: impactFirstJsxA11yMessage(msg.ruleId, msg.message),
         wcag,
         enforcement: enforcementFor(wcag, contract),
         provenance: "jsx-a11y",

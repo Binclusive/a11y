@@ -605,36 +605,48 @@ interface EnforceRule {
   readonly message: string;
 }
 
+/**
+ * Every finding message — here and in the jsx-a11y wrapper (see {@link
+ * import("./finding-voice")}) — leads with the IMPACT-FIRST template:
+ *
+ *   [who is affected] can't [do what] because [cause], so [fix].
+ *
+ * The lead names the harmed user and the human consequence (#14), not the rule
+ * id. The rule id, WCAG SC, and corpus "seen-in-the-wild" frequency are SECONDARY
+ * lines the report renders separately ({@link import("./cli").detailLines}), so
+ * the message carries NO `(corpus: …)` suffix — that data is not dropped, it just
+ * lives on its own line rather than inline in the impact sentence.
+ */
 const RULES: Record<string, EnforceRule> = {
   buttonNoName: {
     ruleId: "enforce/button-no-name",
     wcag: ["4.1.2"],
     message:
-      "Control resolves to a button but has no accessible name: children are empty or icon-only and there is no aria-label/aria-labelledby/title. Give it discernible text or an aria-label (corpus: 4.1.2-button-no-name).",
+      "Screen-reader users can't tell what this button does because it has no accessible name — its children are empty or icon-only and there is no aria-label, aria-labelledby, or title, so add visible text or an aria-label that names its action.",
   },
   imageNoAlt: {
     ruleId: "enforce/image-no-alt",
     wcag: ["1.1.1"],
     message:
-      'Control resolves to an image but has no alt and no aria-label/aria-labelledby. Add an alt that conveys the image\'s meaning, or alt="" if decorative (corpus: 1.1.1).',
+      'Blind users can\'t perceive this image because it has no text alternative — no alt and no aria-label/aria-labelledby, so add an alt that conveys its meaning, or alt="" if it is purely decorative.',
   },
   linkNoName: {
     ruleId: "enforce/link-no-name",
     wcag: ["2.4.4"],
     message:
-      "Control resolves to a link but has no discernible name: no text child and no aria-label/aria-labelledby/title. Give the link visible text or an aria-label that names its destination (corpus: 2.4.4-link-no-name).",
+      "Screen-reader users can't tell where this link goes because it has no discernible name — no text child and no aria-label, aria-labelledby, or title, so give it visible text or an aria-label that names its destination.",
   },
   dialogNoName: {
     ruleId: "enforce/dialog-no-name",
     wcag: ["4.1.2", "1.3.1"],
     message:
-      "Control resolves to a dialog/modal but has no accessible name: no aria-label/aria-labelledby, no title/label prop, and no nested title subcomponent. Name the dialog so assistive tech announces it (corpus: 4.1.2).",
+      "Screen-reader users can't tell what this dialog is for because it has no accessible name — no aria-label/aria-labelledby, no title or label prop, and no nested title subcomponent, so name the dialog and assistive tech will announce it on open.",
   },
   inputNoName: {
     ruleId: "enforce/input-no-name",
     wcag: ["1.3.1", "3.3.2"],
     message:
-      "Control resolves to a form input but has no associated label: no aria-label/aria-labelledby, no label/title prop, and no id to pair with a <label for>. Associate a real label (corpus: 1.3.1 / 3.3.2-form-control-no-name).",
+      "Screen-reader users can't tell what to enter in this field because it has no associated label — no aria-label/aria-labelledby, no label or title prop, and no id to pair with a <label for>, so associate a real label and the field will be announced.",
   },
 };
 
@@ -703,7 +715,7 @@ function preferTagOverRole(
     const line = sf.getLineAndCharacterOfPosition(attr.getStart(sf)).line + 1;
     return {
       line,
-      message: `This <${tag}> sets role="${value}", which ${native.suggest} conveys natively. Use ${native.suggest} instead of the role so the semantics work without ARIA (corpus: 1.3.1-prefer-tag-over-role).`,
+      message: `Assistive-tech users get fragile semantics here because <${tag}> hand-sets role="${value}" instead of using the native element ${native.suggest} that conveys it, so switch to ${native.suggest} and the role works without relying on ARIA.`,
     };
   }
   return null;

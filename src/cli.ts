@@ -47,10 +47,14 @@ export function detailLines(f: EnrichedFinding): string[] {
         : f.provenance === "swiftui"
           ? "  (SwiftUI static)"
           : "";
+  // Impact-first voice (#14): the message LEADS — it names the harmed user and
+  // the human consequence, the first thing a reader sees under the location. The
+  // rule id and WCAG SC follow as SECONDARY lines (and the corpus block further
+  // below), so the identifiers frame the finding without burying the impact.
   const lines = [
+    `    ${f.message}`,
     `    rule:   ${f.ruleId}  [${f.enforcement}]${via}`,
     `    wcag:   ${scList}`,
-    `    ${f.message}`,
   ];
 
   // The display contract resolves the axe-vs-SC policy once (see resolveDisplay):
