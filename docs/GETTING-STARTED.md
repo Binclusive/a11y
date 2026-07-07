@@ -262,7 +262,7 @@ enforcement: 56 blocking · 1 warning
 ```
 
 > **About the exit code:** `check` exits **non-zero** when it finds blocking
-> issues — by design, so it can gate CI (step 7). Exit `1` is not a crash; it
+> issues — by design, so it can gate CI (step 8). Exit `1` is not a crash; it
 > means it found something. Read the report above it.
 
 **What to do next:** clear one finding and watch the count drop.
@@ -368,11 +368,42 @@ layout-dependent rules.
 The full deep dive — provenance, the corpus edge on rendered-only SCs, why
 templates need a running server — is in **[AUDIT-URL.md](AUDIT-URL.md)**.
 
+**What to do next:** scan your other stacks, or skip ahead to the CI gate.
+
+---
+
+## 7. Scan another stack — opt-in, one subcommand each
+
+**Why:** `check` scans `.tsx` only. Every other stack is **opt-in** — you enable it
+by running its own `check-<stack>` subcommand; nothing scans a stack you didn't ask
+for, and the default `check` never leaves React. Each is a static, in-process pass
+(no browser, no second toolchain) whose findings flow through the *same* corpus /
+WCAG / enforcement machinery as `check`:
+
+```bash
+npx @binclusive/a11y check-swift   ./ios      # .swift — SwiftUI accessibility (static)
+npx @binclusive/a11y check-shopify ./theme    # .liquid — Shopify theme structure (static)
+npx @binclusive/a11y check-unity   ./Assets   # .prefab / .unity — Unity Force-Text scenes
+npx @binclusive/a11y check-android ./app      # res/layout XML — Android layouts
+```
+
+Same tiers, same fixes, same finding shape as the `.tsx` and `check-url` reports.
+
+**On gating:** every `check*` command gates the same way. Each exits non-zero when
+a finding your contract marks **block** fired, and the exit code is identical across
+`text`, `--json`, and `--sarif` output. Tune it with the same flags as `check` —
+`--fail-on` / `--max-violations` to set the threshold, `--ci` to run advisory (always
+exit 0). So a stack scan gates a job exactly like the `.tsx` scan does (next section).
+
+> Until you run `init` to write a `binclusive.json`, every finding counts as
+> block-level, so an ungated scan fails on anything it finds — that first-run
+> default is tracked in [#184](https://github.com/Binclusive/a11y/issues/184).
+
 **What to do next:** make the gate automatic.
 
 ---
 
-## 7. Gate CI
+## 8. Gate CI
 
 **Why:** `check` already exits non-zero on blocking findings. Drop that one line
 into your pipeline and any serious/critical finding (the criteria in your
