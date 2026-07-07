@@ -130,3 +130,16 @@ Before adding/altering a command, read `.patterns/effect-cli/index.md`.
 | Define a command + handler | `.patterns/effect-cli/command.md` |
 | Positional args / named flags | `.patterns/effect-cli/args.md`, `options.md` |
 | Wire a subcommand into the root | `.patterns/effect-cli/subcommands.md` → `running.md` |
+
+### SARIF 2.1.0 — the finding-interchange format (the SARIF renderer's output)
+
+Before emitting or changing SARIF, read `.patterns/sarif/index.md`. Grounded in
+the OASIS SARIF 2.1.0 spec + `microsoft/sarif-sdk` — library truth, not our
+renderer.
+
+| Task | Read |
+|------|------|
+| Shape a `result` (message, level/kind, locations, fingerprints) | `.patterns/sarif/result-object.md` |
+| Propose a fix (`fixes[]` → artifactChanges → replacements) | `.patterns/sarif/fixes.md` |
+| Point a finding at a second spot (`relatedLocations[]`, embedded links) | `.patterns/sarif/related-locations.md` |
+| Decide auto-fixable vs advisory / what Copilot Autofix reads | `.patterns/sarif/autofix-consumption.md` |
