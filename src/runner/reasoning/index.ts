@@ -1,21 +1,27 @@
 /**
  * The reasoning-core registry — how the AI lane selects which per-framework
- * knowledge to consult for a given deterministic finding (issue #2096).
+ * knowledge to consult for a given deterministic finding (issue #2096, #2319).
  *
- * React / TSX is the only framework wired for v1 (epic #2083). Selection is
- * intentionally narrow: a finding that isn't a React/web finding gets NO guidance,
+ * React / TSX (epic #2083) and Shopify Liquid themes (#2319) are wired. Selection
+ * is intentionally narrow: a finding no wired framework claims gets NO guidance,
  * and the reasoner treats "no guidance" as a normal "nothing to add" pass rather
  * than reasoning blind. Adding a framework is one entry here plus one guidance
- * module — the parked frameworks (React Native, iOS, Android, ASP.NET, Shopify)
- * slot in the same way.
+ * module — the parked frameworks (React Native, iOS, Android, ASP.NET, Angular,
+ * Flutter) slot in the same way.
+ *
+ * Shopify is matched BEFORE React because the `liquid` provenance is the authority
+ * for a theme finding: a theme's `assets/*.js`/`*.css` file would otherwise be
+ * claimed by React's extension list. Provenance-first keeps the two seams disjoint.
  */
 import type { Finding } from "../../core";
 import { REACT_GUIDANCE } from "./react";
+import { SHOPIFY_GUIDANCE } from "./shopify";
 import type { FrameworkGuidance } from "./types";
 
 export type { ChecklistArea, Discovery, FixSeverity, FixSuggestion, FixType, FrameworkGuidance, PatternCatalogEntry } from "./types";
 export { FIX_TYPES } from "./types";
 export { REACT_GUIDANCE } from "./react";
+export { SHOPIFY_GUIDANCE } from "./shopify";
 
 /** Source-static provenances that fire on React/web JSX. */
 const WEB_PROVENANCES: ReadonlySet<Finding["provenance"]> = new Set(["jsx-a11y", "enforce", "axe"]);
@@ -29,11 +35,19 @@ function isReactFinding(finding: Finding): boolean {
   return REACT_EXTENSIONS.some((ext) => file.endsWith(ext));
 }
 
+/** A Shopify theme finding — tagged `liquid`, or a `.liquid` template/section/snippet. */
+function isShopifyFinding(finding: Finding): boolean {
+  if (finding.provenance === "liquid") return true;
+  return finding.file.toLowerCase().endsWith(".liquid");
+}
+
 /**
  * The framework knowledge for one finding, or `null` when no wired framework
  * claims it. `null` is the reasoner's cue to add nothing — the honest floor when
  * the corpus has no reasoning to ground a suggestion in.
  */
 export function frameworkGuidanceFor(finding: Finding): FrameworkGuidance | null {
-  return isReactFinding(finding) ? REACT_GUIDANCE : null;
+  if (isShopifyFinding(finding)) return SHOPIFY_GUIDANCE;
+  if (isReactFinding(finding)) return REACT_GUIDANCE;
+  return null;
 }

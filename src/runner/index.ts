@@ -71,6 +71,7 @@ export {
   frameworkGuidanceFor,
   type PatternCatalogEntry,
   REACT_GUIDANCE,
+  SHOPIFY_GUIDANCE,
 } from "./reasoning";
 export {
   createSkillsReasoner,
