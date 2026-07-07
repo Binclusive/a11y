@@ -1,0 +1,318 @@
+{
+  "AntennaPod/AntennaPod": {
+    "sha": "f7f0314888631208fedb26518fd924cb7805062f",
+    "findingsCount": 31,
+    "byRule": {
+      "android-xml/control-no-name": 9,
+      "android-xml/image-no-label": 22
+    },
+    "findings": [
+      {
+        "file": "app/src/main/res/layout/audioplayer_fragment.xml",
+        "line": 89,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/empty_view_layout.xml",
+        "line": 13,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/external_player_fragment.xml",
+        "line": 18,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/feed_item_list_fragment.xml",
+        "line": 23,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/feedinfo.xml",
+        "line": 23,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/feeditem_fragment.xml",
+        "line": 112,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/feeditem_fragment.xml",
+        "line": 156,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/feeditemlist_header.xml",
+        "line": 87,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/feeditemlist_header.xml",
+        "line": 95,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/filter_dialog_row.xml",
+        "line": 11,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/filter_dialog_row.xml",
+        "line": 18,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/home_fragment.xml",
+        "line": 32,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/home_fragment.xml",
+        "line": 42,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/home_fragment.xml",
+        "line": 56,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/horizontal_feed_item.xml",
+        "line": 34,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/horizontal_itemlist_item.xml",
+        "line": 53,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/horizontal_itemlist_item.xml",
+        "line": 69,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/horizontal_itemlist_item.xml",
+        "line": 69,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/nav_section_item.xml",
+        "line": 25,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/secondary_action.xml",
+        "line": 2,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/share_episode_dialog.xml",
+        "line": 73,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/share_episode_dialog.xml",
+        "line": 124,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/share_episode_dialog.xml",
+        "line": 163,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/sort_dialog_item.xml",
+        "line": 2,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/sort_dialog_item_active.xml",
+        "line": 2,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/subscription_grid_item.xml",
+        "line": 66,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/subscription_grid_item.xml",
+        "line": 118,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/swipeactions_picker_item.xml",
+        "line": 13,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/swipeactions_row.xml",
+        "line": 68,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/video_player_controls.xml",
+        "line": 74,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "ui/preferences/src/main/res/layout/gpodnetauth_device_row.xml",
+        "line": 8,
+        "ruleId": "android-xml/control-no-name"
+      }
+    ],
+    "filesScanned": 117,
+    "parseErrors": 0,
+    "error": null
+  },
+  "TeamNewPipe/NewPipe": {
+    "sha": "46a59640cdf8a2e75fbd9166c6407405fec49a44",
+    "findingsCount": 27,
+    "byRule": {
+      "android-xml/control-no-name": 9,
+      "android-xml/image-no-label": 18
+    },
+    "findings": [
+      {
+        "file": "app/src/main/res/layout-land/list_stream_card_item.xml",
+        "line": 13,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout-large-land/fragment_video_detail.xml",
+        "line": 635,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout-large-land/fragment_video_detail.xml",
+        "line": 635,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/activity_player_queue_control.xml",
+        "line": 196,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/activity_player_queue_control.xml",
+        "line": 196,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/activity_player_queue_control.xml",
+        "line": 246,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/activity_player_queue_control.xml",
+        "line": 246,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/drawer_header.xml",
+        "line": 113,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/fragment_choose_tabs.xml",
+        "line": 35,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/fragment_instance_list.xml",
+        "line": 35,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/item_search_suggestion.xml",
+        "line": 47,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/list_playlist_bookmark_item.xml",
+        "line": 13,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_playlist_card_item.xml",
+        "line": 14,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_playlist_grid_item.xml",
+        "line": 12,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_playlist_item.xml",
+        "line": 12,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_playlist_mini_item.xml",
+        "line": 12,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_stream_card_item.xml",
+        "line": 14,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_stream_grid_item.xml",
+        "line": 13,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_stream_item.xml",
+        "line": 13,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_stream_mini_item.xml",
+        "line": 12,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_stream_playlist_card_item.xml",
+        "line": 14,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_stream_playlist_grid_item.xml",
+        "line": 12,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/list_stream_playlist_item.xml",
+        "line": 12,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/play_queue_item.xml",
+        "line": 13,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/player.xml",
+        "line": 434,
+        "ruleId": "android-xml/image-no-label"
+      },
+      {
+        "file": "app/src/main/res/layout/settings_notification_action.xml",
+        "line": 54,
+        "ruleId": "android-xml/control-no-name"
+      },
+      {
+        "file": "app/src/main/res/layout/settings_notification_action.xml",
+        "line": 77,
+        "ruleId": "android-xml/control-no-name"
+      }
+    ],
+    "filesScanned": 116,
+    "parseErrors": 0,
+    "error": null
+  }
+}

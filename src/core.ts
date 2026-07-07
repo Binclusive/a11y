@@ -76,6 +76,7 @@ export type FindingProvenance =
   | "swiftui"
   | "liquid"
   | "unity"
+  | "android-xml"
   | "corpus-agent";
 
 /**

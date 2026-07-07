@@ -18,8 +18,13 @@ export const CONTRACT_VERSION = 1 as const;
 /** Which Next.js router the repo uses, or `null` when not a Next app. */
 export type Router = "app" | "pages" | null;
 
-/** Source language of the repo, decided by tsconfig presence. */
-export type Language = "ts" | "js";
+/**
+ * Source language of the repo. `ts`/`js` are decided by tsconfig presence for a
+ * web project; `android-xml` is set when the repo is detected as an Android
+ * project (a Gradle/manifest layout with `res/layout*` resources), which routes
+ * it to the Android XML layout collector instead of the React/TSX path.
+ */
+export type Language = "ts" | "js" | "android-xml";
 
 /**
  * The detected stack. Every field is a best-effort signal from
@@ -134,8 +139,8 @@ function parseRouter(v: unknown): Router {
 }
 
 function parseLanguage(v: unknown): Language {
-  if (v === "ts" || v === "js") return v;
-  throw new ContractParseError(`stack.language must be "ts" or "js"`);
+  if (v === "ts" || v === "js" || v === "android-xml") return v;
+  throw new ContractParseError(`stack.language must be "ts", "js", or "android-xml"`);
 }
 
 function parseStack(v: unknown): Stack {

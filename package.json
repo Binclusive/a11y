@@ -37,7 +37,10 @@
     "matrix:run": "tsx experiments/stack-matrix/run.ts",
     "matrix:report": "tsx experiments/stack-matrix/report.ts",
     "matrix:baseline": "tsx experiments/stack-matrix/baseline.ts",
-    "matrix:check": "tsx experiments/stack-matrix/check.ts"
+    "matrix:check": "tsx experiments/stack-matrix/check.ts",
+    "android:matrix:run": "tsx experiments/android-matrix/run.ts",
+    "android:matrix:baseline": "tsx experiments/android-matrix/baseline.ts",
+    "android:matrix:check": "tsx experiments/android-matrix/check.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.10.2",

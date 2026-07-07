@@ -6,6 +6,7 @@ import { Effect, Option } from "effect";
 import type { Impact } from "@binclusive/a11y-contract";
 import { type AgentLaneOverrides, augmentWithAgentLane } from "./agent-lane";
 import { collectTsx } from "./collect";
+import { scanAndroidXml } from "./collect-android-xml";
 // Type-only: the rendered-DOM lane (playwright/@axe-core) is loaded lazily inside
 // `runCheckUrl` so the static `check` path carries no eager browser-stack import
 // and the CI image can ship without it (issue #2133).
@@ -658,6 +659,29 @@ async function runCheckUnity(dir: string, json = false): Promise<void> {
   });
 }
 
+/**
+ * The Android counterpart to `runCheck`: statically scan an Android project's
+ * `res/layout*` XML in-process (`scanAndroidXml`), enrich through the SAME corpus
+ * cross-ref, and report findings anchored on `file:line` like every other
+ * producer. No browser, no network, no second toolchain — Android layouts are
+ * plain XML parsed in Node. A missing or unreadable project dir is an empty scan,
+ * never a throw. The collector returns the canonical `root` it scanned so
+ * `relative(root, …)` renders clean `app/src/main/res/layout/…:line` locations.
+ */
+async function runCheckAndroid(dir: string): Promise<void> {
+  const { root, findings: raw } = await scanAndroidXml(dir);
+  console.log(`a11y-checker — scanning res/layout XML under ${root} for Android a11y\n`);
+
+  const findings = enrichAll(raw);
+
+  renderReport(findings, {
+    emptyMessage: "No Android XML a11y violations found.",
+    groupKey: (f) => f.file,
+    groupHeader: (file) => relative(root, file),
+    formatItem: (f) => formatFinding(f, root),
+  });
+}
+
 async function runInit(suggest: boolean, dirArg: string): Promise<void> {
   const dir = resolve(dirArg);
   const r = await init(dir, { suggest });
@@ -899,6 +923,16 @@ const checkUnityCommand = Command.make(
   ),
 );
 
+const checkAndroidCommand = Command.make(
+  "check-android",
+  { dir: dirArg },
+  ({ dir }) => Effect.promise(() => runCheckAndroid(dir)),
+).pipe(
+  Command.withDescription(
+    "scan Android res/layout XML for accessibility findings (static, in-process — no browser, no toolchain)",
+  ),
+);
+
 const initCommand = Command.make(
   "init",
   { suggest: Options.boolean("suggest"), dir: optionalDir },
@@ -980,6 +1014,7 @@ const rootCommand = Command.make("a11y-checker", { dir: rootDir }, ({ dir }) =>
     checkSwiftCommand,
     checkShopifyCommand,
     checkUnityCommand,
+    checkAndroidCommand,
     initCommand,
     learnCommand,
     genCommand,

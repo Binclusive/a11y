@@ -12,8 +12,8 @@
  * builds) so detection and scanning agree on what a "component import" is.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, sep } from "node:path";
 import type { Language, Router, Stack } from "./contract";
 import { familyLabel, isFrameworkPrimitive, isOwnModule, packageNameOf } from "./module-scope";
 import { resolveComponents } from "./resolve-components";
@@ -125,6 +125,67 @@ function detectLanguage(dir: string): Language {
   return findUp(dir, "tsconfig.json") !== null ? "ts" : "js";
 }
 
+/** Build/output dirs not worth descending into when sniffing for Android markers. */
+const ANDROID_SCAN_SKIP = new Set([
+  "node_modules",
+  ".git",
+  ".gradle",
+  "build",
+  "dist",
+  ".idea",
+]);
+
+/**
+ * Bounded find-down for an Android marker — an `AndroidManifest.xml` or a
+ * `res/layout…` resource directory — within `maxDepth` levels of `dir`. Android
+ * projects nest these under `app/src/main/…`, so a pure package-up probe (used
+ * for tsconfig) would miss them; a shallow, skip-pruned descent is the cheap,
+ * reliable signal. Short-circuits on the first marker found.
+ */
+function hasAndroidMarker(dir: string, maxDepth: number): boolean {
+  let entries: ReturnType<typeof readdirSync>;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name === "AndroidManifest.xml") return true;
+    if (entry.isDirectory()) {
+      // a `layout` / `layout-…` dir whose parent is `res` is a layout resource dir
+      if ((entry.name === "layout" || entry.name.startsWith("layout-")) && dir.endsWith(`${sep}res`)) {
+        return true;
+      }
+    }
+  }
+  if (maxDepth <= 0) return false;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || ANDROID_SCAN_SKIP.has(entry.name)) continue;
+    if (hasAndroidMarker(join(dir, entry.name), maxDepth - 1)) return true;
+  }
+  return false;
+}
+
+/**
+ * True when `dir` is an Android project: a Gradle root (a `build.gradle` /
+ * `settings.gradle`, in Groovy or Kotlin DSL) paired with an Android marker
+ * (`AndroidManifest.xml` or a `res/layout*` dir) reachable a few levels down.
+ * Requiring BOTH keeps a plain JVM Gradle project (no Android UI) from being
+ * misread as Android.
+ */
+export function detectAndroid(dir: string): boolean {
+  const gradle =
+    existsSync(join(dir, "build.gradle")) ||
+    existsSync(join(dir, "build.gradle.kts")) ||
+    existsSync(join(dir, "settings.gradle")) ||
+    existsSync(join(dir, "settings.gradle.kts"));
+  if (!gradle && !existsSync(join(dir, "AndroidManifest.xml"))) {
+    // No gradle root and no manifest right here — not the root of an Android repo.
+    return false;
+  }
+  return hasAndroidMarker(dir, 5);
+}
+
 /**
  * The repo's design system: the published package that contributes the most
  * components RESOLVING TO A KNOWN INTERACTIVE HOST (registry or traced). That
@@ -193,6 +254,13 @@ export function detectDesignSystem(tsxFiles: readonly string[], rootDir?: string
  * signal; see the per-field helpers for what each reads.
  */
 export function detectStack(dir: string, tsxFiles: readonly string[]): Stack {
+  // Android is a distinct platform from the React/TSX path: an Android repo has
+  // no `package.json`/tsconfig to read, and its UI is `res/layout*` XML, not
+  // `.tsx`. Detect it first so it routes to the Android XML collector instead of
+  // degrading to a `framework: unknown · custom · js` web stack.
+  if (detectAndroid(dir)) {
+    return { framework: "android", router: null, designSystem: "android-views", language: "android-xml" };
+  }
   // Package-up: a scan pointed at a nested `src/` finds the app's package.json
   // (and the on-disk app/pages layout) one or more levels above.
   const pkgRoot = findUp(dir, "package.json") ?? dir;
