@@ -27,44 +27,10 @@ import {
   type Location as ContractLocation,
   parseFindingPayload,
   type Provenance as ContractProvenance,
-  type Severity as ContractSeverity,
 } from "@binclusive/a11y-contract";
 import type { FindingProvenance } from "./core";
-import { evidenceSeverity, type EnrichedFinding, type Severity as AxeImpact } from "./evidence";
+import type { EnrichedFinding } from "./evidence";
 import { type LocationOptions, resolveLocations } from "./source-identity";
-
-/**
- * The ONE axe-impact -> contract-severity mapping. axe's runtime vocabulary has
- * four levels; the contract (and the persisted `agentic_finding.severity`) has
- * three. `serious` and `moderate` both land on `major` — the single place this
- * collapse is defined. Every severity-emitting surface (SARIF, ticket) routes
- * through here so they can never disagree.
- */
-const IMPACT_TO_SEVERITY: Record<AxeImpact, ContractSeverity> = {
-  critical: "critical",
-  serious: "major",
-  moderate: "major",
-  minor: "minor",
-};
-
-export function impactToSeverity(impact: AxeImpact): ContractSeverity {
-  return IMPACT_TO_SEVERITY[impact];
-}
-
-/**
- * A deterministic finding whose SC is in neither the audit corpus nor the
- * baseline catalog (and which carries no runtime axe impact) still fired a real
- * rule — it is a genuine violation with no severity signal to read. `major`
- * (SARIF `warning`) is the honest floor: it neither fabricates `critical` nor
- * understates a real finding to a `note`.
- */
-const DEFAULT_SEVERITY: ContractSeverity = "major";
-
-/** The finding's contract severity: its resolved axe impact narrowed to the 3-level enum. */
-export function contractSeverity(f: EnrichedFinding): ContractSeverity {
-  const impact = evidenceSeverity(f);
-  return impact === null ? DEFAULT_SEVERITY : impactToSeverity(impact);
-}
 
 /**
  * Collapse the engine's 7-value {@link FindingProvenance} onto the contract's
@@ -108,7 +74,6 @@ export function toContractFinding(
   const base = {
     location,
     criterion: f.wcag[0] ?? "",
-    severity: contractSeverity(f),
     element: hasSelector(f.selector) ? f.selector : f.ruleId,
     evidence: f.message,
     scope,
@@ -156,10 +121,10 @@ export interface LenientPayload {
   readonly dropped: number;
   /**
    * The enriched sources that SURVIVED projection, in `payload.findings` order (1:1).
-   * The moat contract deliberately narrows the 4-level axe impact down to a 3-level
-   * band, so a transport layer that must send the raw 4-level value (Kontrol's
-   * `impact` extra) reads it off the paired source here — no second projection, and
-   * no widening of the wire contract.
+   * The metadata-only wire `Finding` carries no impact field, so a transport layer
+   * that must send the 4-level `impact` (Kontrol's `CiFindingInput` extra) reads it
+   * off the paired source here — no second projection, and no widening of the wire
+   * contract.
    */
   readonly sources: readonly EnrichedFinding[];
 }

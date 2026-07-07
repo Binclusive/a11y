@@ -39,7 +39,7 @@ describe("check_url handler: axe findings emit axe's rule fix", () => {
           wcag: ["1.1.1"],
           enforcement: "block",
           provenance: "axe",
-          severity: "serious",
+          impact: "serious",
           helpUrl:
             "https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name?application=axeAPI",
         },
@@ -169,7 +169,7 @@ describe("get_a11y_rules handler (axe baseline catalog — ADR 0041 §G, no corp
     const r = getA11yRules({ ruleId: "color-contrast" });
     expect(r.matchedOn).toBe("ruleId");
     const cc = r.baseline.find((b) => b.ruleId === "color-contrast");
-    expect(cc?.severity).toBe("serious");
+    expect(cc?.impact).toBe("serious");
     expect(cc?.sc).toContain("1.4.3");
     expect(cc?.helpUrl).toContain("dequeuniversity.com");
   });

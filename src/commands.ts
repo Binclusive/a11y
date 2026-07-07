@@ -81,7 +81,7 @@ function mergeStack(detected: Stack, existing: Stack | undefined): Stack {
  * The default enforcement policy for a fresh contract. The corpus left the engine
  * (ADR 0041 §G), so there is no frequency signal to auto-select which SCs block —
  * a fresh contract blocks nothing by default and the team opts SCs into `block`
- * explicitly. Severity still gates via the severity-gate; enforcement is the
+ * explicitly. Impact still gates via the impact-gate; enforcement is the
  * per-SC override on top of it.
  */
 function defaultContractEnforcement(): ReturnType<typeof defaultEnforcement> {

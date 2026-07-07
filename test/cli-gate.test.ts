@@ -10,7 +10,7 @@ import { runCli } from "../src/cli";
 /**
  * End-to-end wiring of the opt-in blocking gate (#2134) through the REAL `check`
  * command: these prove `--fail-on` / `--max-violations` parse and thread down to
- * the exit code, complementing the pure-decision coverage in `severity-gate.test`.
+ * the exit code, complementing the pure-decision coverage in `impact-gate.test`.
  *
  * The scan dir holds exactly one fixture — a single `critical` / `block`
  * finding — so the exit codes are deterministic:

@@ -3,29 +3,29 @@
  *
  * By default `check` exits non-zero only when a contract-BLOCKING finding fired
  * (`enforcement === "block"`); a scan that surfaces only warn-level findings is a
- * clean build. This module adds a strictly opt-in overlay: `--fail-on <severity>`
- * fails the check when any finding is at or above a severity threshold, and
+ * clean build. This module adds a strictly opt-in overlay: `--fail-on <impact>`
+ * fails the check when any finding is at or above an impact threshold, and
  * `--max-violations <n>` fails it when the finding count exceeds `n`.
  *
  * DEFAULT-SAFE BY CONSTRUCTION: with an unset gate the exit code is EXACTLY
- * today's behavior — findings never fail the check on severity or volume alone.
- * Both knobs are opt-in; there is no severity default.
+ * today's behavior — findings never fail the check on impact or volume alone.
+ * Both knobs are opt-in; there is no impact default.
  */
-import { Severity } from "@binclusive/a11y-contract";
-import type { EnrichedFinding } from "./evidence";
-import { contractSeverity } from "./emit-contract";
+import { Impact } from "@binclusive/a11y-contract";
+import { evidenceImpact, type EnrichedFinding } from "./evidence";
 
 /**
- * The canonical severity ordering — most-severe first (`critical` < `major` <
- * `minor`) — read straight from the contract's own `Severity` enum. We source the
- * order from the enum's `.options` rather than hand-rolling a second rank map, so
- * the gate can never disagree with the contract's severity vocabulary.
+ * The canonical impact ordering — most-severe first (`critical` < `serious` <
+ * `moderate` < `minor` < `unknown`) — read straight from the contract's own
+ * `Impact` enum. We source the order from the enum's `.options` rather than
+ * hand-rolling a second rank map, so the gate can never disagree with the
+ * contract's impact vocabulary.
  */
-export const SEVERITY_ORDER: readonly Severity[] = Severity.options;
+export const IMPACT_ORDER: readonly Impact[] = Impact.options;
 
-/** Rank of a severity in {@link SEVERITY_ORDER} — lower index = more severe. */
-function severityRank(s: Severity): number {
-  return SEVERITY_ORDER.indexOf(s);
+/** Rank of an impact in {@link IMPACT_ORDER} — lower index = more severe. */
+function impactRank(s: Impact): number {
+  return IMPACT_ORDER.indexOf(s);
 }
 
 /**
@@ -44,7 +44,7 @@ function severityRank(s: Severity): number {
  *   stays available but is strictly opt-in.
  */
 export interface GateConfig {
-  readonly failOn: Severity | null;
+  readonly failOn: Impact | null;
   readonly maxViolations: number | null;
   readonly advisory: boolean;
 }
@@ -65,14 +65,16 @@ export const GATE_ADVISORY: GateConfig = { failOn: null, maxViolations: null, ad
 
 /** The minimal per-finding projection the gate reasons over. */
 export interface GateFinding {
-  readonly severity: Severity;
+  readonly impact: Impact;
   /** Whether the contract BLOCKS this finding (`enforcement === "block"`). */
   readonly blocking: boolean;
 }
 
 /** Project an enriched finding onto the gate's minimal shape. */
 export function toGateFinding(f: EnrichedFinding): GateFinding {
-  return { severity: contractSeverity(f), blocking: f.enforcement === "block" };
+  // Absent impact ⇒ the contract's `unknown` (least severe): the gate reads the
+  // finding's own resolved impact, never a re-derived band.
+  return { impact: evidenceImpact(f) ?? "unknown", blocking: f.enforcement === "block" };
 }
 
 /**
@@ -85,7 +87,7 @@ export function toGateFinding(f: EnrichedFinding): GateFinding {
  * own).
  *
  * When the gate IS set, the exit reflects the gate: non-zero when any finding is
- * at or above `failOn` (severity rank ≤ threshold rank), or when the finding
+ * at or above `failOn` (impact rank ≤ threshold rank), or when the finding
  * count exceeds `maxViolations`; zero otherwise. The opt-in gate applies in
  * advisory mode too, so a CI runner can still opt into a failing exit.
  */
@@ -97,8 +99,8 @@ export function gateExitCode(findings: readonly GateFinding[], gate: GateConfig)
     return findings.some((f) => f.blocking) ? 1 : 0;
   }
   if (gate.failOn !== null) {
-    const threshold = severityRank(gate.failOn);
-    if (findings.some((f) => severityRank(f.severity) <= threshold)) return 1;
+    const threshold = impactRank(gate.failOn);
+    if (findings.some((f) => impactRank(f.impact) <= threshold)) return 1;
   }
   if (gate.maxViolations !== null && findings.length > gate.maxViolations) return 1;
   return 0;

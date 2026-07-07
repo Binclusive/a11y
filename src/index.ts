@@ -88,11 +88,9 @@ export {
 } from "./contract";
 export { detectStack } from "./detect-stack";
 // Emit path — the metadata-only wire projection (local finding -> contract) and
-// the LOCAL SARIF renderer that reads the rich model directly. One severity
-// mapping (`impactToSeverity` -> contract enum -> `severityToLevel`) threads both.
+// the LOCAL SARIF renderer that reads the rich model directly. Both narrow
+// through the ONE `evidenceImpact` accessor + `impactToLevel` (impact -> SARIF).
 export {
-  contractSeverity,
-  impactToSeverity,
   type LenientPayload,
   toContractFinding,
   toContractProvenance,
@@ -108,7 +106,7 @@ export {
   normalizeLine,
   resolveLocations,
 } from "./source-identity";
-export { formatSarif, severityToLevel } from "./sarif";
+export { formatSarif, impactToLevel } from "./sarif";
 export {
   type ComponentSuggestion,
   type SuggestConfidence,
@@ -172,13 +170,14 @@ export {
 // ── 4 · Evidence — the coverage catalog (axe baseline), read-only ────────────
 // The corpus left the engine (ADR 0041 §G): pure detection, baseline everywhere.
 export {
+  type AxeImpact,
   type BaselineRuleInfo,
   baselineRules,
   type Evidence,
   evidenceBestPractice,
   evidenceFix,
   evidenceHelpUrl,
-  evidenceSeverity,
+  evidenceImpact,
 } from "./evidence";
 export { BLOCK_BEGIN, BLOCK_END, extractBlock, renderBlock, spliceBlock } from "./agents-block";
 export { RULE_ID_TO_WCAG, wcagForRuleId } from "./wcag-map";

@@ -11,9 +11,9 @@
  *   - **one rollup PR comment**, updated in place across pushes.
  *
  * The counts derive ONLY from the `@binclusive/a11y-contract` metadata the report
- * already carries — `severity` (`critical`/`major`/`minor`) and `criterion` (the
- * WCAG SC id). No source snippet is manufactured (ADR 0039); the file/line links
- * are the same local navigation aid the inline comments already render.
+ * already carries — `impact` (`critical`/`serious`/`moderate`/`minor`) and
+ * `criterion` (the WCAG SC id). No source snippet is manufactured (ADR 0039); the
+ * file/line links are the same local navigation aid the inline comments already render.
  *
  * Dedup discipline, one level up from #2131: there is exactly ONE rollup comment,
  * found by a stable hidden marker and UPDATED IN PLACE on every push — never a
@@ -26,19 +26,22 @@
  * functions of their inputs; the effectful GitHub calls are injected through
  * {@link RollupClient} so the reconcile logic is testable against a fake.
  */
-import { type Finding, findingKey, type Severity } from "./pr-comment";
+import { type Finding, findingKey } from "./pr-comment";
 
-/** Severity buckets in report order — the contract's 3-level enum. */
-export const SEVERITY_ORDER = ["critical", "major", "minor"] as const;
+/** Impact buckets in report order — the contract's four concrete impact levels. */
+export const IMPACT_ORDER = ["critical", "serious", "moderate", "minor"] as const;
 
-/** The rollup shape a run wants to render: total + by-severity + by-WCAG-criterion. */
+/** One of the four concrete impact levels (the contract's `Impact` minus `unknown`). */
+type ConcreteImpact = (typeof IMPACT_ORDER)[number];
+
+/** The rollup shape a run wants to render: total + by-impact + by-WCAG-criterion. */
 export interface Rollup {
   /** Total findings in the reconciled set (deduped by {@link findingKey}). */
   readonly total: number;
-  /** Count per contract severity, always carrying all three buckets. */
-  readonly bySeverity: Record<Severity, number>;
-  /** Findings with no contract severity (an older report, or an unmapped rule). */
-  readonly unknownSeverity: number;
+  /** Count per contract impact, always carrying all four concrete buckets. */
+  readonly byImpact: Record<ConcreteImpact, number>;
+  /** Findings with no concrete impact (`unknown`, an older report, or an unmapped rule). */
+  readonly unknownImpact: number;
   /** Count per WCAG criterion, descending by count then criterion id. */
   readonly byCriterion: readonly { readonly criterion: string; readonly count: number }[];
 }
@@ -60,13 +63,14 @@ export function computeRollup(findings: readonly Finding[]): Rollup {
     if (!deduped.has(k)) deduped.set(k, f);
   }
 
-  const bySeverity: Record<Severity, number> = { critical: 0, major: 0, minor: 0 };
-  let unknownSeverity = 0;
+  const byImpact: Record<ConcreteImpact, number> = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+  let unknownImpact = 0;
   const criterionCounts = new Map<string, number>();
 
   for (const f of deduped.values()) {
-    if (f.severity !== undefined) bySeverity[f.severity] += 1;
-    else unknownSeverity += 1;
+    // `unknown` (and an absent impact) is not a concrete bucket — it counts as unclassified.
+    if (f.impact !== undefined && f.impact !== "unknown") byImpact[f.impact] += 1;
+    else unknownImpact += 1;
     const criterion = f.criterion !== undefined && f.criterion !== "" ? f.criterion : NO_CRITERION;
     criterionCounts.set(criterion, (criterionCounts.get(criterion) ?? 0) + 1);
   }
@@ -75,7 +79,7 @@ export function computeRollup(findings: readonly Finding[]): Rollup {
     .map(([criterion, count]) => ({ criterion, count }))
     .sort((a, b) => b.count - a.count || a.criterion.localeCompare(b.criterion));
 
-  return { total: deduped.size, bySeverity, unknownSeverity, byCriterion };
+  return { total: deduped.size, byImpact, unknownImpact, byCriterion };
 }
 
 /** Options that inject the (env-derived) file link into the otherwise-pure renderers. */
@@ -88,9 +92,9 @@ export interface RenderOptions {
 
 const DEFAULT_MAX_ROWS = 50;
 
-function severityLine(rollup: Rollup): string {
-  const parts = SEVERITY_ORDER.map((s) => `${rollup.bySeverity[s]} ${s}`);
-  if (rollup.unknownSeverity > 0) parts.push(`${rollup.unknownSeverity} unclassified`);
+function impactLine(rollup: Rollup): string {
+  const parts = IMPACT_ORDER.map((s) => `${rollup.byImpact[s]} ${s}`);
+  if (rollup.unknownImpact > 0) parts.push(`${rollup.unknownImpact} unclassified`);
   return parts.join(" · ");
 }
 
@@ -103,13 +107,13 @@ function renderBody(rollup: Rollup, findings: readonly Finding[], opts: RenderOp
   const lines: string[] = [];
   lines.push("## ♿ Accessibility summary");
   lines.push("");
-  lines.push(`**${rollup.total}** finding${rollup.total === 1 ? "" : "s"} — ${severityLine(rollup)}`);
+  lines.push(`**${rollup.total}** finding${rollup.total === 1 ? "" : "s"} — ${impactLine(rollup)}`);
 
   lines.push("");
-  lines.push("| Severity | Count |");
+  lines.push("| Impact | Count |");
   lines.push("| --- | ---: |");
-  for (const s of SEVERITY_ORDER) lines.push(`| ${s} | ${rollup.bySeverity[s]} |`);
-  if (rollup.unknownSeverity > 0) lines.push(`| unclassified | ${rollup.unknownSeverity} |`);
+  for (const s of IMPACT_ORDER) lines.push(`| ${s} | ${rollup.byImpact[s]} |`);
+  if (rollup.unknownImpact > 0) lines.push(`| unclassified | ${rollup.unknownImpact} |`);
 
   lines.push("");
   lines.push("| WCAG criterion | Count |");

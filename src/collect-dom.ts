@@ -94,10 +94,10 @@ export async function scanUrl(url: string, opts: DomScanOptions = {}): Promise<D
       const wcag = scFromTags(v.tags);
       const enforcement = enforcementFor(wcag, null);
       for (const node of v.nodes) {
-        // axe's runtime IMPACT is the most accurate severity: it is computed
+        // axe's runtime IMPACT is the most accurate signal: it is computed
         // against the actual rendered node. Prefer the per-node impact; fall
         // back to the violation-level impact when axe leaves the node's null.
-        const severity = node.impact ?? v.impact ?? undefined;
+        const impact = node.impact ?? v.impact ?? undefined;
         findings.push({
           file: url,
           line: 0,
@@ -107,7 +107,7 @@ export async function scanUrl(url: string, opts: DomScanOptions = {}): Promise<D
           wcag,
           enforcement,
           provenance: "axe",
-          ...(severity != null ? { severity } : {}),
+          ...(impact != null ? { impact } : {}),
           helpUrl: v.helpUrl,
         });
       }

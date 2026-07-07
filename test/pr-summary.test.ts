@@ -15,7 +15,7 @@ import {
 
 /**
  * The consolidated PR summary / rollup (issue #2132). The counts derive from the
- * contract's `severity` + `criterion` metadata and are computed over the findings
+ * contract's `impact` + `criterion` metadata and are computed over the findings
  * deduped by the SAME identity the inline reconciler uses, so the rollup total
  * equals the inline-comment count on a converged PR. Exactly ONE rollup comment
  * is kept, found by a stable marker and updated in place — never re-posted.
@@ -26,22 +26,22 @@ const finding = (over: Partial<Finding> = {}): Finding => ({
   file: "src/App.tsx",
   line: 12,
   message: "Image missing alt text.",
-  severity: "critical",
+  impact: "critical",
   criterion: "1.1.1",
   ...over,
 });
 
 describe("computeRollup", () => {
-  it("totals and breaks down by severity and WCAG criterion", () => {
+  it("totals and breaks down by impact and WCAG criterion", () => {
     const r = computeRollup([
-      finding({ line: 1, severity: "critical", criterion: "1.1.1" }),
-      finding({ line: 2, severity: "major", criterion: "1.4.3" }),
-      finding({ line: 3, severity: "major", criterion: "1.4.3" }),
-      finding({ line: 4, severity: "minor", criterion: "2.4.4" }),
+      finding({ line: 1, impact: "critical", criterion: "1.1.1" }),
+      finding({ line: 2, impact: "serious", criterion: "1.4.3" }),
+      finding({ line: 3, impact: "serious", criterion: "1.4.3" }),
+      finding({ line: 4, impact: "minor", criterion: "2.4.4" }),
     ]);
     expect(r.total).toBe(4);
-    expect(r.bySeverity).toEqual({ critical: 1, major: 2, minor: 1 });
-    expect(r.unknownSeverity).toBe(0);
+    expect(r.byImpact).toEqual({ critical: 1, serious: 2, moderate: 0, minor: 1 });
+    expect(r.unknownImpact).toBe(0);
     // descending by count, then criterion id
     expect(r.byCriterion).toEqual([
       { criterion: "1.4.3", count: 2 },
@@ -54,13 +54,19 @@ describe("computeRollup", () => {
     // same rule/spot, different wording → one inline comment → count once
     const r = computeRollup([finding(), finding({ message: "reworded" })]);
     expect(r.total).toBe(1);
-    expect(r.bySeverity.critical).toBe(1);
+    expect(r.byImpact.critical).toBe(1);
   });
 
-  it("buckets a finding with no contract severity as unclassified, never inventing one", () => {
-    const r = computeRollup([finding({ severity: undefined })]);
-    expect(r.unknownSeverity).toBe(1);
-    expect(r.bySeverity).toEqual({ critical: 0, major: 0, minor: 0 });
+  it("buckets a finding with no concrete impact as unclassified, never inventing one", () => {
+    const r = computeRollup([finding({ impact: undefined })]);
+    expect(r.unknownImpact).toBe(1);
+    expect(r.byImpact).toEqual({ critical: 0, serious: 0, moderate: 0, minor: 0 });
+  });
+
+  it("buckets a finding whose impact is `unknown` as unclassified", () => {
+    const r = computeRollup([finding({ impact: "unknown" })]);
+    expect(r.unknownImpact).toBe(1);
+    expect(r.byImpact).toEqual({ critical: 0, serious: 0, moderate: 0, minor: 0 });
   });
 
   it("groups findings with no WCAG mapping under a single bucket", () => {
@@ -120,7 +126,7 @@ describe("reconcileRollup", () => {
   });
 
   it("updates the existing rollup in place — never a second POST", () => {
-    const before = rollupComment(7, [finding({ severity: "minor" })]);
+    const before = rollupComment(7, [finding({ impact: "minor" })]);
     const desired = renderRollupComment(computeRollup([finding()]), [finding()]);
     const plan = reconcileRollup(desired, [before]);
     expect(plan.create).toBe(false);
@@ -180,12 +186,12 @@ class FakeClient implements RollupClient {
 describe("syncRollup — converges to exactly one rollup", () => {
   it("posts once, then updates in place on the next push (no double-post)", async () => {
     const client = new FakeClient();
-    await syncRollup([finding({ severity: "minor" })], client);
+    await syncRollup([finding({ impact: "minor" })], client);
     expect(client.calls).toEqual(["create"]);
     expect(client.comments.filter((c) => isRollupComment(c.body))).toHaveLength(1);
 
     // second push with a changed set → update the SAME comment, never a new one
-    await syncRollup([finding({ severity: "critical" })], client);
+    await syncRollup([finding({ impact: "critical" })], client);
     expect(client.calls).toEqual(["create", "update:100"]);
     expect(client.comments.filter((c) => isRollupComment(c.body))).toHaveLength(1);
   });
@@ -193,7 +199,7 @@ describe("syncRollup — converges to exactly one rollup", () => {
   it("cleans up pre-existing duplicate rollups down to one", async () => {
     const dupes = [rollupComment(1, [finding()]), rollupComment(2, [finding()])];
     const client = new FakeClient(dupes);
-    await syncRollup([finding({ severity: "major" })], client);
+    await syncRollup([finding({ impact: "serious" })], client);
     expect(client.comments.filter((c) => isRollupComment(c.body))).toHaveLength(1);
     expect(client.calls).toContain("remove:2");
   });

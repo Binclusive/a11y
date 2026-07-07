@@ -7,30 +7,31 @@
  * that reads the source-anchored model directly — it never routes through the
  * contract projection.
  *
- * Severity is the ONE contract enum: {@link severityToLevel} maps
- * `critical|major|minor` onto SARIF's `error|warning|note`, and
- * `contractSeverity` supplies that enum from the finding's resolved axe impact.
- * So text, ticket, and SARIF all narrow through the same severity mapping.
+ * Impact is the ONE contract enum: {@link impactToLevel} maps the four concrete
+ * axe impacts (plus `unknown`) onto SARIF's `error|warning|note`, and
+ * {@link evidenceImpact} supplies that value from the finding's resolved axe
+ * impact. So text and SARIF narrow through the same impact vocabulary.
  */
 import { relative } from "node:path";
-import type { Severity as ContractSeverity } from "@binclusive/a11y-contract";
-import { contractSeverity, hasSelector, impactToSeverity, toContractProvenance } from "./emit-contract";
-import { evidenceHelpUrl, type EnrichedFinding } from "./evidence";
+import type { Impact } from "@binclusive/a11y-contract";
+import { hasSelector, toContractProvenance } from "./emit-contract";
+import { evidenceHelpUrl, evidenceImpact, type EnrichedFinding } from "./evidence";
 import { type LocationOptions, resolveLocations } from "./source-identity";
 
-// Re-export the severity mapping so a consumer wiring SARIF has the whole
-// severity story from one module. `impactToSeverity` is the axe -> contract
-// collapse; `severityToLevel` is contract -> SARIF level.
-export { impactToSeverity };
-
-/** The one contract-severity -> SARIF-level mapping. Exhaustive over the closed enum. */
-export function severityToLevel(severity: ContractSeverity): "error" | "warning" | "note" {
-  switch (severity) {
+/**
+ * The one contract-impact -> SARIF-level mapping. Exhaustive over the closed enum.
+ * `critical`/`serious` are the actionable errors; `moderate` a warning; `minor`
+ * and `unknown` (not judged) are notes — SARIF's lowest, honest floor.
+ */
+export function impactToLevel(impact: Impact): "error" | "warning" | "note" {
+  switch (impact) {
     case "critical":
+    case "serious":
       return "error";
-    case "major":
+    case "moderate":
       return "warning";
     case "minor":
+    case "unknown":
       return "note";
   }
 }
@@ -73,7 +74,7 @@ function findingLocations(f: EnrichedFinding, root: string | undefined): SarifLo
 /**
  * Render a SARIF 2.1.0 log over the LOCAL findings. `runId` names the run in
  * `automationDetails` (e.g. a PR number or scan id). Rules are the deduped set
- * of fired rule ids; each result carries its severity level, source location,
+ * of fired rule ids; each result carries its impact level, source location,
  * and a `properties.provenance` tag (`deterministic` | `agent`) so the two
  * checker lanes stay distinguishable once both feed SARIF. `opts.root`, when
  * given, relativizes source-file uris against the scanned root — the form
@@ -123,7 +124,7 @@ export function formatSarif(
           const loc = located.get(f);
           return {
             ruleId: f.ruleId,
-            level: severityToLevel(contractSeverity(f)),
+            level: impactToLevel(evidenceImpact(f) ?? "unknown"),
             message: { text: f.message },
             locations: findingLocations(f, opts.root),
             // `<lineHash>:<index>` — the content hash lets code-scanning re-match the

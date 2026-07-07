@@ -37,14 +37,14 @@ import { scan } from "./core";
 import {
   type BaselineRuleInfo,
   baselineRules,
+  type AxeImpact,
   evidenceBestPractice,
   type Evidence,
   evidenceHelpUrl,
-  evidenceSeverity,
+  evidenceImpact,
   type EnrichedFinding,
   enrichAll,
   resolveDisplay,
-  type Severity,
 } from "./evidence";
 import type { Coverage } from "./resolve-components";
 import { collectUnityFindings } from "./unity-findings";
@@ -63,8 +63,8 @@ export interface CheckFinding {
    * corpus left the engine; frequency is platform-derived).
    */
   readonly source: Evidence["source"];
-  /** Severity: axe runtime impact, else the baseline catalog default. */
-  readonly severity: Severity | null;
+  /** Impact: axe runtime impact, else the baseline catalog default; null when unknown. */
+  readonly impact: AxeImpact | null;
   /**
    * True for a baseline match on an axe best-practice rule with no WCAG SC — an
    * axe recommendation, not a WCAG conformance failure.
@@ -97,7 +97,7 @@ function toCheckFinding(f: EnrichedFinding, file: string): CheckFinding {
     ruleId: f.ruleId,
     wcag: f.wcag,
     source: f.corpus.source,
-    severity: evidenceSeverity(f),
+    impact: evidenceImpact(f),
     bestPractice: evidenceBestPractice(f.corpus),
     fix: resolveDisplay(f).fix,
     helpUrl: evidenceHelpUrl(f),
@@ -189,7 +189,7 @@ const TOP_RULES = 15;
 /**
  * The `get_a11y_rules` result. The corpus left the engine (ADR 0041 §G), so the
  * answer is now purely the coverage catalog: axe's published per-rule entries
- * (severity + standard fix + helpUrl, NO org count, NO frequency tier) for the
+ * (impact + standard fix + helpUrl, NO org count, NO frequency tier) for the
  * requested component/SC/ruleId, so the tool can answer for any axe/WCAG rule.
  */
 export interface GetA11yRulesResult {
@@ -271,28 +271,28 @@ function jsonContent(value: unknown): { content: [{ type: "text"; text: string }
 export function registerTools(server: McpServer): void {
   server.tool(
     "check_a11y",
-    "Scan the .tsx files under a directory for accessibility violations and return each finding (file, line, jsx-a11y ruleId, WCAG SC, severity, and the representative fix) plus the component-coverage summary.",
+    "Scan the .tsx files under a directory for accessibility violations and return each finding (file, line, jsx-a11y ruleId, WCAG SC, impact, and the representative fix) plus the component-coverage summary.",
     { dir: z.string().describe("Directory to scan recursively for .tsx files.") },
     async ({ dir }) => jsonContent(await checkA11y(dir)),
   );
 
   server.tool(
     "check_url",
-    "Render a live URL in a real browser and run axe-core against the rendered DOM, returning each finding (the URL as file, axe ruleId, WCAG SC, severity, the representative fix, and the CSS selector of the offending node). Unlike check_a11y, this needs no source: it works on non-React, server-rendered, or otherwise source-less pages, while returning the same baseline findings.",
+    "Render a live URL in a real browser and run axe-core against the rendered DOM, returning each finding (the URL as file, axe ruleId, WCAG SC, impact, the representative fix, and the CSS selector of the offending node). Unlike check_a11y, this needs no source: it works on non-React, server-rendered, or otherwise source-less pages, while returning the same baseline findings.",
     { url: z.string().describe("The page URL to render and audit.") },
     async ({ url }) => jsonContent(await checkUrl(url)),
   );
 
   server.tool(
     "check_unity",
-    "Scan a Unity project directory for accessibility violations in its serialized .prefab/.unity assets and return each finding (file, ruleId, WCAG SC, severity, and the representative fix). Mirrors check_a11y for the Unity ecosystem: missing accessible labels, color-only interactive state, and project-level gaps (no screen-reader support, no input rebinding), against the same axe baseline catalog.",
+    "Scan a Unity project directory for accessibility violations in its serialized .prefab/.unity assets and return each finding (file, ruleId, WCAG SC, impact, and the representative fix). Mirrors check_a11y for the Unity ecosystem: missing accessible labels, color-only interactive state, and project-level gaps (no screen-reader support, no input rebinding), against the same axe baseline catalog.",
     { dir: z.string().describe("Unity project directory to scan recursively for .prefab/.unity assets.") },
     async ({ dir }) => jsonContent(await checkUnity(dir)),
   );
 
   server.tool(
     "get_a11y_rules",
-    "Return the accessibility rules relevant to a component, WCAG SC, or axe ruleId so you can apply them BEFORE writing the code. The result is axe-core's published per-rule baseline catalog (ruleId, WCAG SC, severity, standard fix, helpUrl) for the requested component, SC, or ruleId (e.g. \"color-contrast\" / SC 1.4.3). With no filter, returns the top rules.",
+    "Return the accessibility rules relevant to a component, WCAG SC, or axe ruleId so you can apply them BEFORE writing the code. The result is axe-core's published per-rule baseline catalog (ruleId, WCAG SC, impact, standard fix, helpUrl) for the requested component, SC, or ruleId (e.g. \"color-contrast\" / SC 1.4.3). With no filter, returns the top rules.",
     {
       component: z
         .string()

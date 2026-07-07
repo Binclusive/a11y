@@ -8,7 +8,7 @@
  *      truthful, partial (~15 SCs), and carries org counts / frequency tiers.
  *   2. BASELINE catalog (this file's output) — derived MECHANICALLY from
  *      axe-core's rule metadata. Covers EVERY axe rule, so a finding for an SC
- *      the corpus has never seen still surfaces with a WCAG SC, a severity, and a
+ *      the corpus has never seen still surfaces with a WCAG SC, an impact, and a
  *      concrete fix instead of dead-ending at `unknown`.
  *
  * These two NEVER mix: the baseline carries NO org count and NO frequency tier.
@@ -19,7 +19,7 @@
  *   - `axe.getRules()` → `ruleId`, `help`, `helpUrl`, `tags`. The SC array is
  *     parsed from the `wcag<NNN>` tags via the SHARED `scFromTags` (the same
  *     function the live-DOM collector uses), so axe tags and corpus keys line up.
- *   - `axe._audit.rules[].impact` → the per-rule default SEVERITY
+ *   - `axe._audit.rules[].impact` → the per-rule default IMPACT
  *     (`minor|moderate|serious|critical`). `getRules()` does NOT expose impact,
  *     but the audit's rule objects do, and every one of axe's rules carries a
  *     valid level (verified: 104/104, none null). This is axe's own published
@@ -46,8 +46,8 @@ export interface BaselineRule {
   readonly ruleId: string;
   /** WCAG SC(s) parsed from the rule's `wcag<NNN>` tags (deduped, sorted). */
   readonly sc: readonly string[];
-  /** axe's default per-rule severity. */
-  readonly severity: "minor" | "moderate" | "serious" | "critical";
+  /** axe's default per-rule impact. */
+  readonly impact: "minor" | "moderate" | "serious" | "critical";
   /** axe's short, imperative remediation summary (`help`). */
   readonly help: string;
   /** axe's Deque-University help URL for the rule. */
@@ -116,7 +116,7 @@ export function buildBaselineCatalog(axe: AxeModule): BaselineCatalogFile {
 
   const rules: BaselineRule[] = [];
   for (const r of axe.getRules()) {
-    const severity = impactById.get(r.ruleId);
+    const impact = impactById.get(r.ruleId);
     // Every axe rule carries a valid default impact; if a future axe version
     // ever omits one, default to the conservative middle ("moderate") rather
     // than fabricating a high/low signal or dropping the rule from coverage.
@@ -124,7 +124,7 @@ export function buildBaselineCatalog(axe: AxeModule): BaselineCatalogFile {
     rules.push({
       ruleId: r.ruleId,
       sc,
-      severity: severity ?? "moderate",
+      impact: impact ?? "moderate",
       help: r.help,
       helpUrl: r.helpUrl,
     });
@@ -133,7 +133,7 @@ export function buildBaselineCatalog(axe: AxeModule): BaselineCatalogFile {
 
   return {
     _meta: {
-      note: "BASELINE rule catalog — coverage layer, NOT audit-frequency data. Generated mechanically from axe-core's published per-rule metadata (getRules() + axe._audit.rules[].impact). Covers every axe/WCAG rule with a WCAG SC, axe's default severity, a standard fix (help), and a helpUrl. Carries NO org count and NO frequency tier — those live only in the corpus snapshot (the real-audit moat). Regenerate with `pnpm gen:baseline`.",
+      note: "BASELINE rule catalog — coverage layer, NOT audit-frequency data. Generated mechanically from axe-core's published per-rule metadata (getRules() + axe._audit.rules[].impact). Covers every axe/WCAG rule with a WCAG SC, axe's default impact, a standard fix (help), and a helpUrl. Carries NO org count and NO frequency tier — those live only in the corpus snapshot (the real-audit moat). Regenerate with `pnpm gen:baseline`.",
       source: "axe-core getRules() + axe._audit.rules[].impact",
       axeVersion: axe.version,
       ruleCount: rules.length,

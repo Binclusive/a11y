@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { enrich } from "../src/evidence";
 import type { Finding } from "../src/core";
-import { formatSarif, severityToLevel } from "../src/sarif";
+import { formatSarif, impactToLevel } from "../src/sarif";
 import { lineContentHash, resolveLocations } from "../src/source-identity";
 
 /**
  * SARIF is a LOCAL renderer: it reads the rich source-anchored finding (needs
- * file/line for physical locations) and narrows severity through the ONE
- * contract-severity mapping (`severityToLevel`) — never through the metadata-only
+ * file/line for physical locations) and narrows the finding's impact through the
+ * ONE contract-impact mapping (`impactToLevel`) — never through the metadata-only
  * wire projection.
  */
 
@@ -22,11 +22,13 @@ const raw = (over: Partial<Finding> = {}): Finding => ({
   ...over,
 });
 
-describe("severityToLevel (contract enum -> SARIF level)", () => {
-  it("maps the closed severity enum onto error|warning|note", () => {
-    expect(severityToLevel("critical")).toBe("error");
-    expect(severityToLevel("major")).toBe("warning");
-    expect(severityToLevel("minor")).toBe("note");
+describe("impactToLevel (contract impact enum -> SARIF level)", () => {
+  it("maps the closed impact enum onto error|warning|note", () => {
+    expect(impactToLevel("critical")).toBe("error");
+    expect(impactToLevel("serious")).toBe("error");
+    expect(impactToLevel("moderate")).toBe("warning");
+    expect(impactToLevel("minor")).toBe("note");
+    expect(impactToLevel("unknown")).toBe("note");
   });
 });
 
@@ -46,15 +48,20 @@ describe("formatSarif over the local finding", () => {
   });
 
   it("anchors a rendered-DOM (axe) finding on its selector as a logicalLocation, no region", () => {
-    const f = enrich(raw({ provenance: "axe", file: "https://x.com", line: 0, selector: "main div.hero", severity: "serious" }));
+    const f = enrich(raw({ provenance: "axe", file: "https://x.com", line: 0, selector: "main div.hero", impact: "serious" }));
     const loc = JSON.parse(formatSarif([f], "r")).runs[0].results[0].locations[0];
     expect(loc.physicalLocation.artifactLocation.uri).toBe("https://x.com");
     expect(loc.physicalLocation.region).toBeUndefined();
     expect(loc.logicalLocations[0].fullyQualifiedName).toBe("main div.hero");
   });
 
-  it("levels a result through the contract severity mapping (serious axe impact -> warning)", () => {
-    const f = enrich(raw({ provenance: "axe", file: "https://x", line: 0, severity: "serious" }));
+  it("levels a result through the contract impact mapping (serious axe impact -> error)", () => {
+    const f = enrich(raw({ provenance: "axe", file: "https://x", line: 0, impact: "serious" }));
+    expect(JSON.parse(formatSarif([f], "r")).runs[0].results[0].level).toBe("error");
+  });
+
+  it("levels a moderate axe impact as a SARIF warning", () => {
+    const f = enrich(raw({ provenance: "axe", file: "https://x", line: 0, impact: "moderate" }));
     expect(JSON.parse(formatSarif([f], "r")).runs[0].results[0].level).toBe("warning");
   });
 
@@ -78,7 +85,7 @@ describe("formatSarif over the local finding", () => {
   });
 
   it("leaves a rendered-DOM URL uri untouched even when a root is given", () => {
-    const f = enrich(raw({ provenance: "axe", file: "https://x.com/page", line: 0, severity: "serious" }));
+    const f = enrich(raw({ provenance: "axe", file: "https://x.com/page", line: 0, impact: "serious" }));
     const sarif = JSON.parse(formatSarif([f], "r", { root: "/work/stage" }));
     expect(sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri).toBe("https://x.com/page");
   });
@@ -127,7 +134,7 @@ describe("partialFingerprints.primaryLocationLineHash (code-scanning alert track
 
   it("does NOT fabricate a fingerprint for a rendered-DOM (page) finding", () => {
     const f = enrich(
-      raw({ provenance: "axe", file: "https://x.com", line: 0, selector: "main", severity: "serious" }),
+      raw({ provenance: "axe", file: "https://x.com", line: 0, selector: "main", impact: "serious" }),
     );
     const result = JSON.parse(formatSarif([f], "r")).runs[0].results[0];
     expect(result.partialFingerprints).toBeUndefined();

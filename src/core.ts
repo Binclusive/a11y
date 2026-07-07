@@ -1,7 +1,17 @@
+import type { Impact } from "@binclusive/a11y-contract";
 import tsParser from "@typescript-eslint/parser";
 import { ESLint, type Linter } from "eslint";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import ts from "typescript";
+
+/**
+ * The 4-level axe runtime impact a finding can carry — the contract's canonical
+ * {@link Impact} vocabulary minus `unknown` (a finding either observed a concrete
+ * axe impact or carries none; "not judged" is modeled by ABSENCE, so the wire
+ * maps an absent impact to the contract's `unknown` at the boundary). Derived
+ * from the contract enum so the runtime scale can never drift from it.
+ */
+export type AxeImpact = Exclude<Impact, "unknown">;
 import {
   commonBaseDir,
   contractForFiles,
@@ -132,11 +142,12 @@ export interface Finding {
   readonly selector?: string;
   /**
    * axe-core's per-node runtime IMPACT for this finding — the single most
-   * accurate severity, computed by axe against the actual rendered node. Set
+   * accurate impact, computed by axe against the actual rendered node. Set
    * only on `axe` findings (the source passes have no axe runtime). The corpus
-   * enrich step prefers this over the static baseline severity when present.
+   * enrich step prefers this over the static baseline impact when present.
+   * Absent ⇒ not judged (the wire maps that to the contract's `unknown`).
    */
-  readonly severity?: "minor" | "moderate" | "serious" | "critical";
+  readonly impact?: AxeImpact;
   /**
    * axe-core's Deque-University help URL for the rule that fired. Set only on
    * `axe` findings; the baseline catalog supplies the same URL for source-pass

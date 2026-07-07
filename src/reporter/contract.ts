@@ -24,7 +24,7 @@
 import { type Finding, parseFindings } from "./finding";
 
 export { type Finding, parseFindings };
-export type { Severity } from "./finding";
+export type { Impact } from "./finding";
 
 /** A best-effort logger; adapters log to stderr and never throw. */
 export type Logger = (msg: string) => void;

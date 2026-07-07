@@ -68,7 +68,7 @@ const PROTOCOL_LINES: readonly string[] = [
   "whenever accessibility is in scope. Don't guess from generic a11y knowledge.",
   "",
   "To fix or clean up accessibility:",
-  "1. `check_a11y` the directory; work findings by severity — blocking first.",
+  "1. `check_a11y` the directory; work findings by impact — blocking first.",
   "2. Apply mechanical fixes (missing `type`, role typo, `href`, `tabIndex`).",
   "3. For semantic fixes (alt text, `aria-label`, link text, labels) derive a real",
   '   value from context — never filler like `alt="image"`; flag low-confidence ones.',
