@@ -1,0 +1,172 @@
+{
+  "Shopify/dawn": {
+    "sha": "83d5e6b4094d8019820bffafe04b242d0602ffe2",
+    "filesScanned": 95,
+    "findingsCount": 12,
+    "parseErrorCount": 0,
+    "parseErrorRate": 0,
+    "byRule": {
+      "liquid/control-no-name": 2,
+      "liquid/duplicate-id": 5,
+      "liquid/empty-heading": 2,
+      "liquid/heading-order": 1,
+      "liquid/input-no-label": 1,
+      "liquid/label-for-dangling": 1
+    },
+    "findings": [
+      {
+        "file": "sections/announcement-bar.liquid",
+        "line": 37,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "sections/announcement-bar.liquid",
+        "line": 97,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "sections/header.liquid",
+        "line": 152,
+        "ruleId": "liquid/empty-heading"
+      },
+      {
+        "file": "sections/header.liquid",
+        "line": 195,
+        "ruleId": "liquid/empty-heading"
+      },
+      {
+        "file": "sections/main-addresses.liquid",
+        "line": 158,
+        "ruleId": "liquid/label-for-dangling"
+      },
+      {
+        "file": "sections/main-collection-product-grid.liquid",
+        "line": 150,
+        "ruleId": "liquid/duplicate-id"
+      },
+      {
+        "file": "sections/main-login.liquid",
+        "line": 76,
+        "ruleId": "liquid/heading-order"
+      },
+      {
+        "file": "sections/main-password-header.liquid",
+        "line": 64,
+        "ruleId": "liquid/input-no-label"
+      },
+      {
+        "file": "sections/main-search.liquid",
+        "line": 249,
+        "ruleId": "liquid/duplicate-id"
+      },
+      {
+        "file": "sections/pickup-availability.liquid",
+        "line": 40,
+        "ruleId": "liquid/duplicate-id"
+      },
+      {
+        "file": "snippets/facets.liquid",
+        "line": 66,
+        "ruleId": "liquid/duplicate-id"
+      },
+      {
+        "file": "snippets/facets.liquid",
+        "line": 841,
+        "ruleId": "liquid/duplicate-id"
+      }
+    ],
+    "error": null
+  },
+  "Shopify/horizon": {
+    "sha": "7479288eef36b0f0815423d183e8749ffd2faf75",
+    "filesScanned": 261,
+    "findingsCount": 15,
+    "parseErrorCount": 0,
+    "parseErrorRate": 0,
+    "byRule": {
+      "liquid/control-no-name": 8,
+      "liquid/heading-order": 2,
+      "liquid/list-structure": 3,
+      "liquid/media-no-captions": 1,
+      "liquid/svg-no-name": 1
+    },
+    "findings": [
+      {
+        "file": "blocks/_blog-post-card.liquid",
+        "line": 26,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "blocks/_card.liquid",
+        "line": 24,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "blocks/_header-logo.liquid",
+        "line": 28,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "blocks/buy-buttons.liquid",
+        "line": 339,
+        "ruleId": "liquid/heading-order"
+      },
+      {
+        "file": "blocks/product-title.liquid",
+        "line": 7,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "sections/hero.liquid",
+        "line": 509,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "sections/section-rendering-product-card.liquid",
+        "line": 44,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "snippets/background-media.liquid",
+        "line": 51,
+        "ruleId": "liquid/media-no-captions"
+      },
+      {
+        "file": "snippets/cart-products.liquid",
+        "line": 169,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "snippets/group.liquid",
+        "line": 45,
+        "ruleId": "liquid/control-no-name"
+      },
+      {
+        "file": "snippets/header-actions.liquid",
+        "line": 42,
+        "ruleId": "liquid/svg-no-name"
+      },
+      {
+        "file": "snippets/localization-form.liquid",
+        "line": 175,
+        "ruleId": "liquid/list-structure"
+      },
+      {
+        "file": "snippets/overflow-list.liquid",
+        "line": 32,
+        "ruleId": "liquid/list-structure"
+      },
+      {
+        "file": "snippets/overflow-list.liquid",
+        "line": 64,
+        "ruleId": "liquid/list-structure"
+      },
+      {
+        "file": "snippets/product-grid.liquid",
+        "line": 124,
+        "ruleId": "liquid/heading-order"
+      }
+    ],
+    "error": null
+  }
+}

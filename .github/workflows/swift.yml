@@ -1,0 +1,52 @@
+name: swift
+
+# Gives the Swift collector (A11ySwiftScan) the same pre-finish guard the JS path
+# already has: build + run `swift test` on every push / PR that touches the
+# package. A regression in the SwiftSyntax climb (a missing-label misfire, a false
+# positive on a labeled control) fails here instead of shipping silently.
+on:
+  push:
+    paths:
+      - "swift/A11ySwiftScan/**"
+      - ".github/workflows/swift.yml"
+  pull_request:
+    paths:
+      - "swift/A11ySwiftScan/**"
+      - ".github/workflows/swift.yml"
+
+# A newer push to the same ref cancels the in-flight run for it.
+concurrency:
+  group: swift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # macOS: the package declares `platforms: [.macOS(.v13)]` and is developed on
+    # macOS; the runner ships the Swift toolchain via Xcode.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # swift-tools-version:6.1 needs Swift 6.1+ — pin the latest stable Xcode so
+      # the runner's default toolchain is new enough.
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show Swift version
+        run: swift --version
+
+      # Cache the resolved swift-syntax checkout + build artifacts to keep the run
+      # fast; keyed on the pinned dependency graph (Package.resolved).
+      - name: Cache SwiftPM build
+        uses: actions/cache@v4
+        with:
+          path: swift/A11ySwiftScan/.build
+          key: swiftpm-${{ runner.os }}-${{ hashFiles('swift/A11ySwiftScan/Package.resolved') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-
+
+      - name: swift test
+        working-directory: swift/A11ySwiftScan
+        run: swift test

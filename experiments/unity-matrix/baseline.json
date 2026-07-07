@@ -1,0 +1,300 @@
+{
+  "UnityTechnologies/open-project-1": {
+    "sha": "608eac98df29cd97821a6115cd52dfb9027345b1",
+    "findingsCount": 56,
+    "byRule": {
+      "unity/color-only-state": 41,
+      "unity/missing-accessible-label": 14,
+      "unity/no-screen-reader-support": 1
+    },
+    "findings": [
+      {
+        "file": "",
+        "line": 0,
+        "ruleId": "unity/no-screen-reader-support"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/EditorTools/LocationButton.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/GameplayScene/Dialogue/ButtonChoice.prefab",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/GameplayScene/Inventory/InventoryItem.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/GameplayScene/Inventory/InventoryItem.prefab",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/GameplayScene/Inventory/InventoryTab.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/GameplayScene/Inventory/InventoryTab.prefab",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/MainMenu/ButtonMenu.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/Shared/Button/Button.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/Shared/Settings/Setting_Field.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/Shared/Settings/Setting_Field.prefab",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/Shared/Settings/Setting_Field.prefab",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Prefabs/UI/Shared/Settings/Tab_Item.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/Scenes/WIP/Settings System.unity",
+        "line": 0,
+        "ruleId": "unity/missing-accessible-label"
+      },
+      {
+        "file": "UOP1_Project/Assets/WIP/Prefabs/DebugMenu.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/WIP/Prefabs/DebugMenu.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/WIP/Prefabs/DebugMenu.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/WIP/Prefabs/DebugMenu.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/WIP/Prefabs/DebugMenu.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/WIP/Prefabs/DebugMenu.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/WIP/Prefabs/DebugMenu.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      },
+      {
+        "file": "UOP1_Project/Assets/WIP/Prefabs/DebugMenu.prefab",
+        "line": 0,
+        "ruleId": "unity/color-only-state"
+      }
+    ],
+    "assetsScanned": 533,
+    "graphCount": 533,
+    "opaqueBinary": 0,
+    "opaqueParseError": 0,
+    "opaqueRate": 0,
+    "opaqueAssets": [],
+    "error": null
+  }
+}

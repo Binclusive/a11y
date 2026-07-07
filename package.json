@@ -1,0 +1,78 @@
+{
+  "name": "@binclusive/a11y",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local accessibility checker for React/TSX, grounded in axe-core's published rule catalog. Runs entirely on your machine — no network, no upload.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "bin": {
+    "a11y-checker": "./bin/a11y.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "data/baseline-rules.json"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Binclusive/a11y.git"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "scripts": {
+    "scan": "tsx ./src/cli.ts check",
+    "scan:url": "tsx ./src/cli.ts check-url",
+    "mcp": "tsx ./src/mcp.ts",
+    "gen:baseline": "tsx ./src/baseline/gen-baseline.ts",
+    "typecheck": "tsc --noEmit",
+    "decisions:check": "tsx ./scripts/check-decisions.ts",
+    "check:action-pin": "node ./scripts/check-action-pin.mjs",
+    "test": "vitest run",
+    "//test:e2e": "Rendered-DOM e2e (real Chromium). Excluded from `test`. CI must run `npx playwright install chromium` first.",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "matrix:discover": "tsx experiments/stack-matrix/discover.ts",
+    "matrix:run": "tsx experiments/stack-matrix/run.ts",
+    "matrix:report": "tsx experiments/stack-matrix/report.ts",
+    "matrix:baseline": "tsx experiments/stack-matrix/baseline.ts",
+    "matrix:check": "tsx experiments/stack-matrix/check.ts",
+    "android:matrix:run": "tsx experiments/android-matrix/run.ts",
+    "android:matrix:baseline": "tsx experiments/android-matrix/baseline.ts",
+    "android:matrix:check": "tsx experiments/android-matrix/check.ts"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@binclusive/a11y-contract": "^0.4.1",
+    "@binclusive/code-graph": "^0.0.1",
+    "@effect/cli": "0.75.2",
+    "@effect/platform": "0.96.1",
+    "@effect/platform-node": "0.107.0",
+    "@modelcontextprotocol/sdk": "1.26.0",
+    "@shopify/liquid-html-parser": "^2.9.2",
+    "@typescript-eslint/parser": "^8.21.0",
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "effect": "3.21.3",
+    "eslint": "^9.18.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "playwright": "^1.50.1",
+    "ts-morph": "28.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "5.8.3",
+    "zod": "4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.5",
+    "fast-check": "^4.8.0",
+    "vitest": "3.0.7"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

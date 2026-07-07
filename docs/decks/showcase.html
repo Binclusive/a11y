@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en" data-theme="eng">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>a11y-checker — live on real code (showcase)</title>
+  <meta name="description" content="The a11y-checker run cold on two popular open-source projects — Ant Design Pro and Horizon UI — with the real findings and zero false positives." />
+  <link rel="stylesheet" href="deck.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to current slide</a>
+  <div class="sr-only" role="status" aria-live="polite" data-live></div>
+
+  <main class="deck" id="main">
+
+    <!-- 1 · TITLE -->
+    <section class="slide slide--title" data-title="Live on real code" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">a11y-checker</span>
+        <span class="slide__top-right"><span>live showcase</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="title-mark reveal"><b>Binclusive</b> · run cold on real projects</p>
+        <h1 class="headline reveal">Live on <em>real</em> code.</h1>
+        <p class="subhead reveal">Two popular projects. Real findings. Nothing configured.</p>
+        <div class="pills reveal">
+          <span class="pill"><b>150</b> files</span>
+          <span class="pill"><b>44</b> findings</span>
+          <span class="pill"><b>0</b> false positives</span>
+        </div>
+      </div>
+      <footer class="slide__foot">
+        <span>Press <b>→</b> to advance · <b>O</b> for contents</span>
+        <span><b data-counter-current>01</b> / <span data-counter-total>11</span></span>
+      </footer>
+    </section>
+
+    <!-- 2 · THE SETUP -->
+    <section class="slide" data-title="We ran it cold" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">The setup</span>
+        <span class="slide__top-right"><span>nothing up our sleeve</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">fresh clones, zero config</p>
+        <h2 class="title-2 reveal" style="margin-bottom:var(--gap)">We cloned two popular projects and ran it cold.</h2>
+        <div class="repo-grid reveal">
+          <span class="repo"><b>Ant Design Pro</b><span>Ant Design · 71 files</span></span>
+          <span class="repo"><b>Horizon UI</b><span>Chakra · 79 files</span></span>
+        </div>
+        <p class="spoken reveal" style="margin-top:var(--gap)">No special setup, no configuration, no cherry-picking. We took two well-known open-source admin projects — fresh clones, straight off GitHub — and pointed the checker at their source. Both are built on a trusted, well-regarded component library. Here's exactly what came back.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>02</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 3 · ANTD INTRO + COVERAGE -->
+    <section class="slide" data-title="Ant Design Pro — 71 files" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">Project 1 · Ant Design Pro</span>
+        <span class="slide__top-right"><span>a top React admin framework</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">scanned cold</p>
+        <h2 class="title-2 reveal" style="margin-bottom:var(--gap)">37 real findings. Zero false positives.</h2>
+        <div class="statgrid reveal">
+          <div class="stat"><div class="stat__n">71</div><div class="stat__l">component files scanned</div></div>
+          <div class="stat"><div class="stat__n">37</div><div class="stat__l">accessibility findings — all true positives</div></div>
+          <div class="stat"><div class="stat__n">40</div><div class="stat__l">trusted Ant Design components (+ 42 icons, 14 layout) — nothing to flag</div></div>
+        </div>
+        <p class="spoken reveal" style="margin-top:var(--gap)">Ant Design Pro is one of the most widely used React admin frameworks anywhere, built on the Ant Design library. Most of the screen is Ant Design's own trusted components, plus icons and layout — nothing to check there. The checker found thirty-seven genuine issues in what's left, and not one false alarm.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>03</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 4 · ANTD HERO CATCH -->
+    <section class="slide" data-title="Antd — the icon-only button" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">Ant Design Pro · the catch</span>
+        <span class="slide__top-right"><span>a real bug behind a "trusted" button</span></span>
+      </header>
+      <div class="slide__body">
+        <div class="split">
+          <div>
+            <p class="kicker reveal">exactly what the second pass is for</p>
+            <h2 class="title-2 reveal">An icon-only menu button with no name.</h2>
+            <p class="spoken reveal">An Ant Design button with nothing but an ellipsis icon inside — the "more options" menu. A screen reader announces it as just <span class="amber">"button."</span> Ant Design is trusted, so a structural linter skips it entirely.</p>
+            <p class="spoken reveal">The content check caught it — and the corpus says this exact failure shows up at <strong>21 of our 26 audited companies</strong>. The most common bug on the real web, found on a trusted component, cold.</p>
+          </div>
+          <div class="reveal">
+            <div class="specimen" role="img" aria-label="Real source from Ant Design Pro, profile/advanced/index.tsx line 90: an Ant Design Button containing only an EllipsisOutlined icon, with no accessible name. WCAG 4.1.2, very common at 21 of 26 audited orgs.">
+              <div class="specimen__bar"><span class="glyphs"><i></i><i></i><i></i></span><span>pages/profile/advanced/index.tsx:90</span></div>
+<pre class="specimen__code"><span class="tok-punc">&lt;</span><span class="tok-tag">Button</span><span class="tok-punc">&gt;</span>
+  <span class="tok-punc">&lt;</span><span class="tok-tag">EllipsisOutlined</span> <span class="tok-punc">/&gt;</span>
+<span class="tok-punc">&lt;/</span><span class="tok-tag">Button</span><span class="tok-punc">&gt;</span></pre>
+              <div class="specimen__annot"><span class="arrow">↳</span><span>icon-only · no accessible name</span><span class="sc">WCAG 4.1.2</span></div>
+            </div>
+            <div class="pills" style="margin-top:1rem">
+              <span class="pill"><b>VERY COMMON</b> · 21/26 orgs</span>
+              <span class="pill">fix: add an aria-label</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>04</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 5 · ANTD THE REST -->
+    <section class="slide" data-title="Antd — the rest" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">Ant Design Pro · the rest</span>
+        <span class="slide__top-right"><span>the other 36</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">every one a real issue</p>
+        <h2 class="title-2 reveal" style="margin-bottom:var(--gap)">Plus 4 unlabeled inputs and 32 links acting as buttons.</h2>
+        <ul class="evlist reveal" style="list-style:none;margin:0;padding:0">
+          <li class="evrow"><span class="evrow__mark">4×</span><span><span class="evrow__code">enforce/input-no-name</span> — form inputs with no label, including a search box named only by its placeholder<span class="evrow__where">WCAG 1.3.1 / 3.3.2 · placeholders aren't names to a screen reader</span></span></li>
+          <li class="evrow"><span class="evrow__mark">32×</span><span><span class="evrow__code">anchor-is-valid</span> — links wired up as buttons, with no real destination<span class="evrow__where">WCAG 2.1.1 · keyboard + semantics</span></span></li>
+        </ul>
+        <p class="spoken reveal" style="margin-top:var(--gap)">The other findings are just as real. Four form inputs with no label — including a search box that leans only on a placeholder, which screen readers don't treat as a name. And thirty-two links wired up to act as buttons, with no real destination. Every one a genuine issue, every one blocking by the default policy, zero false alarms.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>05</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 6 · HORIZON INTRO + COVERAGE -->
+    <section class="slide" data-title="Horizon UI — 79 files" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">Project 2 · Horizon UI</span>
+        <span class="slide__top-right"><span>a popular Chakra admin template</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">a different library, same story</p>
+        <h2 class="title-2 reveal" style="margin-bottom:var(--gap)">79 files. 7 findings. Still zero false positives.</h2>
+        <div class="statgrid reveal">
+          <div class="stat"><div class="stat__n">79</div><div class="stat__l">component files scanned</div></div>
+          <div class="stat"><div class="stat__n">7</div><div class="stat__l">findings — all true positives</div></div>
+          <div class="stat"><div class="stat__n">41</div><div class="stat__l">trusted Chakra components — the library handles these</div></div>
+        </div>
+        <p class="spoken reveal" style="margin-top:var(--gap)">Horizon UI is a popular admin template built on Chakra — a completely different component library from the first project. The checker detected the stack correctly with no help, leaned on Chakra's forty-one trusted components, and surfaced seven real issues. One of them is the cleanest example in the whole deck.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>06</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 7 · HORIZON HERO CATCH -->
+    <section class="slide" data-title="Horizon — the trusted Chakra input" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">Horizon UI · the catch</span>
+        <span class="slide__top-right"><span>"trusted" wasn't safe</span></span>
+      </header>
+      <div class="slide__body">
+        <div class="split">
+          <div>
+            <p class="kicker reveal">the cleanest recall win</p>
+            <h2 class="title-2 reveal">A trusted Chakra search box, with no label.</h2>
+            <p class="spoken reveal">This is Chakra's own <code>Input</code> — a trusted, well-built component — used as the site search. It has a placeholder, "Search…", and nothing else. No label, no <code>aria-label</code>, no id tying it to one. A screen-reader user lands on it and hears <span class="amber">nothing about what it's for</span>.</p>
+            <p class="spoken reveal">Chakra guarantees the input renders correctly. It can't guarantee you gave it a name. <strong>The content check did what the library can't.</strong></p>
+          </div>
+          <div class="reveal">
+            <div class="specimen" role="img" aria-label="Real source from Horizon UI, components/navbar/searchBar/SearchBar.tsx line 37: a trusted Chakra Input used as a search box with only a placeholder and no label, aria-label, or id. WCAG 1.3.1 and 3.3.2, very common at 22 of 26 audited orgs.">
+              <div class="specimen__bar"><span class="glyphs"><i></i><i></i><i></i></span><span>components/navbar/searchBar/SearchBar.tsx:37</span></div>
+<pre class="specimen__code"><span class="tok-punc">&lt;</span><span class="tok-tag">Input</span>
+  <span class="tok-attr">variant</span><span class="tok-punc">=</span><span class="tok-str">"search"</span>
+  <span class="tok-attr">placeholder</span><span class="tok-punc">=</span><span class="tok-str">"Search..."</span>
+<span class="tok-punc">/&gt;</span>
+<span class="tok-comment">// no aria-label · no &lt;label&gt; · no id</span></pre>
+              <div class="specimen__annot"><span class="arrow">↳</span><span>placeholder is not a name</span><span class="sc">WCAG 1.3.1</span></div>
+            </div>
+            <div class="pills" style="margin-top:1rem">
+              <span class="pill"><b>VERY COMMON</b> · 22/26 orgs</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>07</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 8 · THE SCORECARD -->
+    <section class="slide" data-title="The scorecard" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">The scorecard</span>
+        <span class="slide__top-right"><span>both runs, side by side</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">fresh clones · zero config · every finding a true positive</p>
+        <h2 class="title-2 reveal" style="margin-bottom:var(--gap)">Two libraries, 150 files, no false alarms.</h2>
+        <table class="data-table reveal">
+          <caption>Stack detected correctly on both, with no configuration.</caption>
+          <thead>
+            <tr>
+              <th scope="col">Project</th>
+              <th scope="col">Library</th>
+              <th scope="col">files</th>
+              <th scope="col">trusted</th>
+              <th scope="col">findings</th>
+              <th scope="col">false pos.</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Ant Design Pro</th><td>Ant Design</td><td class="num">71</td><td class="num">40</td><td class="num">37</td><td class="good">0</td></tr>
+            <tr><th scope="row">Horizon UI</th><td>Chakra</td><td class="num">79</td><td class="num">41</td><td class="num">7</td><td class="good">0</td></tr>
+          </tbody>
+        </table>
+        <p class="spoken reveal" style="margin-top:1.2rem">Two different component libraries, a hundred and fifty files between them, forty-four real findings, and zero false positives — with nothing configured by hand. The checker worked out each stack on its own and trusted each library's primitives, exactly as it should.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>08</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 9 · THE PATTERN -->
+    <section class="slide" data-title="The same gap in both" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">The pattern</span>
+        <span class="slide__top-right"><span>trusted ≠ safe</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">the same gap, two libraries</p>
+        <h2 class="title-2 reveal">Both projects hid a real bug behind a "trusted" component.</h2>
+        <p class="spoken reveal" style="max-width:74ch">An Ant Design button with no name. A Chakra input with no label. Two different libraries, the same kind of bug — and a structural linter waves both of them through, because the component comes from a library it trusts. The library got its own internals right. It said nothing about the content the app passed in.</p>
+        <p class="callout reveal">"Trusted" guarantees the structure. The content check guarantees the name. You need both.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>09</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 10 · THE HONEST READ -->
+    <section class="slide" data-title="The honest read" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">The honest read</span>
+        <span class="slide__top-right"><span>low coverage is partly correct</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">the number that doesn't matter</p>
+        <h2 class="title-2 reveal">"Only 9 elements checked" is the wrong thing to measure.</h2>
+        <p class="spoken reveal">A fair pushback: the checker directly inspected only nine or ten elements per project. Doesn't that mean it's mostly blind? No — and this is the honest part. On a well-built design-system app, most components <em>should</em> be trusted, because the library really does guarantee its own primitives. Counting those as "unscanned" would be the lie.</p>
+        <p class="spoken reveal">The number that matters isn't coverage percentage. It's <strong>did it find the real, app-level bugs without crying wolf</strong>. On both projects, cold, the answer was yes.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>10</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+    <!-- 11 · CLOSE -->
+    <section class="slide slide--title" data-title="The takeaway" aria-roledescription="slide">
+      <header class="slide__top">
+        <span class="slide__tag">The takeaway</span>
+        <span class="slide__top-right"><span>nothing configured</span></span>
+      </header>
+      <div class="slide__body">
+        <p class="kicker reveal">two popular projects, run cold</p>
+        <h2 class="title-1 reveal">44 real bugs. <em>Zero</em> false alarms. Nothing configured.</h2>
+        <p class="spoken reveal">Two of the most popular open-source admin projects, fresh off GitHub, scanned with no setup. Forty-four genuine accessibility issues — including two that the components' own libraries called trusted. Every finding real, every one ready to fix. That's the checker on code we'd never seen.</p>
+        <p class="callout reveal">This is what runs, quietly, every time your AI touches a file.</p>
+      </div>
+      <footer class="slide__foot"><span class="dot">●</span><span><b data-counter-current>11</b> / <span data-counter-total>11</span></span></footer>
+    </section>
+
+  </main>
+
+  <!-- contents overlay -->
+  <div class="contents" role="dialog" aria-modal="true" aria-labelledby="contents-title">
+    <h2 class="title-2" id="contents-title">Contents</h2>
+    <ol data-contents-list></ol>
+  </div>
+
+  <!-- chrome -->
+  <div class="deck-progress" data-progress aria-hidden="true"></div>
+  <p class="overview-hint" aria-hidden="true"><kbd>O</kbd> contents · <kbd>←</kbd><kbd>→</kbd> move</p>
+  <nav class="deck-nav" aria-label="Slide navigation">
+    <button type="button" data-prev aria-label="Previous slide">←</button>
+    <span class="deck-counter"><b data-counter-current>01</b>/<span data-counter-total>11</span></span>
+    <button type="button" data-next aria-label="Next slide">→</button>
+    <button type="button" data-menu aria-label="Open contents">☰</button>
+  </nav>
+
+  <script src="deck.js"></script>
+</body>
+</html>

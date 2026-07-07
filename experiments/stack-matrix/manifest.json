@@ -1,0 +1,250 @@
+[
+  {
+    "repo": "rickypeng99/yugioh_web",
+    "designSystem": "mui",
+    "defaultBranch": "master",
+    "sha": "b7d2f5e92629f9fa6c224c60cf98b2e93995865a",
+    "stars": 120,
+    "source": "discovered"
+  },
+  {
+    "repo": "agarun/turborepo-vite-starter",
+    "designSystem": "mui",
+    "defaultBranch": "main",
+    "sha": "b806f34e2a467e99033ddd3cb6aac6b4dcb529d6",
+    "stars": 67,
+    "source": "discovered"
+  },
+  {
+    "repo": "jaiarobotics/jaiabot",
+    "designSystem": "mui",
+    "defaultBranch": "2.y",
+    "sha": "1df70c4068c7ade04dc749a9ee0a2da271eb4661",
+    "stars": 36,
+    "source": "discovered"
+  },
+  {
+    "repo": "horizon-ui/horizon-ui-chakra",
+    "designSystem": "chakra",
+    "defaultBranch": "main",
+    "sha": "27a99f9fb391e9da126e91cf109b3afd953fb58b",
+    "stars": 2868,
+    "source": "seed"
+  },
+  {
+    "repo": "corbt/agent.exe",
+    "designSystem": "chakra",
+    "defaultBranch": "main",
+    "sha": "e2440622aa0206b9c9223c776f89cb511bbc9f8b",
+    "stars": 3486,
+    "source": "discovered"
+  },
+  {
+    "repo": "creativetimofficial/purity-ui-dashboard",
+    "designSystem": "chakra",
+    "defaultBranch": "main",
+    "sha": "0cdbec0b17661abd280d3e38fafee8b8a3d81d97",
+    "stars": 533,
+    "source": "discovered"
+  },
+  {
+    "repo": "mantinedev/vite-template",
+    "designSystem": "mantine",
+    "defaultBranch": "master",
+    "sha": "6e895de5f6f27b9b8bf4e3d9c19c10304b93fd7b",
+    "stars": 227,
+    "source": "seed"
+  },
+  {
+    "repo": "BoringBoredom/UEFI-Editor",
+    "designSystem": "mantine",
+    "defaultBranch": "master",
+    "sha": "44e8c9ba4a05dbd6fc4b1c247ed17948b6e58f8d",
+    "stars": 919,
+    "source": "discovered"
+  },
+  {
+    "repo": "vikejs/bati",
+    "designSystem": "mantine",
+    "defaultBranch": "main",
+    "sha": "10ee521892ec5db66def9cd75ec676999e9e8043",
+    "stars": 479,
+    "source": "discovered"
+  },
+  {
+    "repo": "umijs/umi",
+    "designSystem": "antd",
+    "defaultBranch": "master",
+    "sha": "155dc3e52e81daa4de58282364519e252e89218e",
+    "stars": 16030,
+    "source": "discovered"
+  },
+  {
+    "repo": "alibaba/lowcode-demo",
+    "designSystem": "antd",
+    "defaultBranch": "main",
+    "sha": "680a8b4b8f315deed49f88833f488d4de373b857",
+    "stars": 1866,
+    "source": "discovered"
+  },
+  {
+    "repo": "guangqiang-liu/OneM",
+    "designSystem": "antd",
+    "defaultBranch": "master",
+    "sha": "153642984f657bcc696a8b58eb35cf16a0e7312d",
+    "stars": 1376,
+    "source": "discovered"
+  },
+  {
+    "repo": "shadcn-ui/taxonomy",
+    "designSystem": "radix",
+    "defaultBranch": "main",
+    "sha": "298a8857c7128a0d121e7f699dfd729f23b3966d",
+    "stars": 19242,
+    "source": "seed"
+  },
+  {
+    "repo": "steven-tey/precedent",
+    "designSystem": "radix",
+    "defaultBranch": "main",
+    "sha": "3be40205d7cdf56082cd284f07f12251b9208f79",
+    "stars": 5101,
+    "source": "seed"
+  },
+  {
+    "repo": "DarkInventor/easy-ui",
+    "designSystem": "radix",
+    "defaultBranch": "main",
+    "sha": "0bfdd128fcb7c0ec36cc0c77ed0081b4b280ec29",
+    "stars": 609,
+    "source": "discovered"
+  },
+  {
+    "repo": "hathora/builder",
+    "designSystem": "headlessui",
+    "defaultBranch": "develop",
+    "sha": "a4182519ea1e4381def6484ba46a09a16f930769",
+    "stars": 573,
+    "source": "discovered"
+  },
+  {
+    "repo": "Supernova3339/changerawr",
+    "designSystem": "headlessui",
+    "defaultBranch": "master",
+    "sha": "a72f1c9e9084bfbc3cfc61f47fabad2c66243a64",
+    "stars": 282,
+    "source": "discovered"
+  },
+  {
+    "repo": "modagavr/pancake-wizard",
+    "designSystem": "headlessui",
+    "defaultBranch": "main",
+    "sha": "f9d36e6352eb5a05544aaee92a0b56368b67c82e",
+    "stars": 249,
+    "source": "discovered"
+  },
+  {
+    "repo": "antiwork/shortest",
+    "designSystem": "reactAria",
+    "defaultBranch": "main",
+    "sha": "45a8dcfe89992b37ed2dfb1f76618048cff0f45c",
+    "stars": 5612,
+    "source": "discovered"
+  },
+  {
+    "repo": "untitleduico/react",
+    "designSystem": "reactAria",
+    "defaultBranch": "main",
+    "sha": "d97ce86cdf93fa8703c67610acfae5662c62793a",
+    "stars": 1761,
+    "source": "discovered"
+  },
+  {
+    "repo": "jolbol1/jolly-ui",
+    "designSystem": "reactAria",
+    "defaultBranch": "main",
+    "sha": "aac97a84f8e0c2071a5e255c2f6ec190e238c1c2",
+    "stars": 1115,
+    "source": "discovered"
+  },
+  {
+    "repo": "kamp-us/phoenix",
+    "designSystem": "baseui",
+    "defaultBranch": "main",
+    "sha": "083d6048c437ff701eedab755b059ce86ff0d63b",
+    "stars": 8,
+    "source": "seed"
+  },
+  {
+    "repo": "iamzhihuix/skills-manage",
+    "designSystem": "baseui",
+    "defaultBranch": "main",
+    "sha": "467d0423beaf71a31c520d4e3795ec88acae5ab2",
+    "stars": 1988,
+    "source": "discovered"
+  },
+  {
+    "repo": "thomasgauvin/claude-agent-sdk-in-cloudflare-containers",
+    "designSystem": "baseui",
+    "defaultBranch": "main",
+    "sha": "12f81a1205b086b596bb06f2b983c1cb993c1844",
+    "stars": 44,
+    "source": "discovered"
+  },
+  {
+    "repo": "olros/stats",
+    "designSystem": "radix",
+    "defaultBranch": "main",
+    "sha": "afb5dc7d00bbeff205187b1ce579966027789888",
+    "stars": 5,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "patdx/edge-cms",
+    "designSystem": "remix",
+    "defaultBranch": "main",
+    "sha": "0b30389e5117c4a8bf1e17e2f2146348c269cb1d",
+    "stars": 3,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "sjohnston00/sorted",
+    "designSystem": "headlessui",
+    "defaultBranch": "main",
+    "sha": "14a962c6cc28cdefa76c96dda660f764352baf31",
+    "stars": 0,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "googleanalytics/ga-dev-tools",
+    "designSystem": "mui",
+    "defaultBranch": "main",
+    "sha": "14217f42eca6358cfa973ce0e65bc128038ba42e",
+    "stars": 1531,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "EmaSuriano/gatsby-starter-mate",
+    "designSystem": "gatsby",
+    "defaultBranch": "master",
+    "sha": "c2eaec646179faac082a1b2d2216bece547b25f2",
+    "stars": 543,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "elastic/synthetics-recorder",
+    "designSystem": "cra",
+    "defaultBranch": "main",
+    "sha": "cbe360ccffb288a5e5bbb2413283bed2b6c3ea22",
+    "stars": 32,
+    "source": "framework-discovered"
+  },
+  {
+    "repo": "StenAL/new-tab",
+    "designSystem": "cra",
+    "defaultBranch": "main",
+    "sha": "52b1a9a87f4ca906c204f4a300b339f2a7ecc3b0",
+    "stars": 4,
+    "source": "framework-discovered"
+  }
+]

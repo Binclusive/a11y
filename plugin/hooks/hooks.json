@@ -1,0 +1,17 @@
+{
+  "description": "Auto-whisper accessibility findings the instant the AI edits a .tsx file",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx",
+            "args": ["-y", "@binclusive/a11y", "hook"]
+          }
+        ]
+      }
+    ]
+  }
+}

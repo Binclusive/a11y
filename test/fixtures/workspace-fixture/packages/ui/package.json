@@ -1,0 +1,10 @@
+{
+  "name": "@acme/ui",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./components/button": "./src/components/button/index.ts",
+    "./components/star-barrel": "./src/components/star-barrel.ts",
+    "./*": "./src/*.tsx"
+  }
+}

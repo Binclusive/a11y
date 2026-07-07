@@ -1,0 +1,3 @@
+# Cloned OSS repos and raw per-repo scan results are reproducible — never commit them.
+.cache/
+results/

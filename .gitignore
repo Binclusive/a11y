@@ -1,0 +1,33 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.turbo/
+coverage/
+
+# Third-party repo clones pulled by the stack-matrix / recall experiments. These are
+# vendored working copies of other people's code — never part of the OSS package.
+.cache/
+**/.cache/
+
+# Compiled Swift build objects (SwiftPM). Package.swift + Package.resolved ARE tracked;
+# the build tree is not.
+.build/
+**/.build/
+.swiftpm/
+
+# python bytecode (demo cast generators)
+__pycache__/
+*.pyc
+
+# Raw audit-corpus exports + the extracted clustering worklists carry customer
+# identifiers (org_id/project_id/elements/urls + raw prose). They are READ by the
+# distiller and must NEVER be committed — only the anonymized, k>=3-gated
+# data/clusters/clusters-*.json and data/corpus/* outputs are. (Privacy boundary;
+# previously convention-only and unenforced.)
+raw-export*.json
+*-raw-export.json
+data/clusters/_worklist-*.json
+
+# Raw scan-output captures against named customer sites (demo dumps).
+demo/**/raw-*.txt
