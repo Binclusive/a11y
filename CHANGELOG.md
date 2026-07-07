@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/Binclusive/a11y/compare/v0.1.3...v0.1.4) (2026-07-07)
+
+
+### Bug Fixes
+
+* **cli:** single-source CLI/MCP version from package.json + auto-bump plugin.json ([#175](https://github.com/Binclusive/a11y/issues/175)) ([#233](https://github.com/Binclusive/a11y/issues/233)) ([62f7ced](https://github.com/Binclusive/a11y/commit/62f7ced447738ee995a8ac9404a6bd86b347c1ed))
+
 ## [0.1.3](https://github.com/Binclusive/a11y/compare/v0.1.2...v0.1.3) (2026-07-07)
 
 

@@ -19,7 +19,7 @@ jobs:
         with:
           fetch-depth: 0
       - id: a11y
-        uses: Binclusive/a11y@v0.1.3 # x-release-please-version
+        uses: Binclusive/a11y@v0.1.4 # x-release-please-version
         with:
           # --- AI enrichment lane (BYOK) ---------------------------------------
           # Your OWN provider key, from a repo secret. Provider-agnostic; no

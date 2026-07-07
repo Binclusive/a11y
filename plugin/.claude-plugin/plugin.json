@@ -1,8 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "binclusive-a11y",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Local accessibility checker for .tsx — an MCP server (ask the checker) plus a PostToolUse auto-whisper hook (the checker speaks up the instant the AI edits a file). Wraps eslint-plugin-jsx-a11y with axe-core's published rule catalog.",
-  "author": { "name": "Binclusive" },
+  "author": {
+    "name": "Binclusive"
+  },
   "homepage": "https://github.com/Binclusive/a11y"
 }

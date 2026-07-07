@@ -35,7 +35,7 @@ runs:
   # `:<version>-browser` alias is still published (back-compat), so older refs keep
   # resolving. The action-pin drift gate enforces the exact form; a consumer at ref
   # v<version> resolves this exact digest.
-  image: "docker://ghcr.io/binclusive/a11y:browser-0.1.3" # x-release-please-version
+  image: "docker://ghcr.io/binclusive/a11y:browser-0.1.4" # x-release-please-version
   # A Docker action auto-injects each input as INPUT_<NAME> — the entrypoint reads
   # INPUT_SCAN_URL to branch into `check-url`. The token is the one value the runner
   # does not pass by default, so map it explicitly like the static action.
