@@ -38,18 +38,50 @@ function isGitRepo(workspace: string): boolean {
   }
 }
 
-function gitDiffNames(workspace: string, baseSha: string, headSha: string): string[] {
+/**
+ * Names touched between base and head, honoring extra diff flags (deletion
+ * filter, rename detection).
+ *
+ * Prefers the THREE-dot `base...head` range — the PR-diff semantic GitHub's own
+ * PR view uses (changes since the merge-base, excluding commits added to base
+ * after the branch point). On a SHALLOW checkout the merge-base commit is usually
+ * absent, so three-dot fails hard with "no merge base" (#198). Rather than swallow
+ * that as an empty scope — the silent-empty-green trap: 0 files → 0 findings → a
+ * GREEN check on a scan that saw NOTHING — degrade to the TWO-dot `base..head`
+ * tree comparison, which needs only the two endpoint commits (both guaranteed
+ * present — `entrypoint.sh` self-fetches the base before scoping). Two-dot is a
+ * strict superset of the three-dot change set, so it can only OVER-scan (extra
+ * files a drifted base changed), never HIDE a PR-touched file — the safe
+ * direction for an advisory gate.
+ */
+function gitDiffRange(
+  workspace: string,
+  baseSha: string,
+  headSha: string,
+  extraArgs: readonly string[],
+): string[] {
+  const run = (range: string): string =>
+    execFileSync("git", ["-C", workspace, "diff", ...extraArgs, "--name-only", range], {
+      encoding: "utf8",
+    });
+  let out: string;
   try {
-    const out = execFileSync(
-      "git",
-      ["-C", workspace, "diff", "--name-only", `${baseSha}...${headSha}`],
-      { encoding: "utf8" },
-    );
-    return out.split("\n").filter((p) => p !== "");
+    out = run(`${baseSha}...${headSha}`);
   } catch {
-    // Advisory gate: a git failure is an empty scope, never a throw.
-    return [];
+    try {
+      out = run(`${baseSha}..${headSha}`);
+    } catch {
+      // Advisory gate: both ranges failed (e.g. head unresolvable) is an empty
+      // scope, never a throw. A missing BASE is caught earlier, and loud, in
+      // entrypoint.sh — this path never sees a bad base.
+      return [];
+    }
   }
+  return out.split("\n").filter((p) => p !== "");
+}
+
+function gitDiffNames(workspace: string, baseSha: string, headSha: string): string[] {
+  return gitDiffRange(workspace, baseSha, headSha, []);
 }
 
 /**
@@ -63,17 +95,7 @@ function gitDiffNames(workspace: string, baseSha: string, headSha: string): stri
  * Paths are repo-root-relative, forward-slash (git's native output).
  */
 function gitDeletedNames(workspace: string, baseSha: string, headSha: string): string[] {
-  try {
-    const out = execFileSync(
-      "git",
-      ["-C", workspace, "diff", "--diff-filter=D", "--find-renames", "--name-only", `${baseSha}...${headSha}`],
-      { encoding: "utf8" },
-    );
-    return out.split("\n").filter((p) => p !== "");
-  } catch {
-    // Advisory gate: a git failure is an empty deletion set, never a throw.
-    return [];
-  }
+  return gitDiffRange(workspace, baseSha, headSha, ["--diff-filter=D", "--find-renames"]);
 }
 
 /**

@@ -75,6 +75,38 @@ GATE_ARGS=""
 [ -n "$GATE_ARGS" ] && log "blocking gate ON:$GATE_ARGS" || log "blocking gate: off (default non-blocking)"
 GATE_EXIT=0
 
+# ---- 0. Ensure the diff base is in local history (self-fetch, #198) --------
+# A shallow checkout (actions/checkout@v4 default `fetch-depth: 1`) does NOT
+# bring the PR's base commit into local history, so `git diff base...head`
+# resolves to an EMPTY range — 0 changed files → 0 findings → a GREEN check on a
+# scan that saw NOTHING. That is the silent-empty-green failure (#198): the diff
+# scoper below catches the git error and returns an empty list, indistinguishable
+# from a genuinely-empty diff. Make it unrepresentable HERE, before the scope
+# runs: when a BASE_SHA is set (and no explicit CHANGED_FILES override — that list
+# bypasses git entirely), guarantee the base commit is present, fetching it if
+# not; if it is STILL unresolvable, FAIL LOUD rather than proceed to a 0-file
+# scan. A genuinely-empty diff (base present, 0 relevant files) stays a valid
+# green — only an UNRESOLVABLE base is the loud red. `cat-file -e` is the signal
+# that distinguishes the two: base-in-history vs bad-revision.
+if [ -z "${CHANGED_FILES:-}" ] && [ -n "${BASE_SHA:-}" ]; then
+  if ! git -C "$WORKSPACE" cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+    log "diff base $BASE_SHA not in local history (shallow checkout?) — self-fetching"
+    # Try the bare SHA first. Some git servers reject fetch-by-sha
+    # (uploadpack.allowAnySHA1InWant off), so fall back to the base ref/branch the
+    # PR event carried (GITHUB_BASE_REF), then re-check — a ref-tip that has since
+    # advanced past BASE_SHA still fails the re-check and falls through to the
+    # loud-fail below, which is the safe direction (never silent-green).
+    git -C "$WORKSPACE" fetch --depth=1 origin "$BASE_SHA" 2>/dev/null \
+      || { [ -n "${GITHUB_BASE_REF:-}" ] && git -C "$WORKSPACE" fetch --depth=1 origin "$GITHUB_BASE_REF" 2>/dev/null; } \
+      || true
+  fi
+  if ! git -C "$WORKSPACE" cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+    log "ERROR: cannot resolve diff base $BASE_SHA — the base commit is not in history. On shallow checkouts set fetch-depth: 0 (or ensure the base ref is fetched)."
+    exit 1
+  fi
+  log "diff base $BASE_SHA present in local history"
+fi
+
 # ---- 1. Resolve the set of changed .tsx files -----------------------------
 # Delegated to the engine's ONE diff-scoping module (src/diff-scope.ts) via
 # bin/diff-scope.mjs, so the Action and the engine share a single scoper instead
