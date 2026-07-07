@@ -125,15 +125,36 @@ pipelines:
 **Gotchas:**
 - `BITBUCKET_PR_*` are only set under a `pull-requests:` pipeline; a `default`/`branches:` pipeline leaves them unset.
 
+## Workspace / checkout directory
+
+A step that hands the repo to a **containerized** tool needs the absolute path
+where the runner cloned it — to bind-mount that directory into the container, or
+to point the tool at the working tree. This is a separate predefined variable
+from the commit/branch/PR set above, and every system names it differently.
+
+- GitLab: **`CI_PROJECT_DIR`** — full path the repository is cloned into and the job runs from.
+- CircleCI: **`CIRCLE_WORKING_DIRECTORY`** — the job's `working_directory` (default `~/project`).
+- Buildkite: **`BUILDKITE_BUILD_CHECKOUT_PATH`** — where the agent checked out the code for this build.
+- Jenkins: **`WORKSPACE`** — absolute path of the workspace assigned to the build on the node.
+- Bitbucket: **`BITBUCKET_CLONE_DIR`** — absolute path of the directory the repository is cloned into.
+
+**Gotchas:**
+- CircleCI's is the only one that can be `~`-relative (default `~/project`). The
+  shell expands `$CIRCLE_WORKING_DIRECTORY` at runtime, but CircleCI does **not**
+  expand `~` inside a YAML path key — use an absolute path there.
+- When the tool runs *inside* the image (rather than on the host), it already
+  starts in this directory; the variable matters most when a host-side step must
+  mount or reference the checkout — see [run-docker-image.md](./run-docker-image.md).
+
 ## Decision guide
 
-| System | Commit | Branch | PR number | Base branch |
-|---|---|---|---|---|
-| GitLab | `CI_COMMIT_SHA` | `CI_COMMIT_REF_NAME` | `CI_MERGE_REQUEST_IID` | `CI_MERGE_REQUEST_TARGET_BRANCH_NAME` |
-| CircleCI | `CIRCLE_SHA1` | `CIRCLE_BRANCH` | `CIRCLE_PULL_REQUEST` (URL) | **none — derive** |
-| Buildkite | `BUILDKITE_COMMIT` | `BUILDKITE_BRANCH` | `BUILDKITE_PULL_REQUEST` | `BUILDKITE_PULL_REQUEST_BASE_BRANCH` |
-| Jenkins | `GIT_COMMIT` | `GIT_BRANCH` | `CHANGE_ID` | `CHANGE_TARGET` |
-| Bitbucket | `BITBUCKET_COMMIT` | `BITBUCKET_BRANCH` | `BITBUCKET_PR_ID` | `BITBUCKET_PR_DESTINATION_BRANCH` |
+| System | Commit | Branch | PR number | Base branch | Checkout dir |
+|---|---|---|---|---|---|
+| GitLab | `CI_COMMIT_SHA` | `CI_COMMIT_REF_NAME` | `CI_MERGE_REQUEST_IID` | `CI_MERGE_REQUEST_TARGET_BRANCH_NAME` | `CI_PROJECT_DIR` |
+| CircleCI | `CIRCLE_SHA1` | `CIRCLE_BRANCH` | `CIRCLE_PULL_REQUEST` (URL) | **none — derive** | `CIRCLE_WORKING_DIRECTORY` |
+| Buildkite | `BUILDKITE_COMMIT` | `BUILDKITE_BRANCH` | `BUILDKITE_PULL_REQUEST` | `BUILDKITE_PULL_REQUEST_BASE_BRANCH` | `BUILDKITE_BUILD_CHECKOUT_PATH` |
+| Jenkins | `GIT_COMMIT` | `GIT_BRANCH` | `CHANGE_ID` | `CHANGE_TARGET` | `WORKSPACE` |
+| Bitbucket | `BITBUCKET_COMMIT` | `BITBUCKET_BRANCH` | `BITBUCKET_PR_ID` | `BITBUCKET_PR_DESTINATION_BRANCH` | `BITBUCKET_CLONE_DIR` |
 
 ## Rules
 
