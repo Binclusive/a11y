@@ -246,7 +246,7 @@ artifact:
 
 ```sh
 docker run --rm -v "$PWD:/workspace" -w /workspace -e A11Y_PLATFORM=null \
-  ghcr.io/binclusive/a11y-checker:latest \
+  ghcr.io/binclusive/a11y:latest \
   check /workspace/src --ci --format sarif > a11y.sarif
 ```
 
