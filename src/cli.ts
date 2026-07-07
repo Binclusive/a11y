@@ -18,7 +18,7 @@ import { collectUnityFindings } from "./unity-findings";
 import { type FindingProvenance, scan } from "./core";
 import { type Evidence, type EnrichedFinding, enrichAll, evidenceImpact, resolveDisplay } from "./evidence";
 import { runHookCli } from "./hook";
-import { phoneHome } from "./phone-home";
+import { type PhoneHomeDeps, phoneHome } from "./phone-home";
 import { formatSarif } from "./sarif";
 import {
   GATE_OFF,
@@ -509,8 +509,16 @@ function normalizeTarget(target: string): string {
  * selectors instead of source lines. This is the source-less path — it inspects
  * what actually ships, so it covers non-React pages and anything the static
  * .tsx scan can't see (server-rendered markup, third-party widgets, runtime DOM).
+ *
+ * The optional {@link PhoneHomeDeps} overrides mirror `runCheck`'s `agentOverrides`
+ * seam: the CLI handler never passes them (phone-home resolves its config + fetch
+ * from the env), but the behavioral tracer test injects a stub `fetch` to prove a
+ * real rendered-URL finding reaches the wire as a page-shaped contract.
  */
-async function runCheckUrl(url: string): Promise<void> {
+export async function runCheckUrl(
+  url: string,
+  phoneHomeOverrides: Partial<PhoneHomeDeps> = {},
+): Promise<void> {
   const target = normalizeTarget(url);
   console.log(`a11y-checker — rendering ${target} and running axe-core\n`);
 
@@ -536,6 +544,21 @@ async function runCheckUrl(url: string): Promise<void> {
     groupKey: (f) => f.ruleId,
     groupHeader: (ruleId) => ruleId,
     formatItem: (f) => formatUrlFinding(f),
+  });
+
+  // OPTIONAL, non-blocking phone-home (#2335): route the rendered-URL findings
+  // through the SAME emit seam the static `check --json` path uses. Inside
+  // `phoneHome`, `toFindingPayloadLenient` → `resolveLocations` branches each
+  // `^https?://` finding to the canonical page-shaped `{ location: { kind: "page",
+  // url }, … }` contract and POSTs it when the CI env carries a `b8e_` token +
+  // org/project. Fully env-gated, swallows its own failures, and never touches the
+  // exit code the gate above set. The scanned page IS the scanned target — the
+  // same `url` vocabulary platform-side scope-reconcile keys on (#2166). `root` is
+  // the cwd: page findings resolve their location from the URL, not `root`, and a
+  // URL scan analyzes no source files (`scannedPaths` stays the safe empty set).
+  await phoneHome(findings, process.cwd(), process.env, {
+    scanTargets: () => [target],
+    ...phoneHomeOverrides,
   });
 }
 
