@@ -1,0 +1,57 @@
+# Browser-capable CI image for the @binclusive/a11y engine's URL/render path
+# (`check-url` → axe-core over a live page). The static image (Dockerfile) strips
+# playwright/@axe-core to stay slim for the source-only `check`; this variant is
+# the opposite trade — it KEEPS the browser lane and ships a real Chromium so a
+# URL scan can actually run. Consumed only by the dedicated url-scan action
+# (action-url.yml, pinned to :<version>-browser). See issue #2336.
+
+# Base is Debian (node:20), NOT the static image's node:20-alpine: Playwright's
+# bundled Chromium is a glibc build and does not run on Alpine/musl, and
+# `playwright install --with-deps` only resolves the OS libraries on Debian/Ubuntu.
+# The static path stays on Alpine; the browser path pays the glibc cost by design.
+
+# ---- deps: resolve the FULL production dependency closure (browser lane kept) ----
+FROM node:20 AS deps
+
+ENV CI=1
+
+# lockfileVersion 9.0 → pnpm 9.
+RUN corepack enable && corepack prepare pnpm@9 --activate
+
+WORKDIR /engine
+
+# --prod drops vitest/fast-check/@types (tsx runs TS without type-checking). Unlike
+# the static image we do NOT strip playwright/@axe-core afterwards — the `check-url`
+# path imports them at runtime. The Chromium browser binary itself is fetched in the
+# runtime stage via `playwright install`, so the npm install stays browser-less here.
+COPY package.json pnpm-lock.yaml ./
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pnpm install --prod --frozen-lockfile
+
+# ---- runtime: final image with Chromium ----
+FROM node:20
+
+ENV CI=1
+
+WORKDIR /engine
+
+# git         — the entrypoint diffs BASE..HEAD to find changed .tsx files.
+# ca-certs    — HTTPS to the GitHub REST API when posting review comments.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# The resolved runtime deps (playwright/@axe-core included) cross the stage boundary.
+COPY --from=deps /engine/node_modules ./node_modules
+
+# Engine sources + the CI wrapper. .dockerignore keeps node_modules, git history,
+# docs, and experiments out so the copy stays small.
+COPY . .
+RUN chmod +x /engine/entrypoint.sh
+
+# Install the Chromium build the `check-url` path renders with, plus its OS library
+# dependencies (`--with-deps`). This is the whole reason the browser variant exists —
+# the static image deliberately never fetches it. Pinned to the one browser the
+# engine uses (chromium) to keep the layer minimal.
+RUN npx playwright install --with-deps chromium
+
+ENTRYPOINT ["/engine/entrypoint.sh"]
