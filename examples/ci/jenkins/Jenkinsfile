@@ -40,6 +40,10 @@ pipeline {
           # default branch; head = GIT_COMMIT. checkout-depth.md: Jenkins clones
           # full by default, so a plain fetch of the base ref is enough.
           BASE_BRANCH="${CHANGE_TARGET:-$A11Y_DEFAULT_BRANCH}"
+          # We run as root (`-u root:root`) over a workspace owned by the node user;
+          # this fetch precedes the entrypoint, so mark the dir safe here too or git
+          # aborts with "detected dubious ownership".
+          git config --global --add safe.directory "$WORKSPACE"
           git fetch --no-tags origin "$BASE_BRANCH"
           export GITHUB_WORKSPACE="$WORKSPACE"
           export BASE_SHA="origin/$BASE_BRANCH"

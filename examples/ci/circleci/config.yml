@@ -46,7 +46,9 @@ jobs:
 workflows:
   build:
     jobs:
-      - a11y:
+      # Bare string job reference (not `- a11y:` with a null mapping) — the only
+      # keys we'd add are commented out, and a mapping with no live value misparses.
+      - a11y
           # secrets-and-env.md: optional phone-home. Create a Context (Org
           # Settings -> Contexts) holding B8E_TOKEN (masked) and attach it here;
           # a context var only reaches a job whose workflow entry names it. Omit

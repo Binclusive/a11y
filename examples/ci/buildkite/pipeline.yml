@@ -26,6 +26,9 @@ steps:
       # ci-context.md: base = BUILDKITE_PULL_REQUEST_BASE_BRANCH on a PR build,
       # else the default branch; head = BUILDKITE_COMMIT.
       BASE_BRANCH="${BUILDKITE_PULL_REQUEST_BASE_BRANCH:-$A11Y_DEFAULT_BRANCH}"
+      # The docker plugin runs this as root over a checkout owned by the agent user;
+      # without this git aborts the fetch with "detected dubious ownership".
+      git config --global --add safe.directory "$BUILDKITE_BUILD_CHECKOUT_PATH"
       # checkout-depth.md: fetch the base ref (unshallow first if the agent cloned
       # shallow) so the diff can resolve.
       git fetch --no-tags --unshallow origin "$BASE_BRANCH" 2>/dev/null || git fetch --no-tags origin "$BASE_BRANCH"
@@ -43,8 +46,10 @@ steps:
           image: "ghcr.io/binclusive/a11y:0.1.1"
           # secrets-and-env.md: Buildkite is the outlier — NO managed secret store.
           # The agent injects B8E_TOKEN via an environment / pre-command hook (or
-          # Vault/S3); propagate it into the container to enable optional phone-home.
-          # Omit for a fully-local scan.
-          propagate-environment: true
+          # Vault/S3). Omit for a fully-local scan.
+          #
+          # Explicit allowlist only — an env var crosses into the container iff it's
+          # named below. NOT `propagate-environment: true`, which forwards the ENTIRE
+          # agent environment (every secret the agent holds) — a leak surface.
           environment:
             - "B8E_TOKEN"
