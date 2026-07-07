@@ -40,7 +40,7 @@ jobs:
       # Cache the resolved swift-syntax checkout + build artifacts to keep the run
       # fast; keyed on the pinned dependency graph (Package.resolved).
       - name: Cache SwiftPM build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: swift/A11ySwiftScan/.build
           key: swiftpm-${{ runner.os }}-${{ hashFiles('swift/A11ySwiftScan/Package.resolved') }}
