@@ -21,7 +21,6 @@ import { runHookCli } from "./hook";
 import { type PhoneHomeDeps, phoneHome } from "./phone-home";
 import { formatSarif } from "./sarif";
 import {
-  GATE_ADVISORY,
   GATE_OFF,
   type GateConfig,
   gateExitCode,
@@ -471,6 +470,37 @@ function renderReport(
 }
 
 /**
+ * The ONE report+gate path every stack runner shares (issue #176). A machine
+ * format routes through {@link emitFindings} (SARIF / JSON + phone-home); `text`
+ * routes through the human {@link renderReport}. BOTH branches derive the exit
+ * code from the SAME `gate` on `ctx` (via `gateExitCode`), so a stack scan's exit
+ * is identical across text / --json / --sarif and honors --fail-on /
+ * --max-violations / --ci everywhere. The old format-dependent split (advisory
+ * exit on the machine branch, block-gated exit on the text branch) is
+ * unrepresentable here: there is one gate, threaded once.
+ */
+async function reportStack(
+  format: OutputFormat,
+  findings: readonly EnrichedFinding[],
+  ctx: EmitContext,
+  text: {
+    /** Human-report preamble (scan header / parse-skips) — printed for `text` only. */
+    readonly preamble: () => void;
+    readonly emptyMessage: string;
+    readonly groupKey: (f: EnrichedFinding) => string;
+    readonly groupHeader: (key: string) => string;
+    readonly formatItem: (f: EnrichedFinding) => string;
+  },
+): Promise<void> {
+  if (format !== "text") {
+    await emitFindings(format, findings, ctx);
+    return;
+  }
+  text.preamble();
+  renderReport(findings, text, ctx.gate);
+}
+
+/**
  * The `check` command's runner. The optional {@link AgentLaneOverrides} is the AI
  * lane's ONLY injection seam: the CLI handler never passes it (the lane resolves
  * its provider from `LLM_API_KEY`), but the tracer test drives this same function
@@ -629,7 +659,12 @@ export async function runCheckUrl(
  * exactly as `runCheck` does. The Swift toolchain may be missing — `scanSwift`
  * surfaces that as a one-line Error, handled like `runCheckUrl`'s launch failure.
  */
-async function runCheckSwift(dir: string): Promise<void> {
+async function runCheckSwift(
+  dir: string,
+  format: OutputFormat = "text",
+  runId = "local",
+  gate: GateConfig = GATE_OFF,
+): Promise<void> {
   let result: Awaited<ReturnType<typeof scanSwift>>;
   try {
     result = await scanSwift(dir);
@@ -644,16 +679,22 @@ async function runCheckSwift(dir: string): Promise<void> {
   // `root` it scanned in, so `relative(root, …)` here renders clean
   // `Sources/…/X.swift:line` locations that agree with the engine's emitted paths.
   const { root } = result;
-  console.log(`a11y-checker — scanning .swift under ${root} for SwiftUI a11y\n`);
-
   const findings = enrichAll(result.findings);
 
-  renderReport(findings, {
-    emptyMessage: "No SwiftUI a11y violations found.",
-    groupKey: (f) => f.file,
-    groupHeader: (file) => relative(root, file),
-    formatItem: (f) => formatFinding(f, root),
-  });
+  // Swift's engine reports findings, not a scanned-file list — filesScanned/coverage
+  // stay zeroed in the machine report, identical to Unity (no component resolver).
+  await reportStack(
+    format,
+    findings,
+    { root, runId, filesScanned: 0, coverage: EMPTY_COVERAGE, analyzedFiles: [], gate },
+    {
+      preamble: () => console.log(`a11y-checker — scanning .swift under ${root} for SwiftUI a11y\n`),
+      emptyMessage: "No SwiftUI a11y violations found.",
+      groupKey: (f) => f.file,
+      groupHeader: (file) => relative(root, file),
+      formatItem: (f) => formatFinding(f, root),
+    },
+  );
 }
 
 /**
@@ -669,47 +710,49 @@ export async function runCheckShopify(
   format: OutputFormat = "text",
   runId = "local",
   phoneHomeOverrides: Partial<PhoneHomeDeps> = {},
+  gate: GateConfig = GATE_OFF,
 ): Promise<void> {
   const { root, files, findings: raw, parseErrors } = await scanLiquid(dir);
   const findings = enrichAll(raw);
 
-  if (format !== "text") {
-    // Route the Liquid scan through the SAME canonical emit path `check` uses
-    // (#163): SARIF or the JSON report + `toContractFinding` phone-home projection,
-    // so a Shopify scan hands real `@binclusive/a11y-contract` findings to a real
-    // consumer instead of a bespoke `buildJsonReport`→stdout report. Liquid carries
-    // no component resolver (zeroed coverage) and the whole scanned set is analyzed.
-    // Non-blocking (`GATE_ADVISORY`): the stack scan reports, it doesn't gate (exit
-    // 0 even with findings) — the opt-in blocking gate is a noted follow-up (#163 AC).
-    await emitFindings(format, findings, {
+  // Route through the SAME report+gate path as `check` (#163 for the wire, #176
+  // for the gate): SARIF / JSON + `toContractFinding` phone-home on the machine
+  // branch, the human report on text — both gated by the SAME `gate`, so the exit
+  // is format-independent (no more advisory-on-json vs block-on-text split). Liquid
+  // carries no component resolver (zeroed coverage) and the whole scanned set is
+  // analyzed.
+  await reportStack(
+    format,
+    findings,
+    {
       root,
       runId,
       filesScanned: files.length,
       coverage: EMPTY_COVERAGE,
       analyzedFiles: files,
-      gate: GATE_ADVISORY,
+      gate,
       phoneHome: phoneHomeOverrides,
-    });
-    return;
-  }
-
-  if (files.length === 0) {
-    console.log(`No .liquid files under ${root}`);
-    return;
-  }
-
-  console.log(`a11y-checker — scanned ${files.length} .liquid file(s) under ${root}`);
-  if (parseErrors.length > 0) {
-    console.log(`  (${parseErrors.length} file(s) skipped — could not parse)`);
-  }
-  console.log("");
-
-  renderReport(findings, {
-    emptyMessage: "No Liquid a11y violations found.",
-    groupKey: (f) => f.file,
-    groupHeader: (file) => relative(root, file),
-    formatItem: (f) => formatFinding(f, root),
-  });
+    },
+    {
+      // A theme with no .liquid files is a distinct, more specific empty-state than
+      // "no findings" — preserve it (and skip the scan-count header entirely).
+      preamble: () => {
+        if (files.length === 0) return;
+        console.log(`a11y-checker — scanned ${files.length} .liquid file(s) under ${root}`);
+        if (parseErrors.length > 0) {
+          console.log(`  (${parseErrors.length} file(s) skipped — could not parse)`);
+        }
+        console.log("");
+      },
+      emptyMessage:
+        files.length === 0
+          ? `No .liquid files under ${root}`
+          : "No Liquid a11y violations found.",
+      groupKey: (f) => f.file,
+      groupHeader: (file) => relative(root, file),
+      formatItem: (f) => formatFinding(f, root),
+    },
+  );
 }
 
 /**
@@ -722,33 +765,31 @@ export async function runCheckShopify(
  * resolver, so coverage is zeroed in the `--json` shape — identical structure to
  * `check-shopify --json`.
  */
-async function runCheckUnity(dir: string, json = false): Promise<void> {
+async function runCheckUnity(
+  dir: string,
+  format: OutputFormat = "text",
+  runId = "local",
+  gate: GateConfig = GATE_OFF,
+): Promise<void> {
   const root = resolve(dir);
   const findings = enrichAll(await collectUnityFindings(root));
 
-  if (json) {
-    // Unity carries no resolver coverage — emit the zeroed coverage literal so the
-    // JSON shape stays identical to `check` / `check-shopify`.
-    const report = buildJsonReport(
-      root,
-      0,
-      { total: 0, declared: 0, registry: 0, traced: 0, opaque: 0, trusted: 0, icons: 0, structural: 0, declare: 0 },
-      findings,
-    );
-    console.log(JSON.stringify(report, null, 2));
-    const blocking = findings.filter((f) => f.enforcement === "block").length;
-    process.exitCode = blocking > 0 ? 1 : 0;
-    return;
-  }
-
-  console.log(`a11y-checker — scanning Unity Force-Text scenes under ${root}\n`);
-
-  renderReport(findings, {
-    emptyMessage: "No Unity a11y violations found.",
-    groupKey: (f) => f.file,
-    groupHeader: (file) => relative(root, file),
-    formatItem: (f) => formatFinding(f, root),
-  });
+  // Unity carries no component resolver — coverage is zeroed so the machine report
+  // is identical in shape to `check` / `check-shopify`. Routing through the shared
+  // path (#176) replaces the old bespoke json-only exit with the SAME gate the text
+  // path uses, and adds the SARIF + phone-home wire the other stacks already reach.
+  await reportStack(
+    format,
+    findings,
+    { root, runId, filesScanned: 0, coverage: EMPTY_COVERAGE, analyzedFiles: [], gate },
+    {
+      preamble: () => console.log(`a11y-checker — scanning Unity Force-Text scenes under ${root}\n`),
+      emptyMessage: "No Unity a11y violations found.",
+      groupKey: (f) => f.file,
+      groupHeader: (file) => relative(root, file),
+      formatItem: (f) => formatFinding(f, root),
+    },
+  );
 }
 
 /**
@@ -760,18 +801,31 @@ async function runCheckUnity(dir: string, json = false): Promise<void> {
  * never a throw. The collector returns the canonical `root` it scanned so
  * `relative(root, …)` renders clean `app/src/main/res/layout/…:line` locations.
  */
-async function runCheckAndroid(dir: string): Promise<void> {
-  const { root, findings: raw } = await scanAndroidXml(dir);
-  console.log(`a11y-checker — scanning res/layout XML under ${root} for Android a11y\n`);
-
+async function runCheckAndroid(
+  dir: string,
+  format: OutputFormat = "text",
+  runId = "local",
+  gate: GateConfig = GATE_OFF,
+): Promise<void> {
+  const { root, files, findings: raw } = await scanAndroidXml(dir);
   const findings = enrichAll(raw);
 
-  renderReport(findings, {
-    emptyMessage: "No Android XML a11y violations found.",
-    groupKey: (f) => f.file,
-    groupHeader: (file) => relative(root, file),
-    formatItem: (f) => formatFinding(f, root),
-  });
+  // Android layouts are plain XML parsed in Node — the scanned file set is real,
+  // so filesScanned/analyzedFiles carry it (unlike Swift/Unity). No component
+  // resolver, so coverage is zeroed. Same shared report+gate path as every stack.
+  await reportStack(
+    format,
+    findings,
+    { root, runId, filesScanned: files.length, coverage: EMPTY_COVERAGE, analyzedFiles: files, gate },
+    {
+      preamble: () =>
+        console.log(`a11y-checker — scanning res/layout XML under ${root} for Android a11y\n`),
+      emptyMessage: "No Android XML a11y violations found.",
+      groupKey: (f) => f.file,
+      groupHeader: (file) => relative(root, file),
+      formatItem: (f) => formatFinding(f, root),
+    },
+  );
 }
 
 async function runInit(suggest: boolean, dirArg: string): Promise<void> {
@@ -951,26 +1005,52 @@ function resolveFormat(format: Option.Option<OutputFormat>, json: boolean, sarif
   return Option.getOrElse(format, (): OutputFormat => (sarif ? "sarif" : json ? "json" : "text"));
 }
 
+// The ONE gate + output-format flag set every `check*` command mounts (issue
+// #176). Sharing the exact same Options across `check` and each stack command
+// makes a divergent gate surface unrepresentable — no stack can quietly ship a
+// different exit-code policy than the reference `check` does.
+const gateOptions = {
+  json: Options.boolean("json"),
+  sarif: Options.boolean("sarif"),
+  format: formatOption,
+  ci: ciOption,
+  runId: Options.text("run-id").pipe(Options.withDefault("local")),
+  failOn: failOnOption,
+  maxViolations: maxViolationsOption,
+};
+
+/**
+ * Resolve the {@link GateConfig} from the parsed gate flags — the ONE gate every
+ * runner receives, so the exit-code policy (opt-in `--fail-on` / `--max-violations`
+ * over the non-blocking `--ci` baseline over the default block-gated exit) is
+ * decided identically for `check` and every stack command.
+ */
+function resolveGate(a: {
+  readonly failOn: Option.Option<Impact>;
+  readonly maxViolations: Option.Option<number>;
+  readonly ci: boolean;
+}): GateConfig {
+  return {
+    failOn: Option.getOrNull(a.failOn),
+    maxViolations: Option.getOrNull(a.maxViolations),
+    advisory: a.ci,
+  };
+}
+
 const checkCommand = Command.make(
   "check",
-  {
-    dir: dirArg,
-    json: Options.boolean("json"),
-    sarif: Options.boolean("sarif"),
-    format: formatOption,
-    ci: ciOption,
-    runId: Options.text("run-id").pipe(Options.withDefault("local")),
-    failOn: failOnOption,
-    maxViolations: maxViolationsOption,
-  },
+  { dir: dirArg, ...gateOptions },
   ({ dir, json, sarif, format, ci, runId, failOn, maxViolations }) => {
     const resolved = resolveFormat(format, json, sarif);
     return Effect.promise(() =>
-      runCheck(dir, resolved === "json", resolved === "sarif", runId, {}, {
-        failOn: Option.getOrNull(failOn),
-        maxViolations: Option.getOrNull(maxViolations),
-        advisory: ci,
-      }),
+      runCheck(
+        dir,
+        resolved === "json",
+        resolved === "sarif",
+        runId,
+        {},
+        resolveGate({ failOn, maxViolations, ci }),
+      ),
     );
   },
 ).pipe(
@@ -989,49 +1069,62 @@ const checkUrlCommand = Command.make(
   ),
 );
 
+// Every `check*` stack command mounts the SAME `gateOptions` and threads the SAME
+// `resolveFormat` + `resolveGate` as `check` (issue #176): one output-format
+// selector, one gate, one format-independent exit-code rule across all stacks.
+
 const checkSwiftCommand = Command.make(
   "check-swift",
-  { dir: dirArg },
-  ({ dir }) => Effect.promise(() => runCheckSwift(dir)),
-).pipe(Command.withDescription("scan .swift for SwiftUI accessibility findings (static)"));
+  { dir: dirArg, ...gateOptions },
+  ({ dir, json, sarif, format, ci, runId, failOn, maxViolations }) =>
+    Effect.promise(() =>
+      runCheckSwift(dir, resolveFormat(format, json, sarif), runId, resolveGate({ failOn, maxViolations, ci })),
+    ),
+).pipe(
+  Command.withDescription(
+    "scan .swift for SwiftUI accessibility findings (static; --format text|json|sarif; --ci / --fail-on / --max-violations gate identically to `check`)",
+  ),
+);
 
 const checkShopifyCommand = Command.make(
   "check-shopify",
-  {
-    dir: dirArg,
-    json: Options.boolean("json"),
-    sarif: Options.boolean("sarif"),
-    format: formatOption,
-    runId: Options.text("run-id").pipe(Options.withDefault("local")),
-  },
-  ({ dir, json, sarif, format, runId }) =>
-    // Reuse the CANONICAL `--format text|json|sarif` selector (`--json`/`--sarif`
-    // aliases) the default `check` uses, so the Shopify scan reaches SARIF + the
-    // phone-home contract projection through the SAME path, not a bespoke flag (#163).
-    Effect.promise(() => runCheckShopify(dir, resolveFormat(format, json, sarif), runId)),
+  { dir: dirArg, ...gateOptions },
+  ({ dir, json, sarif, format, ci, runId, failOn, maxViolations }) =>
+    // Reuse the CANONICAL `--format text|json|sarif` selector + gate the default
+    // `check` uses, so the Shopify scan reaches SARIF + the phone-home contract
+    // projection AND gates through the SAME path, not a bespoke flag (#163, #176).
+    Effect.promise(() =>
+      runCheckShopify(dir, resolveFormat(format, json, sarif), runId, {}, resolveGate({ failOn, maxViolations, ci })),
+    ),
 ).pipe(
   Command.withDescription(
-    "scan .liquid Shopify theme source for structural a11y findings (static, no browser; --format text|json|sarif, canonical — routes findings through the same canonical contract wire path as `check`)",
+    "scan .liquid Shopify theme source for structural a11y findings (static, no browser; --format text|json|sarif — routes findings through the same canonical contract wire path AND gate as `check`)",
   ),
 );
 
 const checkUnityCommand = Command.make(
   "check-unity",
-  { dir: dirArg, json: Options.boolean("json") },
-  ({ dir, json }) => Effect.promise(() => runCheckUnity(dir, json)),
+  { dir: dirArg, ...gateOptions },
+  ({ dir, json, sarif, format, ci, runId, failOn, maxViolations }) =>
+    Effect.promise(() =>
+      runCheckUnity(dir, resolveFormat(format, json, sarif), runId, resolveGate({ failOn, maxViolations, ci })),
+    ),
 ).pipe(
   Command.withDescription(
-    "scan Unity Force-Text scenes (.prefab/.unity) for accessibility findings (static, no browser; --json: machine-readable)",
+    "scan Unity Force-Text scenes (.prefab/.unity) for accessibility findings (static, no browser; --format text|json|sarif; --ci / --fail-on / --max-violations gate identically to `check`)",
   ),
 );
 
 const checkAndroidCommand = Command.make(
   "check-android",
-  { dir: dirArg },
-  ({ dir }) => Effect.promise(() => runCheckAndroid(dir)),
+  { dir: dirArg, ...gateOptions },
+  ({ dir, json, sarif, format, ci, runId, failOn, maxViolations }) =>
+    Effect.promise(() =>
+      runCheckAndroid(dir, resolveFormat(format, json, sarif), runId, resolveGate({ failOn, maxViolations, ci })),
+    ),
 ).pipe(
   Command.withDescription(
-    "scan Android res/layout XML for accessibility findings (static, in-process — no browser, no toolchain)",
+    "scan Android res/layout XML for accessibility findings (static, in-process — no browser, no toolchain; --format text|json|sarif; --ci / --fail-on / --max-violations gate identically to `check`)",
   ),
 );
 
