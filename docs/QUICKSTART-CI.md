@@ -31,7 +31,7 @@ jobs:
         with:
           fetch-depth: 0
       - id: a11y
-        uses: Binclusive/a11y@v0.1.1
+        uses: Binclusive/a11y@v0.1.2
       - if: always() # advisory gate exits 0; upload regardless of findings
         uses: github/codeql-action/upload-sarif@v3
         with:
@@ -79,7 +79,7 @@ Action. Anthropic and OpenAI are shipped.
 
 ```yaml
       - id: a11y
-        uses: Binclusive/a11y@v0.1.1
+        uses: Binclusive/a11y@v0.1.2
         with:
           llm-api-key:  ${{ secrets.LLM_API_KEY }}  # your BYOK model key
           llm-provider: anthropic                    # default: anthropic
@@ -132,7 +132,7 @@ Not on GitHub? The same engine runs on CircleCI, Jenkins, Drone, or a bare
 
 ## Pinning for supply-chain safety
 
-These examples pin to the released tag `v0.1.1`. For production, pin to a commit
-SHA — `uses: Binclusive/a11y@<sha>  # v0.1.1` — so a moved tag can't change what
+These examples pin to the released tag `v0.1.2`. For production, pin to a commit
+SHA — `uses: Binclusive/a11y@<sha>  # v0.1.2` — so a moved tag can't change what
 runs in your CI. Dependabot (`github-actions` ecosystem) will bump the pin for
 you.
