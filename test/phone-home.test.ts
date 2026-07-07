@@ -339,6 +339,28 @@ describe("wire sends the 4-level `impact` only — never the 3-level `severity` 
     expect(occ.impact).toBe("unknown");
     expect(occ.severity).toBeUndefined();
   });
+
+  // The load-bearing cross-repo seam: kontrol's `ingestExternalFindings` input parse is
+  // STRICT and REMOVED `severity` from CiFindingInput. An occurrence that still carries a
+  // `severity` key is rejected as an unknown field ⇒ SILENT ingest break (checker succeeds
+  // locally, nothing lands in the dashboard). This locks the EXACT wire occurrence keys so
+  // a stray `severity` can never re-enter the payload without failing here first.
+  const VALID_IMPACTS = new Set(["critical", "serious", "moderate", "minor", "unknown"]);
+  it("the wire occurrence has EXACTLY the impact-only key set — `impact` present, `severity` key ABSENT", async () => {
+    const wire = await capturePost(
+      finding({ provenance: "axe", file: "https://example.com/p", line: 0, selector: "button", impact: "serious" }),
+      "/root",
+    );
+    const [occ] = wire.variables.input.findings;
+    // The complete occurrence contract kontrol's CiFindingInput accepts — no more, no less.
+    expect(Object.keys(occ).sort()).toEqual(
+      ["criterion", "description", "element", "evidence", "impact", "location", "recommendation", "seenAt"].sort(),
+    );
+    // `severity` is not merely undefined — the KEY does not exist (strict parse rejects unknown keys).
+    expect("severity" in occ).toBe(false);
+    // `impact` is present and a valid contract Impact value.
+    expect(VALID_IMPACTS.has(occ.impact as string)).toBe(true);
+  });
 });
 
 // ── Source-scan-scope coverage: scannedPaths (analyzed set) + deletedPaths (ADR 0043) ──

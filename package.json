@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "@axe-core/playwright": "^4.10.2",
-    "@binclusive/a11y-contract": "^0.4.0",
+    "@binclusive/a11y-contract": "^0.4.1",
     "@binclusive/code-graph": "^0.0.1",
     "@effect/cli": "0.75.2",
     "@effect/platform": "0.96.1",
