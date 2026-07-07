@@ -25,7 +25,7 @@ log() { echo "a11y-agent: $*" >&2; }
 git config --global --add safe.directory "$WORKSPACE" 2>/dev/null || true
 
 # ---- URL/browser scan mode (opt-in, #2336) --------------------------------
-# The dedicated url-scan action (action-url.yml, pinned to the :-browser image)
+# The dedicated url-scan action (action-url/action.yml, pinned to the :-browser image)
 # injects INPUT_SCAN_URL. When set, render that live URL with axe-core and exit —
 # this path needs the Chromium the static image strips, so it only resolves under
 # the browser image. Empty (the static action) → fall through to the diff-scoped

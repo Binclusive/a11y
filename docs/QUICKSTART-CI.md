@@ -117,10 +117,10 @@ The Action above scans `.tsx` **source**. For pages with no React source on disk
 which drives a real browser (Playwright + axe-core). Today that path ships in the
 **CLI** (`scan:url` / `check-url`) — see [`AUDIT-URL.md`](AUDIT-URL.md).
 
-> **A dedicated URL-scan CI Action (`action-url.yml`, browser image) is in
-> progress (#2336) but not yet in a released tag** — pin a URL scan into CI only
-> once it ships. Until then, drive the rendered-DOM scan from the CLI in a
-> `run:` step, or use the source scan above.
+> **A dedicated URL-scan CI Action (`Binclusive/a11y/action-url@v<version>`,
+> browser image) is in progress (#2336) but not yet in a released tag** — pin a
+> URL scan into CI only once it ships. Until then, drive the rendered-DOM scan
+> from the CLI in a `run:` step, or use the source scan above.
 
 ## Running on other CI platforms
 
