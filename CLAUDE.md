@@ -174,3 +174,17 @@ GitHub's own Actions docs — they teach GitHub Actions itself, not any one acti
 | Author a Docker container action (image, args, `INPUT_*`, Dockerfile rules) | `.patterns/github-actions/docker-actions.md` |
 | Release an action so consumers pin `@v1` / `@<sha>`; publish to Marketplace | `.patterns/github-actions/publishing-and-pinning.md` |
 | Upload SARIF to code scanning (permissions + checkout) | `.patterns/github-actions/sarif-upload.md` |
+
+### Release tooling — versioning + publishing from commit history
+
+Before wiring release automation (a release workflow, a version-bump config, an
+image-pin auto-repin), read `.patterns/release-tooling/index.md`. Library-derived
+canon from the Conventional Commits spec, `googleapis/release-please`, and
+`changesets/changesets` — the release *model* to reach for, not any wired
+workflow. Records the release-please-over-changesets decision for a single package.
+
+| Task | Read |
+|------|------|
+| Wire release automation / config / an `extra-files` image-pin auto-repin | `.patterns/release-tooling/release-please.md` |
+| Decide which commit types bump (and how) / enforce the message format | `.patterns/release-tooling/conventional-commits.md` |
+| Weigh the multi-package alternative / justify not adopting it | `.patterns/release-tooling/changesets.md` |
