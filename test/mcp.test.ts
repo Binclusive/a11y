@@ -8,7 +8,16 @@ import { extractBlock } from "../src/agents-block";
 import { CONTRACT_FILE, init } from "../src/commands";
 import { parseContract } from "../src/contract";
 import type { DomScanResult } from "../src/collect-dom";
-import { checkA11y, checkUnity, checkUrl, getA11yRules, learnA11yRule } from "../src/mcp";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  checkA11y,
+  checkKotlin,
+  checkUnity,
+  checkUrl,
+  getA11yRules,
+  learnA11yRule,
+  registerTools,
+} from "../src/mcp";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -20,6 +29,16 @@ vi.mock("../src/collect-dom", () => ({
 }));
 const { scanUrl } = await import("../src/collect-dom");
 const mockScanUrl = vi.mocked(scanUrl);
+
+// `checkKotlin` shells to the out-of-process Kotlin PSI engine via `scanKotlin`
+// (spawns Gradle, needs a JDK). Mock that seam so the tool wrapper is driven with
+// crafted findings — JDK-free, the same discipline as the `scanUrl` mock above. The
+// engine's own correctness is covered by the Gradle suite (#115), not this surface test.
+vi.mock("../src/collect-kotlin", () => ({
+  scanKotlin: vi.fn(),
+}));
+const { scanKotlin } = await import("../src/collect-kotlin");
+const mockScanKotlin = vi.mocked(scanKotlin);
 
 describe("check_url handler: emits the canonical @binclusive/a11y-contract payload", () => {
   afterEach(() => mockScanUrl.mockReset());
@@ -155,6 +174,64 @@ describe("check_unity handler", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("check_kotlin handler", () => {
+  afterEach(() => mockScanKotlin.mockReset());
+
+  const COMPOSE_PROJECT = "/tmp/compose-fixture-project";
+
+  it("is registered on the server alongside the other tools", () => {
+    const registered: string[] = [];
+    // A minimal server stand-in: `registerTools` only calls `server.tool(name, …)`,
+    // so capturing the first arg proves check_kotlin is wired in without a transport.
+    const fake = { tool: (name: string) => registered.push(name) } as unknown as McpServer;
+    registerTools(fake);
+    expect(registered).toContain("check_kotlin");
+    // The other tools are still registered — the new tool is additive, not a replacement.
+    expect(registered).toEqual(
+      expect.arrayContaining(["check_a11y", "check_url", "check_unity", "check_kotlin"]),
+    );
+  });
+
+  it("returns enriched Compose findings for a project dir, mirroring check_unity", async () => {
+    mockScanKotlin.mockResolvedValue({
+      root: COMPOSE_PROJECT,
+      findings: [
+        {
+          file: join(COMPOSE_PROJECT, "ui", "ImageNoLabel.kt"),
+          line: 12,
+          ruleId: "compose/image-no-label",
+          message: "[serious] Image has no contentDescription",
+          wcag: ["1.1.1"],
+          enforcement: "block",
+          provenance: "compose",
+        },
+      ],
+    });
+
+    const r = await checkKotlin(COMPOSE_PROJECT);
+
+    // The tool returns the same {root, findings} shape check_unity returns.
+    expect(r.root).toBe(COMPOSE_PROJECT);
+    expect(r.findings.length).toBe(1);
+
+    const f = r.findings[0];
+    expect(f?.ruleId).toBe("compose/image-no-label");
+    expect(f?.provenance).toBe("compose");
+    expect(f?.wcag).toContain("1.1.1");
+    // Paths are relativized to the scanned root — no absolute leakage (parity with check_unity).
+    expect(f?.file).toBe(join("ui", "ImageNoLabel.kt"));
+    expect(f?.file.startsWith("/")).toBe(false);
+  });
+
+  it("returns empty findings (not an error) for a project with no Compose violations", async () => {
+    mockScanKotlin.mockResolvedValue({ root: COMPOSE_PROJECT, findings: [] });
+
+    const r = await checkKotlin(COMPOSE_PROJECT);
+    expect(r.root).toBe(COMPOSE_PROJECT);
+    expect(r.findings).toEqual([]);
   });
 });
 

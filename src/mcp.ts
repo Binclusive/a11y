@@ -32,6 +32,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { FindingPayload } from "@binclusive/a11y-contract";
 import { z } from "zod";
 import { collectTsx } from "./collect";
+import { scanKotlin } from "./collect-kotlin";
 import { learn } from "./commands";
 import { scan } from "./core";
 import { toFindingPayload } from "./emit-contract";
@@ -187,6 +188,33 @@ export async function checkUnity(dir: string): Promise<CheckUnityResult> {
   return { root, findings };
 }
 
+/** The `check_kotlin` result: the scanned project root plus its enriched findings. */
+export interface CheckKotlinResult {
+  readonly root: string;
+  readonly findings: readonly CheckFinding[];
+}
+
+/**
+ * `check_kotlin`: run the out-of-process Jetpack Compose scan over a project dir
+ * (`scanKotlin` — the Kotlin PSI engine → the `compose/image-no-label` rule → one
+ * canonical `Finding[]`), then run those findings through `enrichAll` — the SAME
+ * baseline enrichment `check_a11y`/`check_unity` use. The Compose analog of
+ * `check_unity`: the source is `.kt` Compose source instead of `.tsx`/Unity assets,
+ * so the returned `findings` carry `provenance: "compose"` and `file` is relativized
+ * to the scanned root — which `scanKotlin` canonicalizes and owns, so `relative`
+ * agrees with the engine's emitted paths. No Compose logic lives here; it is a thin
+ * wrapper over the shared spine (#114) plus enrichment, the same reuse discipline as
+ * every other tool (ADR 0008; the #92 editor/agent-parity bar).
+ */
+export async function checkKotlin(dir: string): Promise<CheckKotlinResult> {
+  const { root, findings: raw } = await scanKotlin(dir);
+  const enriched = enrichAll(raw);
+
+  const findings: CheckFinding[] = enriched.map((f) => toCheckFinding(f, relative(root, f.file)));
+
+  return { root, findings };
+}
+
 /** How many patterns `get_a11y_rules` returns when no filter is given. */
 const TOP_RULES = 15;
 
@@ -295,6 +323,13 @@ export function registerTools(server: McpServer): void {
   );
 
   server.tool(
+    "check_kotlin",
+    "Scan an Android Jetpack Compose project directory for accessibility violations in its .kt source and return each finding (file, line, ruleId, WCAG SC, impact, and the representative fix). Mirrors check_unity for the Compose ecosystem: missing accessible labels on Image/Icon (compose/image-no-label), against the same axe baseline catalog.",
+    { dir: z.string().describe("Compose/Gradle project directory to scan recursively for .kt source.") },
+    async ({ dir }) => jsonContent(await checkKotlin(dir)),
+  );
+
+  server.tool(
     "get_a11y_rules",
     "Return the accessibility rules relevant to a component, WCAG SC, or axe ruleId so you can apply them BEFORE writing the code. The result is axe-core's published per-rule baseline catalog (ruleId, WCAG SC, impact, standard fix, helpUrl) for the requested component, SC, or ruleId (e.g. \"color-contrast\" / SC 1.4.3). With no filter, returns the top rules.",
     {
@@ -341,6 +376,7 @@ export function buildServer(): McpServer {
         "check_a11y scans a directory and reports WCAG findings with severities and fixes.",
         "check_url renders a live URL in a real browser and runs axe-core, reporting the same findings for source-less or server-rendered pages.",
         "check_unity scans a Unity project's .prefab/.unity assets and reports the same findings for the Unity ecosystem.",
+        "check_kotlin scans an Android Jetpack Compose project's .kt source and reports the same findings for the Compose ecosystem.",
         "get_a11y_rules returns the rules for a component or WCAG SC so you can apply them before writing code.",
         "learn_a11y_rule records a team rule into binclusive.json and the AGENTS.md/CLAUDE.md block.",
       ].join(" "),

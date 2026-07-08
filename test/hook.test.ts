@@ -1,7 +1,18 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runHook } from "../src/hook";
+
+// The `.kt` hook branch shells to the out-of-process Kotlin PSI engine via
+// `scanKotlin` (spawns Gradle, needs a JDK). Mock that seam so the dispatch is
+// exercised with crafted findings — JDK-free in the default test tier (the engine's
+// own correctness is the Gradle suite's job, #115). The .tsx/.prefab branches below
+// never call scanKotlin, so this mock leaves them — and their real scans — untouched.
+vi.mock("../src/collect-kotlin", () => ({
+  scanKotlin: vi.fn(),
+}));
+const { scanKotlin } = await import("../src/collect-kotlin");
+const mockScanKotlin = vi.mocked(scanKotlin);
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "hook");
 const VIOLATION = join(FIXTURES, "violation.tsx");
@@ -109,6 +120,70 @@ describe("runHook — Unity (.prefab/.unity) (#92)", () => {
   it("scopes the whisper to the edited asset (an opaque/clean asset emits nothing)", async () => {
     // Binary.prefab is opaque → contributes no findings → the per-file whisper no-ops.
     const out = await runHook(unityPayload(BINARY));
+    expect(out).toBeNull();
+  });
+});
+
+describe("runHook — Compose (.kt) parity (#117)", () => {
+  const COMPOSE_PROJECT = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "hook");
+  const IMAGE_NO_LABEL = join(COMPOSE_PROJECT, "ImageNoLabel.kt");
+
+  afterEach(() => mockScanKotlin.mockReset());
+
+  /** A PostToolUse payload for a `.kt` file, cwd at the project root. */
+  function kotlinPayload(filePath: string, toolName = "Edit"): unknown {
+    return {
+      hook_event_name: "PostToolUse",
+      tool_name: toolName,
+      cwd: COMPOSE_PROJECT,
+      tool_input: { file_path: filePath },
+    };
+  }
+
+  /** A crafted compose finding on the edited file (what a mocked scanKotlin returns). */
+  const composeFinding = {
+    file: IMAGE_NO_LABEL,
+    line: 12,
+    ruleId: "compose/image-no-label" as const,
+    message: "[serious] Image has no contentDescription",
+    wcag: ["1.1.1"],
+    enforcement: "block" as const,
+    provenance: "compose" as const,
+  };
+
+  it("fires on a .kt edit whose Compose scan yields a compose/image-no-label finding", async () => {
+    mockScanKotlin.mockResolvedValue({ root: COMPOSE_PROJECT, findings: [composeFinding] });
+
+    const out = await runHook(kotlinPayload(IMAGE_NO_LABEL));
+
+    expect(out).not.toBeNull();
+    expect(out?.hookSpecificOutput.hookEventName).toBe("PostToolUse");
+    const ctx = out?.hookSpecificOutput.additionalContext ?? "";
+    expect(ctx).toContain("You just edited");
+    expect(ctx).toContain("ImageNoLabel.kt");
+    // The compose/image-no-label finding surfaces in the whisper.
+    expect(ctx).toContain("compose/image-no-label");
+  });
+
+  it("works for Write and MultiEdit shapes too (all use tool_input.file_path)", async () => {
+    mockScanKotlin.mockResolvedValue({ root: COMPOSE_PROJECT, findings: [composeFinding] });
+    for (const tool of ["Write", "MultiEdit"]) {
+      const out = await runHook(kotlinPayload(IMAGE_NO_LABEL, tool));
+      expect(out?.hookSpecificOutput.additionalContext).toContain("compose/image-no-label");
+    }
+  });
+
+  it("no-ops on a clean .kt (empty scan → no whisper)", async () => {
+    mockScanKotlin.mockResolvedValue({ root: COMPOSE_PROJECT, findings: [] });
+    const out = await runHook(kotlinPayload(IMAGE_NO_LABEL));
+    expect(out).toBeNull();
+  });
+
+  it("stays opaque (no whisper) when the scan rejects — e.g. no JDK toolchain (precision invariant)", async () => {
+    // scanKotlin REJECTS when the JVM/Gradle toolchain is absent; the fail-safe must
+    // keep the .kt opaque (no mis-whisper), never bubble the error into the edit path.
+    mockScanKotlin.mockRejectedValue(new Error("A11yKotlinScan could not be launched"));
+    const out = await runHook(kotlinPayload(IMAGE_NO_LABEL));
     expect(out).toBeNull();
   });
 });
