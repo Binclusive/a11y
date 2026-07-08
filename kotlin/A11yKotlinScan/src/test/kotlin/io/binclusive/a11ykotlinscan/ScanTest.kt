@@ -55,11 +55,17 @@ class ScanTest {
 
     @Test
     fun directoryScanSurfacesOnlyThePositiveFinding() {
-        val findings = scanFindings(fixturesDir().path)
+        // Scan a DEDICATED subtree this test owns, never the shared fixtures dir:
+        // a global-count assertion over a shared dir breaks the moment a sibling
+        // PR drops a fixture into it (CLAUDE.md "Dir-level scan tests own a
+        // dedicated fixture subtree"; the #84/#77 cross-PR collision class).
+        val aggregate = File(fixturesDir(), "aggregate")
+        val findings = scanFindings(aggregate.path)
         assertEquals(
             1, findings.size,
-            "scanning the fixtures dir should surface exactly the one MissingContentDescription finding; got ${findings.map { it.ruleId }}",
+            "scanning the aggregate subtree should surface exactly its one known finding; got ${findings.map { it.ruleId }}",
         )
+        assertEquals("compose/image-no-label", findings.single().ruleId)
         val stable = findings.zipWithNext().all { (a, b) -> a.file <= b.file }
         assertTrue(stable, "findings must be returned in stable (file, line) order")
     }
