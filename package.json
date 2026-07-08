@@ -42,7 +42,10 @@
     "matrix:check": "tsx experiments/stack-matrix/check.ts",
     "android:matrix:run": "tsx experiments/android-matrix/run.ts",
     "android:matrix:baseline": "tsx experiments/android-matrix/baseline.ts",
-    "android:matrix:check": "tsx experiments/android-matrix/check.ts"
+    "android:matrix:check": "tsx experiments/android-matrix/check.ts",
+    "compose:matrix:run": "tsx experiments/compose-matrix/run.ts",
+    "compose:matrix:baseline": "tsx experiments/compose-matrix/baseline.ts",
+    "compose:matrix:check": "tsx experiments/compose-matrix/check.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.10.2",
