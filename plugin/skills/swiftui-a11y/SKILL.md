@@ -24,22 +24,47 @@ run Layer 1 alone anywhere else and say so in the report.
 > ### Scope and coverage — read this before reporting "clean"
 >
 > **The static SwiftUI scan is currently a 2-rule floor, not a full audit.** Layer 1
-> emits exactly two rules — `swiftui/image-no-label` (WCAG 1.1.1) and
-> `swiftui/control-no-name` (4.1.2). It is **materially thinner than the web/React
-> engine**, which additionally runs a host-element resolver, cross-file wrapper
-> resolution, suppression handling, and a corpus-driven WCAG-enrichment pass. The
-> SwiftUI collector has **none** of those subsystems yet. So a clean static SwiftUI
-> result means **"no issues found by the 2-rule floor (plus whatever runtime you
-> ran),"** never **"fully accessible"** — most failure modes (contrast, Dynamic Type,
-> target size, headings, color-only state, form labels, unresolved custom wrappers) are
-> simply **not yet checked statically**.
+> emits exactly the rules marked `shipped` in the rule spec table below —
+> `swiftui/image-no-label` (WCAG 1.1.1) and `swiftui/control-no-name` (4.1.2). It is
+> **materially thinner than the web/React engine**, which additionally runs a
+> host-element resolver, cross-file wrapper resolution, suppression handling, and a
+> corpus-driven WCAG-enrichment pass. The SwiftUI collector has **none** of those
+> subsystems yet. So a clean static SwiftUI result means **"no issues found by the
+> shipped static rules (plus whatever runtime you ran),"** never **"fully accessible"**
+> — every rule marked `planned` in the table, and every runtime category, is simply
+> **not yet checked statically**.
 >
 > This asymmetry is **a coverage debt being actively closed, not the intended scope.**
 > Per **ADR `.decisions/0007-swiftui-static-floor-scope.md`**, the 2-rule floor is *not*
 > the end state; the SwiftUI collector is on a stated path to parity with the TS engine,
-> tracked in **epic #111** (the rule-gap inventory + pickable children). Until that work
-> lands, **always state the floor explicitly in your report** (see "Always end with this
-> report" below) so a user never reads a thin static pass as a complete audit.
+> tracked in **epic #111** (the rule spec below is its inventory, formalized). Until that
+> work lands, **always state the floor explicitly in your report** (see "Always end with
+> this report" below) so a user never reads a thin static pass as a complete audit.
+
+## The rule spec — canonical `swiftui/*` rule table
+
+This table is the **canonical SwiftUI rule spec and the single coining site** for the
+`swiftui/*` rule vocabulary (registered as canonical nouns in `.glossary/TERMS.md`).
+Every rule implementation in epic #111 is built against **exactly these ids** — never
+re-coin a synonym. The `status` column is the honest coverage statement: `shipped`
+rules run in Layer 1 today; `planned` rules are not yet checked.
+
+| Rule id | SwiftUI failure shape | WCAG SC | Layer | Fix | Status |
+|---|---|---|---|---|---|
+| `swiftui/image-no-label` | Informative `Image` with no accessible name on it or any ancestor up to the nearest a11y element, not marked decorative | 1.1.1 | static | `.accessibilityLabel(...)` naming the content; `Image(decorative:)` / `.accessibilityHidden(true)` if decorative | shipped |
+| `swiftui/control-no-name` | Icon-only / unnamed interactive control (`Button`, tappable view, `Menu`) — empty accessible name after the ancestor climb | 4.1.2 | static | `.accessibilityLabel(...)` naming the **action** | shipped |
+| `swiftui/interactive-hidden` | Interactive view marked `.accessibilityHidden(true)` — a control removed from the accessibility tree | 4.1.2 | static | remove `.accessibilityHidden(true)` from the interactive view; hide only the purely-decorative sibling | planned (#269) |
+| `swiftui/control-no-value` | `Slider` / `Stepper` / `Toggle` (adjustable control) with no `accessibilityValue` | 4.1.2 | static | `.accessibilityValue(...)` describing the current value | planned (#270) |
+| `swiftui/missing-trait` | Tappable view (gesture/action) with no `.isButton` (or equivalent) role trait | 4.1.2 | static | `.accessibilityAddTraits(.isButton)` so assistive tech announces it as actionable | planned (#271) |
+| `swiftui/heading-structure` | Prominent heading-style text not marked as a heading | 1.3.1 / 2.4.6 | static | `.accessibilityAddTraits(.isHeader)` (or `.accessibilityHeading(...)`) | planned (#272) |
+| `swiftui/color-only-state` | State conveyed by a color change alone, no non-color cue (bounded heuristic — stays opaque when unsure) | 1.4.1 | static | add a non-color cue (label text, SF Symbol, or shape) alongside the color | planned (#273) |
+| `swiftui/field-no-label` | `TextField` / `SecureField` / form control with no `.accessibilityLabel` and no visible `Label`/placeholder naming its purpose | 1.3.1 / 4.1.2 | static | `.accessibilityLabel(...)` or an associated visible `Label` naming the field | planned (#274) |
+| `swiftui/wrapper-unlabeled` | Custom wrapper leaves its inner control/image unlabeled across files — the opacity problem; fires only on a confident cross-file resolution | 1.1.1 / 4.1.2 | static | label at the wrapper definition (or forward a label parameter); every call site benefits | planned (#277, needs the resolver #275) |
+
+The three **source-blind** failure modes — contrast (1.4.3), Dynamic Type clipping
+(1.4.4), and hit-region/target size (2.5.5) — are **runtime** (Layer 2) categories, not
+static rule ids: they map through the Apple-audit → WCAG table in Layer 2 below and are
+tracked in #279. No static id is coined for them.
 
 **Lead with the most impactful failures first.** Across audits, the recurring SwiftUI
 shapes are, roughly in order: unlabeled images/icons (1.1.1), icon-only controls with no
