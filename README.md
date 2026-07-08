@@ -241,10 +241,36 @@ unconfigured, the id/key is wrong, or the token mint fails for any reason, the
 Action **falls back to `github-token` and still exits 0** — a failed brand is
 never a failed check.
 
+## Use it on GitLab (native MR-note reporter)
+
+On GitLab, the engine has a **native reporter adapter** (like the GitHub one): it
+posts the findings as a **merge-request note** instead of only emitting an artifact.
+Drop the ready-made [`examples/ci/gitlab/.gitlab-ci.yml`](examples/ci/gitlab/.gitlab-ci.yml)
+at your repo root — it runs the image over the `.tsx` changed in each MR and selects
+the GitLab reporter.
+
+Enable it with two things:
+
+1. **Select the adapter** — set `A11Y_PLATFORM=gitlab` (the config already does).
+   The MR is identified from GitLab's own `CI_PROJECT_ID` + `CI_MERGE_REQUEST_IID`,
+   with `CI_API_V4_URL` as the REST base — all provided in a `merge_request` pipeline.
+2. **Provide a token with `api` scope** — store a **project or personal access
+   token** as a **masked** CI/CD variable named `A11Y_GITLAB_TOKEN`
+   (*Settings → CI/CD → Variables*). It is preferred over the auto-injected
+   `CI_JOB_TOKEN`, whose narrower API surface cannot reliably create MR notes;
+   `CI_JOB_TOKEN` is used as a zero-config fallback when no `A11Y_GITLAB_TOKEN` is set.
+
+**Opt-in, no-op by default.** With **no MR context** (a plain branch pipeline) or
+**no token**, the reporter posts nothing — the scan still runs, the artifacts still
+emit, and the job still exits 0 (advisory). Posting is best-effort: a failed GitLab
+API call is logged and swallowed, never failing the pipeline. Re-runs update the same
+MR note in place rather than adding a new one per push. Opt into a failing job with
+`FAIL_ON` / `MAX_VIOLATIONS` (see the config).
+
 ## Use it on any other CI/CD (generic `--ci` mode)
 
-Not on GitHub? The engine runs the same scan on **CircleCI, Jenkins, Drone, or a
-bare `docker run`** with no native adapter — just run the image and emit a standard
+Not on GitHub or GitLab? The engine runs the same scan on **CircleCI, Jenkins, Drone,
+or a bare `docker run`** with no native adapter — just run the image and emit a standard
 artifact:
 
 ```sh
