@@ -1,7 +1,9 @@
 # a11y-checker on Buildkite — ready-made config.
 #
 # Runs the published Binclusive engine image (via the docker plugin) over the
-# .tsx files changed in each PR, falling back to a diff vs the default branch.
+# .tsx files changed in each PR, falling back to a diff vs the default branch, and
+# posts the findings as a Buildkite **annotation** via the `buildkite` reporter
+# adapter (issue #212).
 #
 # Image: ghcr.io/binclusive/a11y:<version>  (static / no-browser variant).
 #   Bump the tag to upgrade. For a live-URL scan (set INPUT_SCAN_URL) swap to the
@@ -35,6 +37,11 @@ steps:
       export GITHUB_WORKSPACE="$(pwd)"
       export BASE_SHA="origin/$BASE_BRANCH"
       export HEAD_SHA="$BUILDKITE_COMMIT"
+      # Select the Buildkite reporter (issue #212) so findings post as a build
+      # annotation via `buildkite-agent annotate`. The PR is identified from
+      # BUILDKITE_PULL_REQUEST — Buildkite sets it to the string "false" on a non-PR
+      # build, so a plain branch build no-ops the adapter and the scan still runs.
+      export A11Y_PLATFORM="buildkite"
       # Opt-in blocking gate (default OFF = advisory). Uncomment ONE:
       # export FAIL_ON=serious        # fail when any finding is >= this impact
       # export MAX_VIOLATIONS=0       # fail when total finding count exceeds N
@@ -44,12 +51,22 @@ steps:
       # the agent host; the checkout dir is mounted as the workdir.
       - docker#v5.11.0:
           image: "ghcr.io/binclusive/a11y:0.2.0" # x-release-please-version
+          # The reporter shells out to `buildkite-agent annotate` from INSIDE the
+          # container, so the agent binary + its access token must be mounted in.
+          # The docker plugin does this when mount-buildkite-agent is on (its default);
+          # pin it explicitly so the annotation reporter always has the binary.
+          mount-buildkite-agent: true
           # secrets-and-env.md: Buildkite is the outlier — NO managed secret store.
           # The agent injects B8E_TOKEN via an environment / pre-command hook (or
           # Vault/S3). Omit for a fully-local scan.
           #
           # Explicit allowlist only — an env var crosses into the container iff it's
           # named below. NOT `propagate-environment: true`, which forwards the ENTIRE
-          # agent environment (every secret the agent holds) — a leak surface.
+          # agent environment (every secret the agent holds) — a leak surface. The
+          # BUILDKITE_PULL_REQUEST* vars are what the `buildkite` adapter reads to
+          # decide whether this is a PR build worth annotating.
           environment:
             - "B8E_TOKEN"
+            - "BUILDKITE_PULL_REQUEST"
+            - "BUILDKITE_PULL_REQUEST_BASE_BRANCH"
+            - "BUILDKITE_COMMIT"
