@@ -9,6 +9,7 @@ import {
   enforcementFor,
   fileIgnoreMatcher,
   ignoredRuleIds,
+  NO_CONTRACT_ENFORCEMENT,
 } from "../src/config-scan";
 import type { Contract } from "../src/contract";
 import { scan } from "../src/core";
@@ -183,9 +184,13 @@ describe("enforcementFor: block vs warn from the contract", () => {
     expect(enforcementFor(["9.9.9"], c)).toBe("warn"); // unmapped → warn
   });
 
-  it("is block for everything when there is no contract (historical default)", () => {
-    expect(enforcementFor(["2.4.4"], null)).toBe("block");
-    expect(enforcementFor([], null)).toBe("block");
+  it("is ADVISORY (warn) for everything when there is no contract — first-run default (ADR 0010)", () => {
+    // Zero-config first run must NOT block-all: advisory-by-default so a day-one
+    // scan exits 0 and reports without red-building. Blocking is opt-in only.
+    expect(enforcementFor(["2.4.4"], null)).toBe("warn");
+    expect(enforcementFor(["1.3.1"], null)).toBe("warn"); // an SC a contract COULD block — still advisory with no contract
+    expect(enforcementFor([], null)).toBe("warn");
+    expect(NO_CONTRACT_ENFORCEMENT).toBe("warn");
   });
 });
 
@@ -282,12 +287,14 @@ describe("scan end-to-end against a config-driven temp repo", () => {
     expect(c?.declarations.components.Btn).toBe("button");
   });
 
-  it("no binclusive.json → zero-config: every finding is block, nothing suppressed", async () => {
+  it("no binclusive.json → zero-config: every finding is ADVISORY (warn), nothing suppressed (ADR 0010)", async () => {
     const file = join(dir, "bare.tsx");
     await writeFile(file, 'export const D = () => <a href="/z" />;');
     const { findings, contract } = await scan([file]);
     expect(contract).toBeNull();
+    // Findings are still surfaced — only their gate disposition is advisory, so a
+    // first-run scan reports without red-building (blocking is opt-in).
     expect(findings.length).toBeGreaterThan(0);
-    expect(findings.every((f) => f.enforcement === "block")).toBe(true);
+    expect(findings.every((f) => f.enforcement === "warn")).toBe(true);
   });
 });

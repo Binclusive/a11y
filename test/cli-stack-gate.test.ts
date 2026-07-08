@@ -17,8 +17,12 @@ import { runCli } from "../src/cli";
  * format-agnostic and honors `--ci` / `--fail-on` / `--max-violations` everywhere.
  *
  * Each fixture project carries NO `binclusive.json`, so `enforcementFor` returns
- * "block" for every finding (the historical default) — that is precisely the
- * condition under which the old advisory-on-machine-format split was observable.
+ * the ADVISORY "warn" disposition for every finding (first-run default, ADR
+ * 0010) — the default scan exits 0. The #176 invariant under test is
+ * format-INDEPENDENCE (the exit is the same across text / --json / --sarif),
+ * which the opt-in gate cases below exercise on a genuinely-failing exit
+ * (`--max-violations 0` ⇒ [1, 1, 1] identically); the default case here proves
+ * the advisory exit is likewise format-independent.
  *
  * In-process only (no browser, no toolchain) — `check-swift` spawns the real Swift
  * engine and lives in the slow `cli-swift.e2e.test.ts` tier; its exit-code parity
@@ -72,12 +76,14 @@ beforeEach(() => {
 
 describe.each(STACKS)("$verb — format-independent gate (#176)", ({ verb, fixture }) => {
   it(
-    "block-level findings fail the run identically across text / --json / --sarif",
+    "no-config default is advisory ⇒ exits 0 identically across text / --json / --sarif (ADR 0010)",
     { timeout: 30_000 },
     async () => {
-      // No `binclusive.json` ⇒ every finding is block-level ⇒ the default gate exits
-      // 1 — the SAME for all three formats (the old advisory-on-json split is gone).
-      expect(await exitsAcrossFormats(verb, fixture, [])).toEqual([1, 1, 1]);
+      // No `binclusive.json` ⇒ every finding is advisory (warn), so the default gate
+      // exits 0 — the SAME for all three formats (format-independence, #176; the old
+      // advisory-on-json split is gone). A genuinely-failing format-independent exit
+      // is proven by the `--max-violations 0` case below ([1, 1, 1]).
+      expect(await exitsAcrossFormats(verb, fixture, [])).toEqual([0, 0, 0]);
     },
   );
 
@@ -102,8 +108,8 @@ describe.each(STACKS)("$verb — format-independent gate (#176)", ({ verb, fixtu
     "--max-violations below the finding count is green — the opt-in gate replaces the default block exit",
     { timeout: 30_000 },
     async () => {
-      // A generous threshold: the gate REPLACES the default block-gated exit, so a
-      // scan under-threshold is green even though the findings are block-level.
+      // A generous threshold: the opt-in gate decides the exit, so an under-threshold
+      // scan is green (and the advisory-default baseline is green regardless).
       expect(await exitsAcrossFormats(verb, fixture, ["--max-violations", "1000"])).toEqual([
         0, 0, 0,
       ]);

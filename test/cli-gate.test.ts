@@ -12,12 +12,16 @@ import { runCli } from "../src/cli";
  * command: these prove `--fail-on` / `--max-violations` parse and thread down to
  * the exit code, complementing the pure-decision coverage in `impact-gate.test`.
  *
- * The scan dir holds exactly one fixture — a single `critical` / `block`
- * finding — so the exit codes are deterministic:
- *   - no gate           → 1 (the historical block-gated exit, preserved)
+ * The scan dir holds exactly one fixture — a single `critical`-impact finding,
+ * with NO `binclusive.json`, so it is ADVISORY (warn) by default (ADR 0010) —
+ * so the exit codes are deterministic:
+ *   - no gate           → 0 (advisory first-run default; nothing blocks)
  *   - --max-violations 0 → 1 (opt-in volume gate trips: 1 finding > 0)
  *   - --max-violations 5 → 0 (opt-in, below the volume threshold ⇒ green)
  *   - --fail-on critical → 1 (opt-in severity gate at the threshold)
+ *
+ * The opt-in gate flags force a failing exit on TOP of the advisory baseline —
+ * advisory is the no-config baseline, never a cap.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -48,10 +52,10 @@ afterAll(async () => {
 });
 
 describe("check — opt-in blocking gate wiring", () => {
-  it("DEFAULT OFF is unchanged: the block-gated exit is preserved (no gate flags)", async () => {
-    // The fixture's finding is enforcement=block, so today's default still exits 1.
-    // The gate adds NO severity-based exit when unset — this is the historical path.
-    expect(await runCheck([scanDir, "--json"])).toBe(1);
+  it("DEFAULT is advisory with no binclusive.json ⇒ exit 0, no gate flags (ADR 0010)", async () => {
+    // No committed contract ⇒ the finding is advisory (warn), so the first-run
+    // default exits 0. Blocking is opt-in (a contract or the gate flags below).
+    expect(await runCheck([scanDir, "--json"])).toBe(0);
   });
 
   it("--max-violations 0 opts in: a present finding trips the volume gate ⇒ non-zero", async () => {
@@ -68,10 +72,10 @@ describe("check — opt-in blocking gate wiring", () => {
 });
 
 describe("check — generic --ci mode (#2236): first-class non-blocking exit-0", () => {
-  it("findings present ⇒ exit 0 under --ci (the same fixture that exits 1 by default)", async () => {
-    // The fixture is enforcement=block, so the plain default exits 1; `--ci` makes
-    // the non-blocking exit-0 a first-class engine mode, not a shell `|| true`.
-    expect(await runCheck([scanDir, "--json"])).toBe(1);
+  it("findings present ⇒ exit 0 under --ci (and under the advisory no-config default)", async () => {
+    // With no contract the default is already advisory (exit 0, ADR 0010); `--ci`
+    // keeps the non-blocking exit-0 a first-class engine mode, not a shell `|| true`.
+    expect(await runCheck([scanDir, "--json"])).toBe(0);
     expect(await runCheck([scanDir, "--json", "--ci"])).toBe(0);
   });
 
@@ -112,6 +116,7 @@ describe("check — --format canonical output selector (#2236)", () => {
   });
 
   it("--format json matches the legacy --json output (alias equivalence)", async () => {
-    expect(await runCheck([scanDir, "--format", "json"])).toBe(1);
+    // Advisory no-config default (ADR 0010): both aliases exit 0 identically.
+    expect(await runCheck([scanDir, "--format", "json"])).toBe(0);
   });
 });

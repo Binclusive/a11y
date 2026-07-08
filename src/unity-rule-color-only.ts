@@ -40,6 +40,7 @@
  * never a re-parse — {@link scanColorOnlyState} walks a {@link UnityScanResult} directly.
  */
 
+import { NO_CONTRACT_ENFORCEMENT } from "./config-scan";
 import type { Finding } from "./core";
 import type { UnityAsset, UnityScanResult } from "./collect-unity";
 import type { UnityComponent } from "./unity-ast";
@@ -89,10 +90,9 @@ function makeFinding(file: string): Finding {
       "Color-blind and low-vision users, and screen-reader users, get no state cue. " +
       "Use SpriteSwap or an Animation transition to add a non-color cue.",
     wcag: RULE_WCAG,
-    // The static floor's default enforcement (the `decideEnforcement` no-contract
-    // default is `block`); a Unity producer asset has no per-file config seam yet, so it
-    // reports at the floor like the other producers' findings.
-    enforcement: "block",
+    // No per-file contract seam on the Unity path yet ⇒ the no-contract default:
+    // advisory, blocking opt-in via the CLI gate flags (ADR 0010).
+    enforcement: NO_CONTRACT_ENFORCEMENT,
     provenance: "unity",
   };
 }

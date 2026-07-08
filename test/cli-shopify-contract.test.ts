@@ -70,11 +70,11 @@ describe("check-shopify → the canonical contract wire path (#163 connected-sea
     expect(imgNoAlt).toBeDefined();
     expect(imgNoAlt?.properties?.provenance).toBe("deterministic");
 
-    // Unified gate (#176): the stack scan now gates EXACTLY like `check` — the
-    // theme's block-level findings (no binclusive.json ⇒ enforcement "block") fail
-    // the run regardless of output format. The old advisory-on-machine-format exit
-    // (which made the sarif/json branch exit 0 while text exited 1) is gone.
-    expect(exitCode).toBe(1);
+    // Unified gate (#176): the stack scan gates EXACTLY like `check`, independent of
+    // output format. With no binclusive.json the findings are advisory (warn, ADR
+    // 0010), so the run exits 0 in every format — the old advisory-on-machine-format
+    // split (sarif/json exit 0 while text exited 1) is gone because BOTH now agree.
+    expect(exitCode ?? 0).toBe(0);
   });
 
   it("`check-shopify --json` phone-home projects the Liquid scan through `toContractFinding` (ContractFinding.parse succeeds)", async () => {

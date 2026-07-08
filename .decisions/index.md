@@ -13,3 +13,4 @@ One row per ADR. Read the file for the why.
 | [0007](0007-swiftui-static-floor-scope.md) | SwiftUI Collector Scope — Pursue Parity, the 2-Rule Floor Is Not the End State | accepted | 2026-06-30 |
 | [0008](0008-android-collector-compose-scope-engine.md) | Android a11y — Compose + XML Layout Scope, a Clean PSI Engine, and Provenance-Tagged Naming | accepted | 2026-07-02 |
 | [0009](0009-adr-sequence-collision-gate.md) | Reject ADR-Sequence Collisions with a Combined-Tree Gate | accepted | 2026-06-30 |
+| [0010](0010-first-run-advisory-default.md) | First-Run Gating Is Advisory by Default — Blocking Is Opt-In | accepted | 2026-07-08 |
