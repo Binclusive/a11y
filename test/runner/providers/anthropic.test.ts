@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { type Server, createServer } from "node:http";
+import { type AddressInfo } from "node:net";
+import { afterEach, describe, expect, it } from "vitest";
 import { meterProvider, TokenCeilingExceeded, TokenLedger } from "../../../src/runner";
 import { createAnthropicProvider, DEFAULT_REQUEST_TIMEOUT_MS } from "../../../src/runner/providers/anthropic";
 
@@ -114,5 +116,70 @@ describe("createAnthropicProvider — a hung fetch aborts at the timeout (never 
     }
     // The documented safe default is a real, positive, finite bound.
     expect(Number.isFinite(DEFAULT_REQUEST_TIMEOUT_MS) && DEFAULT_REQUEST_TIMEOUT_MS > 0).toBe(true);
+  });
+});
+
+/**
+ * The sneakier evasion the hung-fetch suite above does NOT reach: a server that
+ * sends 200 headers FAST, then drip-feeds a body that never completes. Here
+ * `fetch` resolves (headers received) and only the `.json()` body read stalls —
+ * so the timeout is load-bearing only if `clearTimeout` runs AFTER the body read
+ * (in `finally`) and the SAME `controller.signal` governs that read. This locks
+ * grill-1 of #2192: move `clearTimeout` before `.json()`, or read the body under
+ * a different/absent signal, and these tests go red. Exercising it needs the real
+ * global `fetch` against a real socket — a `fetchImpl` stub whose `.json()`
+ * resolves instantly can't reproduce a stalled body stream.
+ */
+describe("createAnthropicProvider — a slow-drip body aborts at the timeout (headers fast, body never ends)", () => {
+  let server: Server | undefined;
+
+  afterEach(async () => {
+    if (!server) return;
+    const s = server;
+    server = undefined;
+    // Force the never-ending response socket closed so the suite can't leak it.
+    s.closeAllConnections();
+    await new Promise<void>((resolve) => s.close(() => resolve()));
+  });
+
+  /**
+   * Stand up a server that flushes 200 + JSON content-type immediately, writes one
+   * byte of body, then holds the connection open forever without `res.end()`. This
+   * is the drip: the client's `fetch` resolves on headers, but `.json()` waits on a
+   * body that never arrives — a hang only the abort signal can break.
+   */
+  async function dripServerBaseUrl(): Promise<string> {
+    server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write("{"); // a partial body that will never be completed or ended
+      // deliberately no res.end(): the body stream stalls open until the socket dies
+    });
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", () => resolve()));
+    const { port } = server!.address() as AddressInfo;
+    return `http://127.0.0.1:${port}`;
+  }
+
+  it("rejects (aborts) within the bound instead of reading the dribbling body to completion", async () => {
+    const timeoutMs = 100;
+    const provider = createAnthropicProvider({ apiKey: "test", baseUrl: await dripServerBaseUrl(), timeoutMs });
+    const start = Date.now();
+
+    await expect(provider.complete({ messages: [] })).rejects.toThrow(/timed out/i);
+
+    // Aborted near the bound, not an unbounded wait on a body that never ends.
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(timeoutMs - 20);
+    expect(elapsed).toBeLessThan(2_000);
+  });
+
+  it("the AI lane fails SOFT on a drip-stalled body — no tokens spent, floor survives", async () => {
+    // Same metered seam the runner uses: the rejection is a non-fatal recorded
+    // pass error, and a stalled body measured no usage, so it can't spend budget.
+    const ledger = new TokenLedger(1000);
+    const provider = createAnthropicProvider({ apiKey: "test", baseUrl: await dripServerBaseUrl(), timeoutMs: 100 });
+    const metered = meterProvider(provider, ledger);
+
+    await expect(metered.complete({ messages: [] })).rejects.toThrow(/timed out/i);
+    expect(ledger.exhausted()).toBe(false);
   });
 });
