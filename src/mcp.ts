@@ -1,3 +1,8 @@
+// SUPERSEDED by @binclusive/a11y-mcp (Binclusive/monorepo #2533) — this local
+// stdio server was folded into the monorepo's packages/a11y-mcp, backed by the
+// live @binclusive/a11y engine. It stays in place until the a11y repo is gutted to
+// a thin action shell (#2538); removing it now would break the `a11y-checker mcp`
+// bin/CLI wiring mid-migration.
 /**
  * A local, stdio MCP server that exposes the a11y-checker to any MCP client
  * (Cursor, Copilot, Claude, Windsurf) running on the developer's machine.
