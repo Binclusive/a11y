@@ -211,13 +211,22 @@ describe("agent-DX: relatedLocations for a distinct second node (#2339)", () => 
     expect(result.relatedLocations).toHaveLength(1);
     expect(result.relatedLocations[0].logicalLocations[0]).toEqual({ fullyQualifiedName: "nav > a.brand", kind: "element" });
     expect(result.relatedLocations[0].message.text).toContain("nav > a.brand");
-    // Nothing links to it → no id (canon §3.28.2); it is context, so it carries
-    // no physicalLocation and never usurps the primary site (§3.27.22).
+    // Nothing links to it → no id (canon §3.28.2). GitHub code-scanning rejects a
+    // relatedLocation without a physicalLocation, so it is anchored on the
+    // finding's own source file/line (the code site the element corresponds to)
+    // while the selector stays its logical address — it never usurps the primary.
     expect(result.relatedLocations[0].id).toBeUndefined();
-    expect(result.relatedLocations[0].physicalLocation).toBeUndefined();
+    expect(result.relatedLocations[0].physicalLocation.artifactLocation.uri).toBe("src/Nav.tsx");
+    expect(result.relatedLocations[0].physicalLocation.region.startLine).toBe(5);
     // The primary stays the code region; the selector is NOT a primary logicalLocation.
     expect(result.locations[0].physicalLocation.region.startLine).toBe(5);
     expect(result.locations[0].logicalLocations).toBeUndefined();
+  });
+
+  it("relativizes the related location's uri against opts.root, like the primary", () => {
+    const f = enrich(raw({ provenance: "corpus-agent", file: "/work/stage/src/Nav.tsx", line: 5, selector: "nav > a.brand" }));
+    const result = JSON.parse(formatSarif([f], "r", { root: "/work/stage" })).runs[0].results[0];
+    expect(result.relatedLocations[0].physicalLocation.artifactLocation.uri).toBe("src/Nav.tsx");
   });
 
   it("is graceful-empty (omitted) for a source finding with no rendered node", () => {

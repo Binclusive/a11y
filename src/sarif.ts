@@ -51,10 +51,17 @@ interface SarifLocation {
 // A `relatedLocations` entry: a location relevant to *understanding* a finding
 // but that is not where the finding IS (SARIF §3.27.22). Here it is the rendered
 // DOM node a SOURCE-anchored finding also names — a genuinely distinct second
-// node beyond the code site. A CSS selector has no source region, so it rides a
-// `logicalLocations` and carries no `physicalLocation` (§3.28 — all fields
-// optional). No `id`: nothing links to it, so the spec says omit it (§3.28.2).
+// node beyond the code site, carried by a `logicalLocations` CSS selector.
+// GitHub code-scanning is STRICTER than SARIF §3.28 (which makes physicalLocation
+// optional): it rejects a relatedLocation without one — `buildRelatedLocations:
+// expected physical location`. So we anchor it on the finding's own source
+// file/line (the code site the rendered node corresponds to) to satisfy the
+// ingester while keeping the selector as the element's logical address.
 interface SarifRelatedLocation {
+  physicalLocation: {
+    artifactLocation: { uri: string };
+    region?: { startLine: number };
+  };
   message: { text: string };
   logicalLocations: Array<{ fullyQualifiedName: string; kind: "element" }>;
 }
@@ -94,10 +101,19 @@ function findingLocations(f: EnrichedFinding, root: string | undefined): SarifLo
 // (e.g. a corpus-agent discovery grounded in a `jsx-a11y` line that names an
 // `element`). A PAGE finding's selector is its PRIMARY node, not a related one,
 // so it never reaches here — the result is graceful-empty for every other shape.
-function findingRelatedLocations(f: EnrichedFinding): SarifRelatedLocation[] {
+function findingRelatedLocations(
+  f: EnrichedFinding,
+  root: string | undefined,
+): SarifRelatedLocation[] {
   if (f.line > 0 && hasSelector(f.selector)) {
     return [
       {
+        // Anchored on the finding's own source file/line — the code site this
+        // rendered node corresponds to — so GitHub code-scanning accepts it.
+        physicalLocation: {
+          artifactLocation: { uri: locationUri(f.file, root) },
+          region: { startLine: f.line },
+        },
         message: { text: `Rendered element: ${f.selector}` },
         logicalLocations: [{ fullyQualifiedName: f.selector, kind: "element" }],
       },
@@ -171,7 +187,7 @@ export function formatSarif(
         },
         results: findings.map((f) => {
           const loc = located.get(f);
-          const related = findingRelatedLocations(f);
+          const related = findingRelatedLocations(f, opts.root);
           // The specific rationale/suggestion Autofix pulls snippets around. A
           // DISCOVERY finding already folds observation+rationale+fix into
           // `message`; an ENRICHED deterministic finding carries the suggestion
