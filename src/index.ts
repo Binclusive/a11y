@@ -157,7 +157,6 @@ export {
   buildServer,
   type CheckA11yResult,
   type CheckFinding,
-  type CheckUrlResult,
   checkA11y,
   checkUrl,
   type GetA11yRulesResult,

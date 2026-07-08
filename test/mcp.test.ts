@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseFindingPayload } from "@binclusive/a11y-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { extractBlock } from "../src/agents-block";
 import { CONTRACT_FILE, init } from "../src/commands";
@@ -12,53 +13,71 @@ import { checkA11y, checkUnity, checkUrl, getA11yRules, learnA11yRule } from "..
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
 // `checkUrl` renders a live page via `scanUrl` (real browser). Mock that one
-// seam so we can drive `toCheckFinding` with a synthetic axe finding and assert
-// the EMITTED `fix` — no Playwright needed.
+// seam so we can drive the emit projection with a synthetic axe finding and
+// assert the canonical contract shape — no Playwright needed.
 vi.mock("../src/collect-dom", () => ({
   scanUrl: vi.fn(),
 }));
 const { scanUrl } = await import("../src/collect-dom");
 const mockScanUrl = vi.mocked(scanUrl);
 
-describe("check_url handler: axe findings emit axe's rule fix", () => {
+describe("check_url handler: emits the canonical @binclusive/a11y-contract payload", () => {
   afterEach(() => mockScanUrl.mockReset());
 
-  it("emits axe's per-rule guidance for aria-progressbar-name", async () => {
-    // `aria-progressbar-name` is tagged WCAG 1.1.1, whose SC-generic fix is the
-    // image-alt fix. The emitted `fix` must be axe's rule guidance, never that
-    // contradictory SC-generic fix.
-    const result: DomScanResult = {
-      url: "file:///page.html",
-      status: "ok",
-      findings: [
-        {
-          file: "file:///page.html",
-          line: 0,
-          selector: ".progress-bar",
-          ruleId: "aria-progressbar-name",
-          message: "ARIA progressbar nodes must have an accessible name",
-          wcag: ["1.1.1"],
-          enforcement: "block",
-          provenance: "axe",
-          impact: "serious",
-          helpUrl:
-            "https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name?application=axeAPI",
-        },
-      ],
-    };
-    mockScanUrl.mockResolvedValue(result);
+  const axeResult: DomScanResult = {
+    url: "https://example.com/page",
+    status: "ok",
+    findings: [
+      {
+        file: "https://example.com/page",
+        line: 0,
+        selector: ".progress-bar",
+        ruleId: "aria-progressbar-name",
+        message: "ARIA progressbar nodes must have an accessible name",
+        wcag: ["1.1.1"],
+        enforcement: "block",
+        provenance: "axe",
+        impact: "serious",
+        helpUrl:
+          "https://dequeuniversity.com/rules/axe/4.11/aria-progressbar-name?application=axeAPI",
+      },
+    ],
+  };
 
-    const r = await checkUrl("file:///page.html");
-    const f = r.findings.find((x) => x.ruleId === "aria-progressbar-name");
+  it("returns a contract FindingPayload, not the MCP-local CheckFinding DTO", async () => {
+    mockScanUrl.mockResolvedValue(axeResult);
+
+    const payload = await checkUrl("https://example.com/page");
+
+    // The returned value is the canonical wire payload — it re-parses through the
+    // contract's own schema (proves the shape, incl. the .strict() no-extra-keys moat).
+    expect(() => parseFindingPayload(payload)).not.toThrow();
+
+    const f = payload.findings.find((x) => x.element === ".progress-bar");
     expect(f).toBeDefined();
-    // Baseline coverage — no frequency tier is carried (ADR 0041 §G).
-    expect(f?.source).toBe("baseline");
-    expect(f).not.toHaveProperty("tier");
-    expect(f?.wcag).toContain("1.1.1");
-    // The EMITTED fix is axe's rule guidance, NOT the 1.1.1 image-alt fix.
-    expect(f?.fix).toBe("ARIA progressbar nodes must have an accessible name");
-    expect(f?.fix).not.toMatch(/alt text/i);
-    expect(f?.helpUrl).toContain("aria-progressbar-name");
+    // Rendered-DOM findings are deterministic and page-located.
+    expect(f?.provenance).toBe("deterministic");
+    expect(f?.location).toEqual({ kind: "page", url: "https://example.com/page" });
+    // WCAG SC, evidence, and scope come straight off the enriched finding.
+    expect(f?.criterion).toBe("1.1.1");
+    expect(f?.evidence).toBe("ARIA progressbar nodes must have an accessible name");
+    expect(f?.scope).toBe("https://example.com/page");
+
+    // The MCP-local DTO fields are GONE — the surface no longer leaks source
+    // locators or the flat `ruleId`/`fix`/`helpUrl`/`wcag` shape (#216).
+    for (const key of ["ruleId", "fix", "helpUrl", "wcag", "source", "file", "line", "impact"]) {
+      expect(f).not.toHaveProperty(key);
+    }
+  });
+
+  it("re-throws on a failed render (fail-loud, never a silent clean pass — #218)", async () => {
+    mockScanUrl.mockResolvedValue({
+      url: "https://example.com/page",
+      status: "failed",
+      error: "Failed to load https://example.com/page: net::ERR_FAILED",
+    });
+
+    await expect(checkUrl("https://example.com/page")).rejects.toThrow(/Failed to load/);
   });
 });
 
