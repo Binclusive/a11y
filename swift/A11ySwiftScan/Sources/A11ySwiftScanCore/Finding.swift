@@ -5,7 +5,8 @@ import Foundation
 /// parses (see `src/collect-swift.ts`):
 ///
 ///     { "file": string, "line": number,
-///       "ruleId": "swiftui/image-no-label" | "swiftui/control-no-name",
+///       "ruleId": "swiftui/image-no-label" | "swiftui/control-no-name"
+///                 | "swiftui/control-no-value",
 ///       "message": string, "wcag": ["1.1.1"], "severity": "serious" | "critical" }
 ///
 /// `wcag` is an array (always one element here) to match the web tool's

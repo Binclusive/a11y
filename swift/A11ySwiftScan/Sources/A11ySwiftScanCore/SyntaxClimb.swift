@@ -171,6 +171,48 @@ func chainHasAccessibleTreatment(_ expr: some ExprSyntaxProtocol) -> Bool {
     return false
 }
 
+/// Does the modifier chain directly attached to `expr` carry a treatment that
+/// describes (or replaces / removes the need for) an adjustable control's
+/// CURRENT VALUE? Deliberately a STRICTER predicate than
+/// `chainHasAccessibleTreatment`: an `.accessibilityLabel` names the control
+/// but says nothing about its value, so it must NOT satisfy the
+/// control-no-value rule — only these do:
+///   - `.accessibilityValue(...)` — the value is described, the fix itself
+///   - `.accessibilityRepresentation { … }` — a custom representation replaces
+///     the element wholesale; its value semantics are the representation's, so
+///     stay opaque
+///   - `.accessibilityHidden(true)` — intentionally out of the a11y tree
+///   - a merging `.accessibilityElement(children: .combine|.contain)` — the
+///     control's identity is folded into the merged element; how that merge
+///     announces value is not statically decidable, so stay opaque
+func chainHasValueTreatment(_ expr: some ExprSyntaxProtocol) -> Bool {
+    for m in modifiersAppliedTo(expr) {
+        if m.name == "accessibilityValue" { return true }
+        if m.name == "accessibilityRepresentation" { return true }
+        if m.name == "accessibilityHidden", accessibilityHiddenIsTrue(m.call) { return true }
+        if m.name == "accessibilityElement", accessibilityElementMergesChildren(m.call) { return true }
+    }
+    return false
+}
+
+/// Does the subtree rooted at `node` carry an `.accessibilityValue` (or
+/// `.accessibilityRepresentation`) anywhere — e.g. inside the control's label
+/// closure? Rare, but the conservative (precision-first) read is "covered":
+/// stay opaque rather than mis-flag.
+func subtreeContainsValueModifier(_ node: SyntaxProtocol, depth: Int = subtreeNameMaxDepth) -> Bool {
+    if depth <= 0 { return false }
+    for child in node.children(viewMode: .sourceAccurate) {
+        if let member = child.as(MemberAccessExprSyntax.self) {
+            let name = member.declName.baseName.text
+            if name == "accessibilityValue" || name == "accessibilityRepresentation" {
+                return true
+            }
+        }
+        if subtreeContainsValueModifier(child, depth: depth - 1) { return true }
+    }
+    return false
+}
+
 /// The nearest enclosing function call whose callee identifier is in `names`.
 /// Returns the call plus the matched name. Used to find the accessibility-element
 /// ancestor (Button/NavigationLink/…) an `Image`/control lives inside.

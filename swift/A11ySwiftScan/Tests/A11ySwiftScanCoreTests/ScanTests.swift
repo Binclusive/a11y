@@ -64,15 +64,47 @@ final class ScanTests: XCTestCase {
         )
     }
 
+    // MARK: - Rule: control-no-value (4.1.2)
+
+    func testMissingValueFixtureFlagsAdjustableControls() throws {
+        let (text, path) = try source("MissingValue.swift")
+        let findings = scanSource(text, filePath: path)
+
+        XCTAssertEqual(
+            findings.map(\.ruleId),
+            Array(repeating: "swiftui/control-no-value", count: 3),
+            "the Slider, Stepper, and Toggle must each produce exactly one control-no-value finding — a .accessibilityLabel is a NAME, not a VALUE, so it must not satisfy the rule; got \(findings.map(\.ruleId))"
+        )
+        for finding in findings {
+            XCTAssertEqual(finding.wcag, ["4.1.2"])
+            XCTAssertEqual(finding.severity, "serious")
+            XCTAssertTrue(
+                finding.message.contains(".accessibilityValue("),
+                "the fix must point at .accessibilityValue(...) describing the current value; got: \(finding.message)"
+            )
+        }
+    }
+
+    func testValuedControlFixtureProducesNoFindings() throws {
+        let (text, path) = try source("ValuedControl.swift")
+        let findings = scanSource(text, filePath: path)
+
+        XCTAssertTrue(
+            findings.isEmpty,
+            "valued / hidden / custom-represented adjustable controls must not be flagged — false positive(s): \(findings.map(\.ruleId))"
+        )
+    }
+
     // MARK: - The discovery + scan path over a directory
 
     func testScanFindingsWalksFixtureDirectory() {
         let findings = scanFindings(in: fixturesDir.path)
 
-        // Only the positive fixture contributes findings; the negative one is clean.
+        // Only the positive fixtures contribute findings; the negative ones are
+        // clean: 2 from MissingLabel + 3 from MissingValue.
         XCTAssertEqual(
-            findings.count, 2,
-            "scanning the Fixtures dir should surface exactly the two MissingLabel findings; got \(findings.map(\.ruleId))"
+            findings.count, 5,
+            "scanning the Fixtures dir should surface exactly the two MissingLabel and three MissingValue findings; got \(findings.map(\.ruleId))"
         )
         // Stable order (by file then line) is part of the engine↔TS contract.
         let sorted = zip(findings, findings.dropFirst()).allSatisfy {

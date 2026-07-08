@@ -1,11 +1,14 @@
 import SwiftSyntax
 
-/// Walks one parsed `.swift` file and emits findings for the two STATIC rules:
+/// Walks one parsed `.swift` file and emits findings for the STATIC rules:
 ///
-///   swiftui/image-no-label  (WCAG 1.1.1) — an informative `Image(…)` with no
+///   swiftui/image-no-label   (WCAG 1.1.1) — an informative `Image(…)` with no
 ///       accessible name on it OR any ancestor up to the nearest a11y element.
-///   swiftui/control-no-name (WCAG 4.1.2) — an icon-only `Button` / `.onTapGesture`
+///   swiftui/control-no-name  (WCAG 4.1.2) — an icon-only `Button` / `.onTapGesture`
 ///       view whose accessible name is empty after climbing.
+///   swiftui/control-no-value (WCAG 4.1.2) — a `Slider`/`Stepper`/`Toggle`
+///       (adjustable control) with no `.accessibilityValue` describing its
+///       current value.
 ///
 /// The ancestor-climb (see SyntaxClimb.swift) is what makes this precise: a bare
 /// `Image` inside a labeled `Button`/`NavigationLink`/toolbar item is NOT flagged.
@@ -32,6 +35,8 @@ final class A11yVisitor: SyntaxVisitor {
             checkImage(node)
         case "Button":
             checkButtonControl(node)
+        case "Slider", "Stepper", "Toggle":
+            checkAdjustableControl(node, kind: callee)
         default:
             break
         }
@@ -149,6 +154,31 @@ final class A11yVisitor: SyntaxVisitor {
                 severity: "serious"
             ))
         }
+    }
+
+    // MARK: - Rule: control-no-value (4.1.2)
+
+    /// A `Slider`/`Stepper`/`Toggle` is an ADJUSTABLE control: its accessible
+    /// name says what it is, but VoiceOver users also need its CURRENT VALUE.
+    /// Flag the control when nothing describes that value — and stay opaque
+    /// (don't flag) on any treatment that plausibly covers it: a
+    /// `.accessibilityValue`/`.accessibilityRepresentation` on its chain or
+    /// subtree, an explicit `.accessibilityHidden(true)`, or a merging
+    /// combine+label container above it. A `.accessibilityLabel` alone does NOT
+    /// suppress this rule — a name is not a value (see `chainHasValueTreatment`).
+    private func checkAdjustableControl(_ node: FunctionCallExprSyntax, kind: String) {
+        if chainHasValueTreatment(node) { return }
+        if subtreeContainsValueModifier(node) { return }
+        if enclosingCombinedElementSuppliesName(Syntax(node)) { return }
+
+        findings.append(Finding(
+            file: filePath,
+            line: line(of: node),
+            ruleId: "swiftui/control-no-value",
+            message: "\(kind) has no accessibilityValue — VoiceOver announces the control without its current value. Add .accessibilityValue(\"…\") describing the current value.",
+            wcag: ["4.1.2"],
+            severity: "serious"
+        ))
     }
 
     /// True iff this Button's visible content is exactly an `Image` (or images)
