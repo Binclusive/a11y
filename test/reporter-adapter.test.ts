@@ -12,6 +12,7 @@ import {
   resolvePlatformKey,
 } from "../src/reporter/contract";
 import { githubAdapter, githubResolver } from "../src/reporter/github-adapter";
+import { gitlabAdapter, gitlabResolver, renderMrNote } from "../src/reporter/gitlab-adapter";
 import { makeNullAdapter, nullAdapter, renderLine } from "../src/reporter/null-adapter";
 import { defaultRegistry } from "../src/reporter/registry";
 
@@ -64,12 +65,13 @@ describe("resolvePlatformKey", () => {
 });
 
 describe("AdapterRegistry — selection by explicit key", () => {
-  it("selects the shipped github + null adapters, undefined for unknown", () => {
+  it("selects the shipped github + null + gitlab adapters, undefined for unknown", () => {
     const reg = defaultRegistry();
     expect(reg.select("github")?.key).toBe("github");
     expect(reg.select("null")?.key).toBe("null");
+    expect(reg.select("gitlab")?.key).toBe("gitlab");
     expect(reg.select("buildkite")).toBeUndefined();
-    expect(reg.keys().sort()).toEqual(["github", "null"]);
+    expect(reg.keys().sort()).toEqual(["github", "gitlab", "null"]);
   });
 });
 
@@ -242,5 +244,167 @@ describe("github reporter — a 422 create (line outside diff hunk) falls back, 
     expect(logs.some((m) => m.includes("could not inline"))).toBe(true);
     // and the run summary counts zero created, one not inlined — the finding is not lost
     expect(logs.some((m) => m.startsWith("sync: 0 created") && m.includes("1 not inlined"))).toBe(true);
+  });
+});
+
+describe("gitlab adapter — the sibling behind the seam (issue #213)", () => {
+  const mrEnv = {
+    CI_PROJECT_ID: "42",
+    CI_MERGE_REQUEST_IID: "7",
+    CI_API_V4_URL: "https://gitlab.example.com/api/v4",
+    A11Y_GITLAB_TOKEN: "glpat-x",
+    CHANGED_FILES: "src/A.tsx src/b.ts src/C.tsx",
+  } satisfies NodeJS.ProcessEnv;
+
+  it("is registered as the shipped `gitlab` adapter", () => {
+    expect(gitlabAdapter.key).toBe("gitlab");
+  });
+
+  describe("resolver — the MR diff-context half", () => {
+    it("yields a post-target + the changed .tsx when an MR context + credential are present", () => {
+      const ctx = gitlabResolver.resolve(mrEnv);
+      expect(ctx.changedTsx).toEqual(["src/A.tsx", "src/C.tsx"]);
+      expect(ctx.postTarget).toMatchObject({
+        projectId: "42",
+        mrIid: "7",
+        api: "https://gitlab.example.com/api/v4",
+        token: "glpat-x",
+        tokenHeader: "PRIVATE-TOKEN",
+      });
+    });
+
+    it("derives the v4 base from CI_SERVER_URL, and CI_JOB_TOKEN is the JOB-TOKEN fallback", () => {
+      const ctx = gitlabResolver.resolve({
+        CI_PROJECT_ID: "1",
+        CI_MERGE_REQUEST_IID: "2",
+        CI_SERVER_URL: "https://gitlab.example.com/",
+        CI_JOB_TOKEN: "job-tok",
+      });
+      expect(ctx.postTarget).toMatchObject({ api: "https://gitlab.example.com/api/v4", token: "job-tok", tokenHeader: "JOB-TOKEN" });
+    });
+
+    it("strips a trailing slash off CI_API_V4_URL so the joined path has no `//`", () => {
+      const ctx = gitlabResolver.resolve({ ...mrEnv, CI_API_V4_URL: "https://gitlab.example.com/api/v4/" });
+      expect(ctx.postTarget?.api).toBe("https://gitlab.example.com/api/v4");
+      // the resolved base + the reporter's `/projects/…` join must not double the slash
+      expect(`${ctx.postTarget?.api}/projects/42`).not.toContain("v4//");
+    });
+
+    it("no post-target (⇒ no-op) when the MR context is incomplete", () => {
+      expect(gitlabResolver.resolve({ ...mrEnv, CI_MERGE_REQUEST_IID: undefined }).postTarget).toBeNull();
+      expect(gitlabResolver.resolve({ ...mrEnv, CI_PROJECT_ID: undefined }).postTarget).toBeNull();
+    });
+
+    it("no post-target when NO credential is present (no token, no CI_JOB_TOKEN)", () => {
+      expect(gitlabResolver.resolve({ ...mrEnv, A11Y_GITLAB_TOKEN: undefined }).postTarget).toBeNull();
+    });
+
+    it("no-context env dispatches WITHOUT error — the opt-in no-op path end to end", async () => {
+      // Incomplete MR env ⇒ null target ⇒ bound reporter is never built ⇒ dispatch no-ops.
+      const resolved = bindAdapter(gitlabAdapter).resolve({ CHANGED_FILES: "src/A.tsx" });
+      expect(resolved.report).toBeNull();
+      await expect(dispatch(resolved, [finding()], noLog)).resolves.toBeUndefined();
+    });
+  });
+
+  describe("renderMrNote — the findings→MR-note transform (canonical contract in → note body out)", () => {
+    it("renders each finding with impact, rule, WCAG, message, and file:line, plus the reconcile marker", () => {
+      const note = renderMrNote([finding(), finding({ ruleId: "label", file: "src/B.tsx", line: 3, wcag: ["4.1.2"], impact: "serious", message: "Control needs a label." })]);
+      expect(note).toContain("found 2 accessibility finding(s)");
+      expect(note).toContain("`critical` **image-alt** (WCAG 1.1.1) — Image missing alt text. — `src/App.tsx:12`");
+      expect(note).toContain("`serious` **label** (WCAG 4.1.2) — Control needs a label. — `src/B.tsx:3`");
+      expect(note).toContain("<!-- binclusive-a11y-mr-summary -->"); // marker enables in-place update on re-run
+    });
+
+    it("renders a clean pass for an empty finding set", () => {
+      const note = renderMrNote([]);
+      expect(note).toContain("no accessibility findings");
+      expect(note).toContain("<!-- binclusive-a11y-mr-summary -->");
+    });
+  });
+
+  describe("reporter — posts the note payload, best-effort", () => {
+    const target = {
+      projectId: "42",
+      mrIid: "7",
+      api: "https://gitlab.example.com/api/v4",
+      token: "glpat-x",
+      tokenHeader: "PRIVATE-TOKEN" as const,
+    };
+
+    it("POSTs the rendered note (no prior note) to the MR notes endpoint with the auth header", async () => {
+      const calls: { url: string; init?: RequestInit }[] = [];
+      const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(url), ...(init ? { init } : {}) });
+        // list returns no existing note ⇒ the reporter creates one
+        if (init?.method === undefined) return new Response("[]", { status: 200 });
+        return new Response("{}", { status: 201 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        await gitlabAdapter.reporter.report([finding()], target, noLog);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      const post = calls.find((c) => c.init?.method === "POST");
+      expect(post?.url).toBe("https://gitlab.example.com/api/v4/projects/42/merge_requests/7/notes");
+      expect((post?.init?.headers as Record<string, string>)["PRIVATE-TOKEN"]).toBe("glpat-x");
+      const sent = JSON.parse(String(post?.init?.body)) as { body: string };
+      expect(sent.body).toContain("**image-alt**"); // the canonical finding reached the note payload
+      expect(sent.body).toContain("`src/App.tsx:12`");
+    });
+
+    it("UPDATEs its own prior note in place (found by marker) rather than posting a duplicate", async () => {
+      const marker = "<!-- binclusive-a11y-mr-summary -->";
+      const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        if (init?.method === undefined) return new Response(JSON.stringify([{ id: 99, body: `old\n\n${marker}` }]), { status: 200 });
+        return new Response("{}", { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      let putUrl: string | undefined;
+      try {
+        await gitlabAdapter.reporter.report([finding()], target, noLog);
+        putUrl = fetchMock.mock.calls.map(([u, i]) => (i?.method === "PUT" ? String(u) : "")).find((u) => u !== "");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      expect(putUrl).toBe("https://gitlab.example.com/api/v4/projects/42/merge_requests/7/notes/99");
+    });
+
+    it("pages past a full first page to find its marker note on page 2 — PUTs, never POSTs a duplicate", async () => {
+      const marker = "<!-- binclusive-a11y-mr-summary -->";
+      // page 1 is a FULL page (100 unrelated notes, no marker); the marker note is on page 2.
+      // A single-page list would miss it and POST a duplicate — pagination must find & PUT it.
+      const page1 = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, body: `unrelated note ${i}` }));
+      const page2 = [{ id: 4242, body: `old summary\n\n${marker}` }];
+      const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        if (init?.method === undefined) {
+          const page = new URL(String(url)).searchParams.get("page");
+          return new Response(JSON.stringify(page === "2" ? page2 : page1), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        await gitlabAdapter.reporter.report([finding()], target, noLog);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      const methods = fetchMock.mock.calls.map(([, i]) => (i as RequestInit | undefined)?.method);
+      expect(methods).not.toContain("POST"); // no duplicate created
+      const putUrl = fetchMock.mock.calls.map(([u, i]) => ((i as RequestInit | undefined)?.method === "PUT" ? String(u) : "")).find((u) => u !== "");
+      expect(putUrl).toBe("https://gitlab.example.com/api/v4/projects/42/merge_requests/7/notes/4242");
+    });
+
+    it("swallows a failing API call — logs, never throws (advisory exit-0)", async () => {
+      const log = vi.fn();
+      vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("network down"); }));
+      try {
+        await expect(gitlabAdapter.reporter.report([finding()], target, log)).resolves.toBeUndefined();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      expect(log).toHaveBeenCalled();
+    });
   });
 });

@@ -1,7 +1,8 @@
 # a11y-checker on GitLab CI/CD — ready-made config.
 #
 # Runs the published Binclusive engine image over the .tsx files changed in each
-# merge request (and, on plain branch pipelines, vs the default branch).
+# merge request (and, on plain branch pipelines, vs the default branch), and posts
+# the findings as an MR note via the `gitlab` reporter adapter (issue #213).
 #
 # Image: ghcr.io/binclusive/a11y:<version>  (static / no-browser variant).
 #   Bump the tag to upgrade. For a live-URL scan (set INPUT_SCAN_URL) swap to the
@@ -41,8 +42,19 @@ a11y:
     # can resolve — fetch it explicitly.
     - git fetch --no-tags origin "$BASE_BRANCH"
     - export GITHUB_WORKSPACE="$CI_PROJECT_DIR"
-    - export BASE_SHA="origin/$BASE_BRANCH"
+    - export BASE_SHA="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-origin/$BASE_BRANCH}"
     - export HEAD_SHA="$CI_COMMIT_SHA"
+    # Select the GitLab reporter (issue #213) so findings post as an MR note.
+    # CI_PROJECT_ID + CI_MERGE_REQUEST_IID identify the MR; CI_API_V4_URL is the
+    # REST base — all provided by GitLab in a merge_request pipeline. With no MR
+    # context (a plain branch pipeline) the adapter no-ops and the scan still runs.
+    - export A11Y_PLATFORM="gitlab"
+    # secrets-and-env.md: posting an MR note needs a token with `api` scope. The
+    # auto-injected CI_JOB_TOKEN has a narrower surface that cannot always create
+    # notes, so PREFER a project/personal access token stored as a MASKED CI/CD
+    # variable named A11Y_GITLAB_TOKEN (Settings -> CI/CD -> Variables) — it is
+    # auto-injected into the job env, so the adapter reads it with no wiring here.
+    # Absent both, the reporter no-ops (opt-in) and the scan still exits 0.
     # Opt-in blocking gate (default OFF = advisory, exit 0). Uncomment ONE:
     # - export FAIL_ON=serious        # fail when any finding is >= this impact
     # - export MAX_VIOLATIONS=0       # fail when total finding count exceeds N

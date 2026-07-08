@@ -13,7 +13,7 @@ opt into the gate.
 
 | System | File | The one platform-specific gotcha |
 |---|---|---|
-| GitLab CI/CD | [`gitlab/.gitlab-ci.yml`](gitlab/.gitlab-ci.yml) | Shallow clone (depth 20) hides the MR base — pinned `GIT_DEPTH: "0"`. `image:` needs `entrypoint: [""]` so GitLab can run `script:`. |
+| GitLab CI/CD | [`gitlab/.gitlab-ci.yml`](gitlab/.gitlab-ci.yml) | Native `gitlab` reporter posts an **MR note** (`A11Y_PLATFORM=gitlab`) — needs a masked `A11Y_GITLAB_TOKEN` (`api` scope); `CI_JOB_TOKEN` is the fallback. Shallow clone (depth 20) hides the MR base — pinned `GIT_DEPTH: "0"`. `image:` needs `entrypoint: [""]` so GitLab can run `script:`. |
 | CircleCI | [`circleci/config.yml`](circleci/config.yml) → `.circleci/config.yml` | **No base-branch variable exists** — the base is derived by fetching the default branch. `checkout` is a full clone but the base ref is still absent until fetched. |
 | Buildkite | [`buildkite/pipeline.yml`](buildkite/pipeline.yml) | No fixed clone depth (agent-dependent) — the config unshallows before the diff. No managed secret store: `B8E_TOKEN` comes from an agent env/pre-command hook, propagated via the docker plugin. |
 | Jenkins | [`jenkins/Jenkinsfile`](jenkins/Jenkinsfile) | Multibranch PR base is `CHANGE_TARGET`; container runs as `root` so git trusts the mounted workspace. No native soft-fail — wrap the step in `catchError`. |
