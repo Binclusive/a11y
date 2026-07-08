@@ -11,6 +11,7 @@ import { scanAndroidXml } from "./collect-android-xml";
 // `runCheckUrl` so the static `check` path carries no eager browser-stack import
 // and the CI image can ship without it (issue #2133).
 import type { DomScanResult } from "./collect-dom";
+import { scanKotlin } from "./collect-kotlin";
 import { scanLiquid } from "./collect-liquid";
 import { scanSwift } from "./collect-swift";
 import { gen, init, type LearnInput, learn } from "./commands";
@@ -840,6 +841,56 @@ async function runCheckAndroid(
   );
 }
 
+/**
+ * The Compose counterpart to `runCheck`: shell to the out-of-process Kotlin PSI
+ * engine, which parses `.kt` source under `dir` and applies the static Jetpack
+ * Compose accessibility rules, then report findings anchored on `file:line` like
+ * every other producer. The Kotlin/JVM toolchain may be absent — `scanKotlin`
+ * surfaces that as a one-line Error; we degrade gracefully exactly as
+ * `runCheckSwift` does: print the message and stop, never crash (ADR 0008; the
+ * SwiftUI collector is the mirrored precedent).
+ */
+async function runCheckKotlin(
+  dir: string,
+  format: OutputFormat = "text",
+  runId = "local",
+  gate: GateConfig = GATE_OFF,
+): Promise<void> {
+  let result: Awaited<ReturnType<typeof scanKotlin>>;
+  try {
+    result = await scanKotlin(dir);
+  } catch (err) {
+    // Toolchain absent (or the engine failed to launch/exit) — print just the
+    // actionable one-line message and exit 2, the same discipline as
+    // `runCheckSwift`. The scan yields nothing; the process does not crash.
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 2;
+    return;
+  }
+  // The collector owns its path namespace: it returns the canonical, symlink-free
+  // `root` it scanned in, so `relative(root, …)` renders clean `.../X.kt:line`
+  // locations that agree with the engine's emitted paths.
+  const { root } = result;
+  const findings = enrichAll(result.findings);
+
+  // Compose's engine reports findings, not a scanned-file list — filesScanned/
+  // coverage stay zeroed in the machine report, identical to Swift/Unity (no
+  // component resolver), so `check-kotlin --json` has shape parity with `check-unity`.
+  await reportStack(
+    format,
+    findings,
+    { root, runId, filesScanned: 0, coverage: EMPTY_COVERAGE, analyzedFiles: [], gate },
+    {
+      preamble: () =>
+        console.log(`a11y-checker — scanning .kt under ${root} for Jetpack Compose a11y\n`),
+      emptyMessage: "No Jetpack Compose a11y violations found.",
+      groupKey: (f) => f.file,
+      groupHeader: (file) => relative(root, file),
+      formatItem: (f) => formatFinding(f, root),
+    },
+  );
+}
+
 async function runInit(suggest: boolean, dirArg: string): Promise<void> {
   const dir = resolve(dirArg);
   const r = await init(dir, { suggest });
@@ -1140,6 +1191,19 @@ const checkAndroidCommand = Command.make(
   ),
 );
 
+const checkKotlinCommand = Command.make(
+  "check-kotlin",
+  { dir: dirArg, ...gateOptions },
+  ({ dir, json, sarif, format, ci, runId, failOn, maxViolations }) =>
+    Effect.promise(() =>
+      runCheckKotlin(dir, resolveFormat(format, json, sarif), runId, resolveGate({ failOn, maxViolations, ci })),
+    ),
+).pipe(
+  Command.withDescription(
+    "scan .kt for Jetpack Compose accessibility findings (static, out-of-process Kotlin PSI engine — needs the JVM/Gradle toolchain; --format text|json|sarif; --ci / --fail-on / --max-violations gate identically to `check`)",
+  ),
+);
+
 const initCommand = Command.make(
   "init",
   { suggest: Options.boolean("suggest"), dir: optionalDir },
@@ -1222,6 +1286,7 @@ const rootCommand = Command.make("a11y-checker", { dir: rootDir }, ({ dir }) =>
     checkShopifyCommand,
     checkUnityCommand,
     checkAndroidCommand,
+    checkKotlinCommand,
     initCommand,
     learnCommand,
     genCommand,
