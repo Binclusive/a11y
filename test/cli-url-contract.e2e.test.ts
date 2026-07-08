@@ -17,6 +17,11 @@
  * `agentOverrides`): a stub that captures the POST body instead of hitting the
  * network. Everything upstream of the wire is real. (AC1 + AC2.)
  *
+ * DRIVEN IN `json` MODE — since #243 brought `check-url` onto the shared `reportStack`
+ * seam, phone-home fires on the machine (json) emit path exactly as the static `check
+ * --json` surface does, not unconditionally in the human text report. `json` is the
+ * CI/dashboard delivery mode, so this tracer drives it to exercise the send.
+ *
  * GATING — `*.e2e.test.ts`, so it is EXCLUDED from the default browser-free `pnpm
  * test` (unit) run and runs only under `pnpm test:e2e` (which installs Chromium
  * first). This keeps AC4 — the unit suite stays browser-free — intact.
@@ -27,6 +32,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runCheckUrl } from "../src/cli";
+import { GATE_OFF } from "../src/impact-gate";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_HTML = readFileSync(join(here, "fixtures", "a11y-broken.html"), "utf8");
@@ -85,7 +91,8 @@ describe("runCheckUrl: rendered-URL scan emits + sends the page-shaped contract 
       const { server, url } = await startServer();
       const { fetch, body } = capturingFetch();
       try {
-        await runCheckUrl(url, { fetch });
+        // json machine mode: the seam phones home on the json emit path (#243).
+        await runCheckUrl(url, "json", "local", GATE_OFF, { fetch });
       } finally {
         await new Promise<void>((r) => server.close(() => r()));
       }

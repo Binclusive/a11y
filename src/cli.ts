@@ -601,6 +601,14 @@ function normalizeTarget(target: string): string {
  * what actually ships, so it covers non-React pages and anything the static
  * .tsx scan can't see (server-rendered markup, third-party widgets, runtime DOM).
  *
+ * `check-url` mounts the SAME `gateOptions` and threads the SAME `resolveFormat` +
+ * `resolveGate` as every other `check*` command (#176/#243): `format` selects
+ * text | json | sarif and `gate` decides the exit identically across all three, so
+ * the rendered-DOM surface is a first-class CI-consumable delivery surface, not
+ * text-only + always-blocking. The machine formats route through the canonical
+ * {@link reportStack} → {@link emitFindings} seam (page-located via
+ * `resolveLocations`' `^https?://` arm), never a bespoke output path.
+ *
  * The optional {@link PhoneHomeDeps} overrides mirror `runCheck`'s `agentOverrides`
  * seam: the CLI handler never passes them (phone-home resolves its config + fetch
  * from the env), but the behavioral tracer test injects a stub `fetch` to prove a
@@ -608,10 +616,15 @@ function normalizeTarget(target: string): string {
  */
 export async function runCheckUrl(
   url: string,
+  format: OutputFormat = "text",
+  runId = "local",
+  gate: GateConfig = GATE_OFF,
   phoneHomeOverrides: Partial<PhoneHomeDeps> = {},
 ): Promise<void> {
   const target = normalizeTarget(url);
-  console.log(`a11y-checker — rendering ${target} and running axe-core\n`);
+  // Progress line is human-report chrome — print it for `text` only, so a machine
+  // format keeps stdout clean for the JSON/SARIF artifact a CI consumer parses.
+  if (format === "text") console.log(`a11y-checker — rendering ${target} and running axe-core\n`);
 
   let result: DomScanResult;
   try {
@@ -629,8 +642,9 @@ export async function runCheckUrl(
 
   // A FAILED render is NOT a clean pass: say so with a text label (never "No axe-core
   // violations found.") and exit non-zero, so a CI `if check-url …; then` can't read a
-  // render/server failure as green (#218). This is the human + exit-code half of the
-  // failed-vs-clean fix the machine surfaces (--json/--sarif) already carry.
+  // render/server failure as green (#218). This is a usage/load error (exit 2), distinct
+  // from the findings-driven gate exit `reportStack` sets below — a failed render has no
+  // findings to gate on, so `--ci` never turns it green.
   if (result.status === "failed") {
     console.error(`a11y-checker — scan FAILED for ${target}: ${result.error}`);
     process.exitCode = 2;
@@ -639,29 +653,36 @@ export async function runCheckUrl(
 
   const findings = enrichAll(result.findings);
 
-  // Group by axe rule for a readable report — the DOM path has no file to group
-  // on (every finding shares the URL), so the ruleId is the natural section key.
-  renderReport(findings, {
-    emptyMessage: "No axe-core violations found.",
-    groupKey: (f) => f.ruleId,
-    groupHeader: (ruleId) => ruleId,
-    formatItem: (f) => formatUrlFinding(f),
-  });
-
-  // OPTIONAL, non-blocking phone-home (#2335): route the rendered-URL findings
-  // through the SAME emit seam the static `check --json` path uses. Inside
-  // `phoneHome`, `toFindingPayloadLenient` → `resolveLocations` branches each
-  // `^https?://` finding to the canonical page-shaped `{ location: { kind: "page",
-  // url }, … }` contract and POSTs it when the CI env carries a `b8e_` token +
-  // org/project. Fully env-gated, swallows its own failures, and never touches the
-  // exit code the gate above set. The scanned page IS the scanned target — the
-  // same `url` vocabulary platform-side scope-reconcile keys on (#2166). `root` is
-  // the cwd: page findings resolve their location from the URL, not `root`, and a
-  // URL scan analyzes no source files (`scannedPaths` stays the safe empty set).
-  await phoneHome(findings, process.cwd(), process.env, {
-    scanTargets: () => [target],
-    ...phoneHomeOverrides,
-  });
+  // The SAME report+gate seam every stack runner shares (#176): text routes through the
+  // human report (grouped by axe ruleId — the DOM path has no file to group on), json /
+  // sarif through `emitFindings` (page-located, phone-home, gate-exit), and the exit code
+  // is `gateExitCode(findings, gate)` in BOTH branches — so `--ci` / `--fail-on` /
+  // `--max-violations` honor identically here and the advisory default (no `binclusive.json`
+  // ⇒ every finding `warn` ⇒ exit 0; ADR 0010) is inherited, never re-derived.
+  await reportStack(
+    format,
+    findings,
+    {
+      root: process.cwd(),
+      runId,
+      filesScanned: 0,
+      coverage: EMPTY_COVERAGE,
+      analyzedFiles: [],
+      gate,
+      // The rendered page IS the scanned target: inject it as `scanTargets` so the
+      // page-shaped contract reconciles on `url` (#2166/#2335). A URL scan analyzes no
+      // source files, so `analyzedFiles` stays the safe empty set. The tracer test
+      // threads a stub `fetch` through this same override.
+      phoneHome: { scanTargets: () => [target], ...phoneHomeOverrides },
+    },
+    {
+      preamble: () => {},
+      emptyMessage: "No axe-core violations found.",
+      groupKey: (f) => f.ruleId,
+      groupHeader: (ruleId) => ruleId,
+      formatItem: (f) => formatUrlFinding(f),
+    },
+  );
 }
 
 /**
@@ -1122,13 +1143,20 @@ const checkCommand = Command.make(
   ),
 );
 
+// check-url joins the #176 seam (issue #243): it mounts the SAME `gateOptions` and
+// threads the SAME `resolveFormat` + `resolveGate` as `check` / `check-swift` / …, so
+// the rendered-DOM surface accepts --format text|json|sarif, --json/--sarif, --ci,
+// --fail-on and --max-violations and gates identically — no bespoke flag surface.
 const checkUrlCommand = Command.make(
   "check-url",
-  { target: Args.text({ name: "target" }) },
-  ({ target }) => Effect.promise(() => runCheckUrl(target)),
+  { target: Args.text({ name: "target" }), ...gateOptions },
+  ({ target, json, sarif, format, ci, runId, failOn, maxViolations }) =>
+    Effect.promise(() =>
+      runCheckUrl(target, resolveFormat(format, json, sarif), runId, resolveGate({ failOn, maxViolations, ci })),
+    ),
 ).pipe(
   Command.withDescription(
-    "render a live URL (or local path) and run axe-core (non-React / source-less pages)",
+    "render a live URL (or local path) and run axe-core (non-React / source-less pages; --format text|json|sarif; --ci / --fail-on / --max-violations gate identically to `check`)",
   ),
 );
 
