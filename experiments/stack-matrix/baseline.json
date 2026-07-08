@@ -20,9 +20,9 @@
   },
   "DarkInventor/easy-ui": {
     "sha": "0bfdd128fcb7c0ec36cc0c77ed0081b4b280ec29",
-    "findings": 52,
+    "findings": 58,
     "blocking": 0,
-    "warning": 52,
+    "warning": 58,
     "coverage": {
       "checked": 27,
       "trusted": 91,
@@ -32,7 +32,7 @@
       "total": 268
     },
     "byRule": {
-      "enforce/button-no-name": 35,
+      "enforce/button-no-name": 41,
       "enforce/input-no-name": 8,
       "jsx-a11y/alt-text": 1,
       "jsx-a11y/anchor-is-valid": 3,
@@ -77,9 +77,9 @@
   },
   "Supernova3339/changerawr": {
     "sha": "a72f1c9e9084bfbc3cfc61f47fabad2c66243a64",
-    "findings": 145,
+    "findings": 151,
     "blocking": 0,
-    "warning": 145,
+    "warning": 151,
     "coverage": {
       "checked": 40,
       "trusted": 144,
@@ -89,7 +89,7 @@
       "total": 504
     },
     "byRule": {
-      "enforce/button-no-name": 66,
+      "enforce/button-no-name": 72,
       "enforce/input-no-name": 8,
       "enforce/link-no-name": 3,
       "jsx-a11y/anchor-has-content": 5,
@@ -284,9 +284,9 @@
   },
   "iamzhihuix/skills-manage": {
     "sha": "467d0423beaf71a31c520d4e3795ec88acae5ab2",
-    "findings": 14,
+    "findings": 15,
     "blocking": 0,
-    "warning": 14,
+    "warning": 15,
     "coverage": {
       "checked": 11,
       "trusted": 12,
@@ -296,6 +296,7 @@
       "total": 158
     },
     "byRule": {
+      "enforce/button-no-name": 1,
       "enforce/prefer-tag-over-role": 2,
       "jsx-a11y/click-events-have-key-events": 5,
       "jsx-a11y/label-has-associated-control": 2,
@@ -421,9 +422,9 @@
   },
   "patdx/edge-cms": {
     "sha": "0b30389e5117c4a8bf1e17e2f2146348c269cb1d",
-    "findings": 1,
+    "findings": 2,
     "blocking": 0,
-    "warning": 1,
+    "warning": 2,
     "coverage": {
       "checked": 0,
       "trusted": 0,
@@ -433,6 +434,7 @@
       "total": 21
     },
     "byRule": {
+      "enforce/button-no-name": 1,
       "jsx-a11y/anchor-is-valid": 1
     },
     "error": null
@@ -474,9 +476,9 @@
   },
   "sjohnston00/sorted": {
     "sha": "14a962c6cc28cdefa76c96dda660f764352baf31",
-    "findings": 2,
+    "findings": 3,
     "blocking": 0,
-    "warning": 2,
+    "warning": 3,
     "coverage": {
       "checked": 3,
       "trusted": 5,
@@ -486,7 +488,7 @@
       "total": 57
     },
     "byRule": {
-      "enforce/button-no-name": 1,
+      "enforce/button-no-name": 2,
       "jsx-a11y/alt-text": 1
     },
     "error": null
@@ -509,9 +511,9 @@
   },
   "thomasgauvin/claude-agent-sdk-in-cloudflare-containers": {
     "sha": "12f81a1205b086b596bb06f2b983c1cb993c1844",
-    "findings": 14,
+    "findings": 16,
     "blocking": 0,
-    "warning": 14,
+    "warning": 16,
     "coverage": {
       "checked": 0,
       "trusted": 0,
@@ -521,6 +523,7 @@
       "total": 23
     },
     "byRule": {
+      "enforce/button-no-name": 2,
       "enforce/input-no-name": 6,
       "jsx-a11y/label-has-associated-control": 8
     },
