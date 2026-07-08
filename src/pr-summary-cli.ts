@@ -1,6 +1,6 @@
 /**
  * The thin CLI over the PR-summary rollup (issue #2132) that `entrypoint.sh`
- * invokes (through the root `pr-summary.mjs` tsx wrapper) after a scan.
+ * invokes (through the `scripts/pr-summary.mjs` tsx wrapper) after a scan.
  *
  * It does two independent, best-effort things:
  *
