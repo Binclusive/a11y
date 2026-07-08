@@ -1,0 +1,56 @@
+name: ci
+
+# Runs the JS suite's own guard in CI so "tsc clean / tests green" stops being a
+# LOCAL-only claim (#201). Until now the only PR-triggered workflow was checks.yml,
+# paths-scoped to package.json/action.yml/the pin script — it ran the action-pin
+# gate alone, never `tsc --noEmit` or the vitest suite. This adds the missing gate:
+# on every PR (and every push to main) install deps, typecheck, then run the
+# unit/property suite. The Playwright `test:e2e` script is deliberately NOT run here
+# — it needs a real Chromium download and belongs in a separate, heavier job.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# A newer push to the same ref cancels the in-flight run for it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-test:
+    name: typecheck + unit/property tests
+    runs-on: ubuntu-latest
+    steps:
+      # Third-party actions are SHA-pinned (a moving tag is a code-injection
+      # vector); Dependabot (.github/dependabot.yml) bumps the pins weekly.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # pnpm before setup-node so `cache: pnpm` can find the store. packageManager
+      # is unset; the lockfile is v9, matching release.yml's pin.
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 9
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      # Prefer the reproducible frozen-lockfile install. pnpm's minimumReleaseAge
+      # cooldown can reject a just-published @binclusive/a11y-contract version for
+      # ~24h after its bump (#172), which would red every unrelated PR during that
+      # window; fall back to a non-frozen install so the cooldown never hard-fails
+      # this gate.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile || pnpm install --no-frozen-lockfile
+
+      - name: Typecheck (tsc --noEmit)
+        run: pnpm typecheck
+
+      # `pnpm test` is the vitest unit + property suite only. The Playwright e2e
+      # suite (`pnpm test:e2e`) is excluded — it needs `npx playwright install
+      # chromium` and must not gate this workflow.
+      - name: Unit + property tests
+        run: pnpm test
