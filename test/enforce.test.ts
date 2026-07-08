@@ -16,6 +16,7 @@ const dialogs = fx("dialogs.tsx");
 const nameGate = fx("name-gate.tsx");
 const roleToggle = fx("role-toggle.tsx");
 const nativeControls = fx("native-controls.tsx");
+const intrinsicButton = fx("intrinsic-button.tsx");
 // A wrapper that resolves to host `button` but renders its OWN static name
 // internally (sr-only span / aria-label) — the shadcn carousel-arrow FP.
 const srOnlyConsumer = join(here, "fixtures", "sr-only-name-consumer.tsx");
@@ -405,6 +406,73 @@ describe("scan: enforce findings join jsx-a11y findings and dedupe", () => {
     // so every enforce finding here is NET-NEW recall, not a dedupe survivor.
     expect(enforceFindings.length).toBeGreaterThan(0);
     expect(enforceFindings.every((f) => f.ruleId.startsWith("enforce/"))).toBe(true);
+  });
+});
+
+describe("enforce: icon-only raw intrinsic <button> (#257 — the both-passes recall gap)", () => {
+  const src = readFileSync(intrinsicButton, "utf8").split("\n");
+  // Each raw <button> carries a unique className, so its opening line is the line
+  // holding that token — robust to single- vs multi-line export shapes.
+  const lineOf = (token: string): number => src.findIndex((l) => l.includes(token)) + 1;
+  const buttonNoNameFindings = () =>
+    enforceContent([intrinsicButton], CTX).filter((f) => f.ruleId === "enforce/button-no-name");
+  const flaggedLines = (): readonly number[] => buttonNoNameFindings().map((f) => f.line);
+
+  it("flags an icon-only raw <button> with no name — the missed recall case", () => {
+    // The exact repro shapes from continuedev/continue + formbricks: a bare
+    // <button> whose only child is a custom icon component (or <svg>), no name.
+    const buttonHits = buttonNoNameFindings();
+    // 5 raw intrinsic positives (Dismiss/Menu/Drag/SvgOnly/Empty) + the wrapper
+    // parity anchor (WrappedIconOnly) = 6, and NOTHING else.
+    expect(buttonHits.length).toBe(6);
+    expect(buttonHits.every((f) => f.wcag.includes("4.1.2") && f.provenance === "enforce")).toBe(true);
+    const lines = buttonHits.map((f) => f.line);
+    for (const cls of ['"pos-dismiss"', '"pos-menu"', '"pos-drag"', '"pos-svg"', '"pos-empty"']) {
+      expect(lines).toContain(lineOf(cls));
+    }
+  });
+
+  it("does NOT flag a named / unknowable raw <button> — no precision regression", () => {
+    const lines = flaggedLines();
+    // Text child, aria-label, title, sr-only labelled child, spread, dynamic
+    // child: every named-or-unknowable shape stays clean.
+    for (const cls of [
+      '"neg-text"',
+      '"neg-arialabel"',
+      '"neg-title"',
+      '"neg-sronly"',
+      '"neg-spread"',
+      '"neg-dynamic"',
+    ]) {
+      expect(lines).not.toContain(lineOf(cls));
+    }
+  });
+
+  it("ABSTAINS when the icon child itself carries the name (the #257 boundary)", () => {
+    // <XIcon aria-label="Close"/> and <svg><title> name the button via accname —
+    // opaque-safe: we suppress rather than risk a false positive.
+    const lines = flaggedLines();
+    expect(lines).not.toContain(lineOf('"neg-iconnamed"'));
+    expect(lines).not.toContain(lineOf('"neg-svgtitled"'));
+  });
+
+  it("flags the identical <Button> WRAPPER exactly once — no double-report", async () => {
+    // The wrapper was already caught pre-#257; the intrinsic fix must not make it
+    // fire twice. Scan the whole file and count 4.1.2 findings on the wrapper line.
+    const { findings } = await scan([intrinsicButton]);
+    // Trim-exact match so a comment mentioning "<Button>" can't shadow the JSX line.
+    const wrapperLine = src.findIndex((l) => l.trim() === "<Button>") + 1;
+    const onWrapper = findings.filter((f) => f.line === wrapperLine && f.wcag.includes("4.1.2"));
+    expect(onWrapper.length).toBe(1);
+  });
+
+  it("does NOT double-report a truly-empty <button> that jsx-a11y also flags", async () => {
+    // <button className="pos-empty"/> is nameless to BOTH passes; dedupeEnforce
+    // collapses the pair on shared file:line:4.1.2. Exactly one finding survives.
+    const { findings } = await scan([intrinsicButton]);
+    const emptyLine = lineOf('"pos-empty"');
+    const onEmpty = findings.filter((f) => f.line === emptyLine && f.wcag.includes("4.1.2"));
+    expect(onEmpty.length).toBe(1);
   });
 });
 

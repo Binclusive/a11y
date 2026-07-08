@@ -348,6 +348,19 @@ function classify(
   // `Input` component is handled by resolution/registry below.)
   if (NATIVE_FORM_CONTROLS.has(tagName)) return recognized({ type: "input", strength: "host" });
 
+  // Intrinsic `<button>` is a real host jsx-a11y would own, but its
+  // `button-has-accessible-name` DECLINES when the only child is a custom element
+  // (an icon component it can't see into) — so an icon-only raw `<button>` with no
+  // accessible name slips BOTH passes, while the identical resolved `<Button>`
+  // wrapper is caught by this very check. Route the intrinsic host through
+  // enforce's OWN button name-check — the SAME host-strength treatment `<Button>`
+  // already gets — closing that recall gap. The exact-tag test (mirroring the
+  // NATIVE_FORM_CONTROLS guard above) keeps every non-button intrinsic
+  // (`<td>`/`<div>`) unclaimed, and a truly-empty `<button></button>` that
+  // jsx-a11y DOES flag is de-duplicated downstream (shared `file:line:4.1.2` in
+  // `dedupeEnforce`), so this never double-reports. See #257.
+  if (tagName === "button") return recognized({ type: "button", strength: "host" });
+
   // The local binding (namespace local for `NS.Member`).
   const local = tagName.includes(".") ? tagName.slice(0, tagName.indexOf(".")) : tagName;
   const binding = imports.get(local);
@@ -500,6 +513,42 @@ function isIconChild(
   if (ts.isPropertyAccessExpression(tag) && ts.isIdentifier(tag.expression)) {
     const binding = imports.get(tag.expression.text);
     return binding !== undefined && isIconLibrary(binding.module);
+  }
+  return false;
+}
+
+/**
+ * Whether an icon-only control's icon child supplies its OWN accessible name — an
+ * `aria-label`/`aria-labelledby`/`title` on the icon element, or an
+ * `<svg><title>…</title></svg>`. Such a name flows up to the parent control per
+ * the accessible-name computation, so the control is NOT nameless. This is the
+ * icon-only precision boundary (#257): we detect the reliably-static named-icon
+ * shapes and, since a nested/dynamic title we can't read might also name it, the
+ * caller ABSTAINS rather than risk a false positive on the harder cases —
+ * opaque-safe beats a wrong flag. FN-safe: only ever suppresses a finding.
+ */
+function iconChildContributesName(
+  node: ts.JsxElement | ts.JsxSelfClosingElement,
+  imports: ReadonlyMap<string, ImportBinding>,
+  sf: ts.SourceFile,
+): boolean {
+  if (!ts.isJsxElement(node)) return false;
+  for (const child of node.children) {
+    if (!ts.isJsxElement(child) && !ts.isJsxSelfClosingElement(child)) continue;
+    if (!isIconChild(child, imports)) continue;
+    const opening = ts.isJsxElement(child) ? child.openingElement : child;
+    if (anyNameAttr(opening, sf, NAME_ATTRS)) return true;
+    // <svg><title>…</title></svg>: the nested <title> names the icon, so a
+    // present (even dynamic) title element counts as "could be named".
+    if (
+      ts.isJsxElement(child) &&
+      child.children.some((c) => {
+        const t = ts.isJsxElement(c) ? c.openingElement.tagName : ts.isJsxSelfClosingElement(c) ? c.tagName : undefined;
+        return t !== undefined && ts.isIdentifier(t) && t.text === "title";
+      })
+    ) {
+      return true;
+    }
   }
   return false;
 }
@@ -830,6 +879,10 @@ function evaluate(
       // an icon-only child (a visible container). A `host`-strength control is a
       // proven thin wrapper, so empty-or-icon both flag.
       if (ctx.strength === "name" && v === "empty") return abstain;
+      // The icon child itself may carry the accessible name (`<XIcon
+      // aria-label="Close"/>`, `<svg><title>`), which flows up to the button —
+      // so it is not nameless. Abstain rather than fire (#257 boundary).
+      if (v === "iconOnly" && iconChildContributesName(element, imports, sf)) return abstain;
       return { kind: "finding", rule: RULES.buttonNoName };
     }
     case "image": {
