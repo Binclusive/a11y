@@ -5,7 +5,9 @@ It resolves what HTML element each component really is, checks for problems two
 ways (jsx-a11y lint + a corpus-driven content pass), and matches each finding to
 real-world failure frequency. Runs locally, no network for the static path.
 
-Map of the system: `docs/ARCHITECTURE.md`. Adversarial Q&A: `docs/GRILL-ME.md`.
+Map of the system: `docs/ARCHITECTURE.md` (every ship/invoke entrypoint —
+plugin, npm bin, both actions, both Docker images, CI templates — is mapped in
+its §7 "Distribution surfaces"). Adversarial Q&A: `docs/GRILL-ME.md`.
 
 ## Before you finish ANY change
 
