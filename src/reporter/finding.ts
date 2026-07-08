@@ -11,32 +11,36 @@
  */
 
 import type { Impact } from "@binclusive/a11y-contract";
+import type { Finding as CoreFinding } from "../core";
 
 /** The contract's canonical impact scale — the `Impact` enum in `@binclusive/a11y-contract`. */
 export type { Impact };
 
-/** The subset of an a11y finding a reporter renders from — the `check --json` shape. */
-export interface Finding {
-  readonly ruleId: string;
-  readonly file: string;
-  readonly line: number;
-  readonly message: string;
-  readonly wcag?: readonly string[];
-  /**
-   * The finding's contract impact, carried through from the report so a
-   * platform rollup can count by it. Optional: a report predating the field
-   * simply buckets the finding as unclassified.
-   */
+/**
+ * The subset of an a11y finding a reporter renders from — a PROJECTION of the
+ * engine's internal {@link CoreFinding} (`src/core.ts`), not a second hand-rolled
+ * shape. The shared source locators (`ruleId`/`file`/`line`) + `message`/`selector`
+ * are a `Pick` off the internal model, so they can never drift from it; two fields
+ * relax the projection at the reporter boundary and one is derived here:
+ *
+ *   - `wcag` — required on the engine model, but optional here because
+ *     {@link parseFindings} tolerates a report that omits it (boundary parse).
+ *   - `impact` — widened from the model's {@link CoreFinding.impact} (which is
+ *     `AxeImpact`, the concrete scale) back to the full {@link Impact}, because the
+ *     reporter buckets an unclassified finding as `unknown` (the model expresses
+ *     "not judged" as absence, ADR 0039).
+ *   - `criterion` — NOT an engine field; derived in {@link parseFindings} from the
+ *     report's `criterion` (or the first `wcag` tag).
+ *
+ * The reporter projects the INTERNAL model, never the metadata-only wire DTO —
+ * the wire deliberately drops the source locators this surface anchors on (ADR
+ * 0039). `pr-comment.ts` re-exports these for its existing importers.
+ */
+export type Finding = Pick<CoreFinding, "ruleId" | "file" | "line" | "message" | "selector"> & {
+  readonly wcag?: CoreFinding["wcag"];
   readonly impact?: Impact;
-  /** The WCAG success-criterion id (contract `criterion`), e.g. "1.4.3". */
   readonly criterion?: string;
-  /**
-   * The CSS selector of the offending rendered element, on axe/DOM findings only
-   * (source passes anchor by `file:line` and omit it). It is what distinguishes
-   * two same-rule findings co-located at one `file:line`.
-   */
-  readonly selector?: string;
-}
+};
 
 /** Narrow an unknown report value to the contract's impact enum. */
 export function isImpact(value: unknown): value is Impact {
