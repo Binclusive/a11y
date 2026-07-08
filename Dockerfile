@@ -3,6 +3,17 @@
 # step, no Chromium). A multi-stage build keeps corepack/pnpm and the install
 # tooling out of the shipped image; only the runtime node_modules + sources land
 # in the final layer. See issue #2133 (slim the CI image for faster pulls).
+#
+# Sibling image — Dockerfile.browser: the Chromium-capable variant for the URL
+# render path (`check-url`). The two are a deliberate slim-vs-browser split, not a
+# duplicate to consolidate: a Docker action's `runs.image` is fixed per manifest,
+# so the browser lane can't be a runtime flag on one image (see #2336), and the
+# two bases can't be shared (Dockerfile.browser's header carries the glibc-vs-musl
+# why). Mapping — this slim image publishes as `ghcr.io/binclusive/a11y:<version>`
+# and is consumed by the root `action.yml`; the browser image publishes as
+# `:browser-<version>` and is consumed by `action-url/action.yml`. Both variants
+# are built and pushed by `.github/workflows/release-image.yml` (its `variant`
+# matrix). Both share `entrypoint.sh`.
 
 # ---- deps: resolve the production dependency closure the static path needs ----
 # Pin the patch (not the floating node:20-alpine tag) to the engines.node floor
