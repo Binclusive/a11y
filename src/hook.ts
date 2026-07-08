@@ -8,10 +8,12 @@
  * edit lands. Same wrapping discipline as `mcp.ts`: every handler is a THIN
  * wrapper over `scan` + `enrichAll` — no new a11y logic lives here.
  *
- * It handles two ecosystems by file extension: a `.tsx` edit runs the React scan
- * (floor only), and a `.prefab`/`.unity` edit runs the Unity finding-emission
- * aggregator (`collectUnityFindings`) over the enclosing project, scoped to the
- * edited asset — Unity reaches the editor surface at parity with React (#92).
+ * It handles three ecosystems by file extension: a `.tsx` edit runs the React scan
+ * (floor only), a `.prefab`/`.unity` edit runs the Unity finding-emission
+ * aggregator (`collectUnityFindings`), and a `.kt` edit runs the out-of-process
+ * Jetpack Compose scan (`scanKotlin`) — each over the enclosing project, scoped to
+ * the edited file, so every static ecosystem reaches the editor surface at parity
+ * with React (#92 for Unity; #117/ADR 0008 for Compose).
  *
  * Contract (verified against https://docs.claude.com/en/docs/claude-code/hooks):
  *   stdin  — the PostToolUse event JSON. Relevant fields:
@@ -32,6 +34,7 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
+import { scanKotlin } from "./collect-kotlin";
 import { scan, type ScanResult } from "./core";
 import { evidenceFix, type EnrichedFinding, enrichAll } from "./evidence";
 import { collectUnityFindings } from "./unity-findings";
@@ -153,12 +156,71 @@ async function runUnityHook(filePath: string, base: string): Promise<HookOutput 
   }
 }
 
+/** Markers of a Gradle/Compose project root, checked walking up from an edited `.kt`
+ * file. A Gradle build is rooted at a settings/build script or the wrapper; any one
+ * present is enough to call a directory the project root — the Compose analog of
+ * `UNITY_ROOT_MARKERS`. */
+const KOTLIN_ROOT_MARKERS = [
+  "settings.gradle",
+  "settings.gradle.kts",
+  "build.gradle",
+  "build.gradle.kts",
+  "gradlew",
+] as const;
+
+/**
+ * Locate the enclosing Compose/Gradle project for an edited `.kt` file. Walks up
+ * from the file's directory for a Gradle root marker and returns the first directory
+ * that has one; falls back to the file's own directory when none is found — the same
+ * forgiving shape as {@link findUnityProjectRoot} (a loose fixture still scans
+ * something rather than no-op'ing).
+ */
+function findKotlinProjectRoot(filePath: string): string {
+  let dir = dirname(filePath);
+  for (;;) {
+    if (KOTLIN_ROOT_MARKERS.some((m) => existsSync(join(dir, m)))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break; // reached the filesystem root
+    dir = parent;
+  }
+  return dirname(filePath);
+}
+
+/**
+ * The Compose branch of {@link runHook}: an edited `.kt` file. Locate the enclosing
+ * project, run the out-of-process Kotlin PSI scan over it (`scanKotlin` — the SAME
+ * spine the CLI/MCP use, #114), enrich, and emit the SAME floor whisper as the
+ * `.tsx`/`.prefab` branches, scoped to the edited file — per-file parity with
+ * React/Unity (ADR 0008).
+ *
+ * The fail-safe is load-bearing here beyond the other branches: `scanKotlin` REJECTS
+ * when the JVM/Gradle toolchain is absent, so the `catch → null` is what upholds the
+ * precision invariant — a `.kt` the engine can't resolve stays OPAQUE (no whisper),
+ * never a mis-whisper.
+ */
+async function runKotlinHook(filePath: string, base: string): Promise<HookOutput | null> {
+  try {
+    const projectRoot = findKotlinProjectRoot(filePath);
+    const { findings: raw } = await scanKotlin(projectRoot);
+    // Scope to the file just edited (the scan covers the whole project) so the
+    // whisper speaks only to what the model touched — per-file parity with .tsx/.prefab.
+    const forFile = raw.filter((f) => resolve(f.file) === resolve(filePath));
+    const findings = enrichAll(forFile);
+
+    const floor = formatWhisper(filePath, findings, base);
+    if (floor === null) return null;
+    return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: floor } };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Run the checker on ONE edited file and return the `additionalContext`
  * envelope, or null to no-op. Pulls `file_path` from `tool_input`, resolves it
  * against `cwd` if relative, and dispatches by extension: `.tsx` runs the React
- * scan (floor only), `.prefab`/`.unity` runs the Unity aggregator; anything
- * else no-ops.
+ * scan (floor only), `.prefab`/`.unity` runs the Unity aggregator, `.kt` runs the
+ * Compose scan; anything else no-ops.
  *
  * Reused by both the CLI entry and the tests — the tests call it directly with
  * a sample payload, the CLI feeds it parsed stdin.
@@ -177,6 +239,11 @@ export async function runHook(raw: unknown): Promise<HookOutput | null> {
   // Unity assets take the aggregator path; .tsx takes the React scan below.
   if (filePath.endsWith(".prefab") || filePath.endsWith(".unity")) {
     return runUnityHook(filePath, base);
+  }
+
+  // Compose `.kt` source takes the out-of-process Kotlin PSI scan.
+  if (filePath.endsWith(".kt")) {
+    return runKotlinHook(filePath, base);
   }
 
   // Only .tsx files are scannable on the React path — silently no-op on the rest.
