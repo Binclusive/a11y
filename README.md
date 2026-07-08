@@ -141,7 +141,7 @@ jobs:
         with:
           fetch-depth: 0
       - id: a11y
-        uses: Binclusive/a11y@v0.1.4 # x-release-please-version
+        uses: Binclusive/a11y@v0.2.0 # x-release-please-version
       - if: always()  # advisory gate exits 0; upload regardless of findings
         uses: github/codeql-action/upload-sarif@v3
         with:
@@ -154,8 +154,8 @@ file exists only to render on **your** GitHub — it carries file/line for local
 annotation and is never sent to the Binclusive dashboard.
 
 > **Pin for supply-chain safety.** The examples pin to the released tag
-> `@v0.1.4`. <!-- x-release-please-version --> For production, pin to a commit SHA — `uses:
-> Binclusive/a11y@<sha>  # v0.1.4` <!-- x-release-please-version --> — rather than a floating tag or branch, so a
+> `@v0.2.0`. <!-- x-release-please-version --> For production, pin to a commit SHA — `uses:
+> Binclusive/a11y@<sha>  # v0.2.0` <!-- x-release-please-version --> — rather than a floating tag or branch, so a
 > moved tag can't silently change what runs in your CI. Dependabot
 > (`github-actions` ecosystem) will bump the pin for you.
 
@@ -174,7 +174,7 @@ way.
 
 ```yaml
       - id: a11y
-        uses: Binclusive/a11y@v0.1.4 # x-release-please-version
+        uses: Binclusive/a11y@v0.2.0 # x-release-please-version
         with:
           fail-on: critical    # optional — block only on critical findings
           # max-violations: 0  # optional — block on any finding at all
@@ -199,7 +199,7 @@ means "lane off", never an error; the scan still exits 0.
 
 ```yaml
       - id: a11y
-        uses: Binclusive/a11y@v0.1.4 # x-release-please-version
+        uses: Binclusive/a11y@v0.2.0 # x-release-please-version
         with:
           llm-api-key:  ${{ secrets.LLM_API_KEY }}  # optional — your BYOK model key
           llm-model:    ""                          # optional — override the model
@@ -229,7 +229,7 @@ does not, and nothing new crosses the wire.
 
 ```yaml
       - id: a11y
-        uses: Binclusive/a11y@v0.1.4 # x-release-please-version
+        uses: Binclusive/a11y@v0.2.0 # x-release-please-version
         with:
           binclusive-app-id:          ${{ vars.BINCLUSIVE_APP_ID }}
           binclusive-app-private-key: ${{ secrets.BINCLUSIVE_APP_PRIVATE_KEY }}
