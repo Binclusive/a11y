@@ -85,4 +85,49 @@ class ScanTest {
     fun cleanScanEncodesAsEmptyArray() {
         assertEquals("[]", Finding.encodeArray(emptyList()))
     }
+
+    // Nit 1 — fileNameOf must return the basename for BOTH POSIX and Windows
+    // separators, so a Windows call site's file is labeled correctly.
+    @Test
+    fun fileNameOfHandlesPosixAndWindowsSeparators() {
+        assertEquals("Foo.kt", fileNameOf("a/b/Foo.kt"))
+        assertEquals("Foo.kt", fileNameOf("a\\b\\Foo.kt"))
+        assertEquals("Foo.kt", fileNameOf("Foo.kt"))
+    }
+
+    // Nit 2 — the semantics suppression must key on a REAL contentDescription
+    // assignment, not any substring mention. A block that merely mentions the
+    // word must NOT suppress the finding (the false-negative this closes)…
+    @Test
+    fun semanticsThatOnlyMentionsContentDescriptionStillFlags() {
+        val findings = scan("SemanticsMentionsButDoesNotSet.kt")
+        assertEquals(
+            1, findings.size,
+            "a semantics block that only mentions contentDescription (no assignment) must not suppress the finding; got ${findings.map { it.ruleId }}",
+        )
+        assertEquals("compose/image-no-label", findings.single().ruleId)
+    }
+
+    // …while a block that genuinely SETS contentDescription still suppresses it.
+    @Test
+    fun semanticsThatSetsContentDescriptionSuppressesFinding() {
+        val findings = scan("SemanticsSetsContentDescription.kt")
+        assertTrue(
+            findings.isEmpty(),
+            "a semantics block that sets contentDescription must suppress the finding — false positive(s): ${findings.map { it.ruleId }}",
+        )
+    }
+
+    // Nit 3 — an unlabelled Icon inside a `Modifier.clickable { }` chain is a
+    // missing name on an interactive element → `critical`, not `serious`.
+    @Test
+    fun unlabelledIconInsideClickableModifierIsCritical() {
+        val findings = scan("ClickableModifierIcon.kt")
+        val f = findings.single()
+        assertEquals("compose/image-no-label", f.ruleId)
+        assertEquals(
+            "critical", f.severity,
+            "an unlabelled control inside a Modifier.clickable chain must be tiered critical",
+        )
+    }
 }

@@ -1,7 +1,11 @@
 package io.binclusive.a11ykotlinscan
 
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
+import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
@@ -23,6 +27,13 @@ private val COMPOSABLES = setOf("Image", "Icon")
 private val SEMANTICS_CALLS = setOf("semantics", "clearAndSetSemantics")
 private val INTERACTIVE_CALLS = setOf("IconButton", "Button", "FloatingActionButton")
 
+// Interactive Modifier extensions: an unlabelled control inside one of these is
+// `critical`, not `serious` — they are applied via a `modifier =` chain
+// (`Modifier.clickable { … }`) on an enclosing container, not as an ancestor
+// call, so the container's modifier argument must be inspected (see
+// enclosedByInteractiveControl).
+private val INTERACTIVE_MODIFIERS = setOf("clickable", "combinedClickable", "selectable", "toggleable")
+
 /** Parse one `.kt` source string and return its findings (the per-file engine). */
 fun scanSource(psi: KotlinPsi, source: String, filePath: String): List<Finding> {
     val ktFile = psi.parse(fileNameOf(filePath), source)
@@ -31,7 +42,10 @@ fun scanSource(psi: KotlinPsi, source: String, filePath: String): List<Finding> 
     return visitor.findings
 }
 
-private fun fileNameOf(path: String): String = path.substringAfterLast('/')
+// The PSI file label only — basename after the last path separator. Handles both
+// POSIX `/` and Windows `\` so a Windows call site's file is labeled correctly.
+internal fun fileNameOf(path: String): String =
+    path.substringAfterLast('/').substringAfterLast('\\')
 
 private class ComposeVisitor(val filePath: String, val source: String) : KtTreeVisitorVoid() {
     val findings = mutableListOf<Finding>()
@@ -74,12 +88,54 @@ private class ComposeVisitor(val filePath: String, val source: String) : KtTreeV
     private fun KtValueArgument.namedContentDescription(): Boolean =
         getArgumentName()?.asName?.identifier == "contentDescription"
 
-    /** An enclosing `semantics {}` / `clearAndSetSemantics {}` that sets a contentDescription. */
+    /**
+     * An enclosing `semantics {}` / `clearAndSetSemantics {}` that actually SETS a
+     * contentDescription. A bare substring match ("contentDescription" anywhere in
+     * the block) is too broad — a comment or a non-assigning mention would suppress
+     * a real finding (a false negative). So require a genuine `contentDescription =`
+     * assignment (bare or `this.`-qualified) inside the block.
+     */
     private fun enclosingSemanticsNamesIt(element: PsiElement): Boolean =
-        element.ancestorCalls().any { it.name in SEMANTICS_CALLS && it.call.text.contains("contentDescription") }
+        element.ancestorCalls().any { it.name in SEMANTICS_CALLS && setsContentDescription(it.call) }
 
+    private fun setsContentDescription(root: PsiElement): Boolean {
+        if (root is KtBinaryExpression && root.operationToken == KtTokens.EQ && assignsContentDescription(root.left)) {
+            return true
+        }
+        return root.children.any { setsContentDescription(it) }
+    }
+
+    private fun assignsContentDescription(lhs: KtExpression?): Boolean = when (lhs) {
+        is KtNameReferenceExpression -> lhs.getReferencedName() == "contentDescription"
+        is KtDotQualifiedExpression ->
+            (lhs.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() == "contentDescription"
+        else -> false
+    }
+
+    /**
+     * Is the Image/Icon inside an interactive element (→ `critical`)? Two shapes:
+     * an ancestor call that IS an interactive control (`IconButton`/`Button`/…),
+     * or a container whose `modifier =` argument carries an interactive Modifier
+     * extension (`Modifier.clickable`/`selectable`/`toggleable`/`combinedClickable`)
+     * — the latter is a sibling modifier chain, not an ancestor call, so the
+     * container's modifier argument is inspected rather than just its callee name.
+     */
     private fun enclosedByInteractiveControl(element: PsiElement): Boolean =
-        element.ancestorCalls().any { it.name in INTERACTIVE_CALLS || it.name == "clickable" }
+        element.ancestorCalls().any { ac ->
+            ac.name in INTERACTIVE_CALLS || ac.name in INTERACTIVE_MODIFIERS || hasInteractiveModifier(ac.call)
+        }
+
+    private fun hasInteractiveModifier(call: KtCallExpression): Boolean {
+        val modifierArg = call.valueArguments.firstOrNull {
+            it.getArgumentName()?.asName?.identifier == "modifier"
+        } ?: return false
+        return containsInteractiveModifierCall(modifierArg)
+    }
+
+    private fun containsInteractiveModifierCall(root: PsiElement): Boolean {
+        if (root is KtCallExpression && calleeName(root) in INTERACTIVE_MODIFIERS) return true
+        return root.children.any { containsInteractiveModifierCall(it) }
+    }
 
     private fun lineOf(offset: Int): Int {
         var line = 1
