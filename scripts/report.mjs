@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 const tsxEntry = pathToFileURL(require.resolve("tsx")).href;
-const cli = fileURLToPath(new URL("./src/reporter-cli.ts", import.meta.url));
+const cli = fileURLToPath(new URL("../src/reporter-cli.ts", import.meta.url));
 
 const child = spawn(process.execPath, ["--import", tsxEntry, cli, ...process.argv.slice(2)], {
   stdio: "inherit",

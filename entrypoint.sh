@@ -167,7 +167,7 @@ cat "$REPORT"
 # posts — the GitHub adapter reconciles inline PR review comments when a PR context
 # + credential are present, and no-ops otherwise (opt-in). Best-effort; the CLI
 # always exits 0 (advisory), so the output above and the surfaces below still run.
-node "$ENGINE_DIR/report.mjs" "$REPORT" || log "report step failed (ignored)"
+node "$ENGINE_DIR/scripts/report.mjs" "$REPORT" || log "report step failed (ignored)"
 
 # ---- 3.5 Consolidated PR summary + rollup (best-effort) -------------------
 # Writes the GitHub Actions job summary UNCONDITIONALLY (visible on the run page
@@ -175,7 +175,7 @@ node "$ENGINE_DIR/report.mjs" "$REPORT" || log "report step failed (ignored)"
 # present, posts/updates the ONE rollup comment in place (issue #2132). The CLI
 # decides which surfaces apply from its env and always exits 0 — advisory.
 log "writing PR summary + rollup"
-node "$ENGINE_DIR/pr-summary.mjs" "$REPORT" || log "summary step failed (ignored)"
+node "$ENGINE_DIR/scripts/pr-summary.mjs" "$REPORT" || log "summary step failed (ignored)"
 
 # ---- 4. Emit SARIF for GitHub code-scanning native annotations ------------
 # Render the SAME findings as SARIF 2.1.0 into the workspace. This Action only

@@ -1,6 +1,6 @@
 /**
  * The thin CLI over the reporter-adapter seam (issue #2235) that `entrypoint.sh`
- * invokes (through the root `report.mjs` tsx wrapper) after a scan. It selects the
+ * invokes (through the `scripts/report.mjs` tsx wrapper) after a scan. It selects the
  * platform adapter by explicit key (`A11Y_PLATFORM`, defaulting to `github` so the
  * shipped Action is behavior-preserving), resolves the platform's post-context
  * from env, parses the engine's findings JSON, and dispatches to the reporter.
