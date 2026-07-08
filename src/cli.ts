@@ -15,6 +15,7 @@ import { scanKotlin } from "./collect-kotlin";
 import { scanLiquid } from "./collect-liquid";
 import { scanSwift } from "./collect-swift";
 import { gen, init, type LearnInput, learn } from "./commands";
+import { detectStack } from "./detect-stack";
 import { collectUnityFindings } from "./unity-findings";
 import { type FindingProvenance, scan } from "./core";
 import { type Evidence, type EnrichedFinding, enrichAll, evidenceImpact, resolveDisplay } from "./evidence";
@@ -557,6 +558,18 @@ export async function runCheck(
   }
 
   if (files.length === 0) {
+    // A zero-.tsx scan pointed at an Android/Kotlin project is "unsupported by
+    // the TSX path", not "clean" — recognize the stack and name the collector
+    // that CAN scan it, so the run reads as scanned rather than silently empty
+    // (#113; ADR 0008 — Compose vs XML rides on the designSystem routing hint).
+    const stack = detectStack(root, []);
+    if (stack.framework === "android") {
+      const verb = stack.designSystem === "jetpack-compose" ? "check-kotlin" : "check-android";
+      console.log(
+        `No .tsx files under ${root} — this looks like an Android project (${stack.designSystem}). Run \`a11y-checker ${verb} ${dir}\` to scan it.`,
+      );
+      return;
+    }
     console.log(`No .tsx files under ${root}`);
     return;
   }
