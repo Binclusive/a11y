@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  type CreateOutcome,
   type Finding,
   findingKey,
   keyOf,
@@ -217,9 +218,9 @@ class FakeClient implements PrCommentClient {
   list(): Promise<ReviewComment[]> {
     return Promise.resolve(this.existing);
   }
-  create(f: Finding): Promise<void> {
+  create(f: Finding): Promise<CreateOutcome> {
     this.created.push(f);
-    return Promise.resolve();
+    return Promise.resolve("created");
   }
   update(id: number, f: Finding): Promise<void> {
     this.updated.push({ id, finding: f });
@@ -259,6 +260,70 @@ describe("syncComments — drives the mocked comments API", () => {
 });
 
 /**
+ * A client whose `create` reports the finding's line is outside the diff hunk — the
+ * GitHub 422 (`pull_request_review_thread.line ... could not be resolved`) surfaced
+ * as the {@link CreateOutcome} `"line-outside-diff"` rather than a swallowed void.
+ * The whole point of #207: this must NOT be mislogged as a created comment.
+ */
+class OutsideDiffClient implements PrCommentClient {
+  attempted: Finding[] = [];
+  constructor(private existing: ReviewComment[] = []) {}
+  list(): Promise<ReviewComment[]> {
+    return Promise.resolve(this.existing);
+  }
+  create(f: Finding): Promise<CreateOutcome> {
+    this.attempted.push(f);
+    return Promise.resolve("line-outside-diff");
+  }
+  update(): Promise<void> {
+    return Promise.resolve();
+  }
+  remove(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+describe("syncComments — a 422 for a line outside the diff hunk falls back, never a phantom success (#207)", () => {
+  it("routes an out-of-hunk finding to notInlined instead of dropping it, and logs NO false 'created comment'", async () => {
+    const logs: string[] = [];
+    const f = finding({ file: "src/Hero.tsx", line: 10 });
+    const client = new OutsideDiffClient([]);
+    const plan = await syncComments([f], client, (m) => logs.push(m));
+
+    // the create WAS attempted (in-hunk behavior is unchanged — we still try to inline)
+    expect(client.attempted).toEqual([f]);
+    // the finding is NOT lost: it is surfaced on the fallback list, not silently dropped
+    expect(plan.notInlined).toEqual([f]);
+    // the misleading success log is gone — a 422 is never logged as a created comment
+    expect(logs.some((m) => m.startsWith(`created comment for ${findingKey(f)}`))).toBe(false);
+    // and it IS logged honestly as a fallback
+    expect(logs.some((m) => m.includes("could not inline") && m.includes(findingKey(f)))).toBe(true);
+    // the summary counts it as not-inlined, not created
+    expect(logs.some((m) => m.startsWith("sync: 0 created") && m.includes("1 not inlined"))).toBe(true);
+  });
+
+  it("still inlines an in-hunk finding exactly as before — the fallback only catches the 422", async () => {
+    const logs: string[] = [];
+    const inHunk = finding({ file: "src/Ok.tsx", line: 3 });
+    const outHunk = finding({ file: "src/Hero.tsx", line: 10 });
+    // a mixed run: the first finding posts inline, the second 422s
+    const client: PrCommentClient = {
+      list: () => Promise.resolve([]),
+      create: (f) => Promise.resolve(f.file === "src/Ok.tsx" ? "created" : "line-outside-diff"),
+      update: () => Promise.resolve(),
+      remove: () => Promise.resolve(),
+    };
+    const plan = await syncComments([inHunk, outHunk], client, (m) => logs.push(m));
+
+    expect(plan.notInlined).toEqual([outHunk]);
+    // the in-hunk finding still logs a real created comment (behavior preserved)
+    expect(logs).toContain(`created comment for ${findingKey(inHunk)}`);
+    // the out-of-hunk finding never claims success
+    expect(logs.some((m) => m.startsWith(`created comment for ${findingKey(outHunk)}`))).toBe(false);
+  });
+});
+
+/**
  * A client whose `list()` fails — the partial-pagination-failure case. Reconciling
  * against a truncated list would re-CREATE comments on unfetched pages (duplicates),
  * so a list failure must ABORT the sync (throw) before any create/update/delete.
@@ -270,9 +335,9 @@ class ListFailsClient implements PrCommentClient {
   list(): Promise<ReviewComment[]> {
     return Promise.reject(new Error("list page 2 -> 500 (a page fetch failed)"));
   }
-  create(f: Finding): Promise<void> {
+  create(f: Finding): Promise<CreateOutcome> {
     this.created.push(f);
-    return Promise.resolve();
+    return Promise.resolve("created");
   }
   update(id: number, f: Finding): Promise<void> {
     this.updated.push({ id, finding: f });

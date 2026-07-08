@@ -195,3 +195,52 @@ describe("github reporter — no-op path (belt-and-suspenders with the resolver)
     ).resolves.toBeUndefined();
   });
 });
+
+describe("github reporter — a 422 create (line outside diff hunk) falls back, never a phantom success (#207)", () => {
+  it("logs the finding as an out-of-hunk fallback, NOT as a created comment, when the create POST 422s", async () => {
+    const logs: string[] = [];
+    // Mock the GitHub REST API: the list GET returns an empty page (nothing on the PR
+    // yet), the create POST 422s with GitHub's real out-of-hunk message.
+    const fetchMock = vi.fn((url: string, init?: RequestInit): Promise<Response> => {
+      const method = init?.method ?? "GET";
+      if (method === "GET") return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      if (method === "POST") {
+        const body = JSON.stringify({
+          message: "Validation Failed",
+          errors: [{ resource: "PullRequestReviewComment", field: "line", code: "unprocessable" }],
+          documentation_url: "https://docs.github.com/rest/pulls/comments#create-a-review-comment-for-a-pull-request",
+        });
+        // the diagnostic string the issue quoted: the line could not be resolved
+        return Promise.resolve(
+          new Response(`${body} pull_request_review_thread.line could not be resolved`, { status: 422 }),
+        );
+      }
+      return Promise.resolve(new Response("", { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const f = finding({ file: "src/Hero.tsx", line: 10 });
+      await githubAdapter.reporter.report(
+        [f],
+        // GITHUB_TOKEN only ⇒ resolvePostingToken returns it directly (no network mint)
+        { repo: "acme/app", pr: "42", commitId: "deadbeef", api: "https://api.github.com", env: { GITHUB_TOKEN: "ghs_x" } },
+        (m) => logs.push(m),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    // the create POST was attempted (in-hunk posting behavior is unchanged)
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.github.com/repos/acme/app/pulls/42/comments",
+      expect.objectContaining({ method: "POST" }),
+    );
+    // the misleading success log is gone: a 422 is never logged as a created comment
+    expect(logs.some((m) => m.startsWith("created comment for"))).toBe(false);
+    // it IS surfaced honestly — the adapter's 422 diagnostic and the sync's fallback line
+    expect(logs.some((m) => m.includes("422") && m.toLowerCase().includes("line outside diff hunk"))).toBe(true);
+    expect(logs.some((m) => m.includes("could not inline"))).toBe(true);
+    // and the run summary counts zero created, one not inlined — the finding is not lost
+    expect(logs.some((m) => m.startsWith("sync: 0 created") && m.includes("1 not inlined"))).toBe(true);
+  });
+});

@@ -122,6 +122,20 @@ export function renderBody(f: Finding): string {
   return `**a11y: \`${f.ruleId}\`** (${wcag})\n\n${f.message}\n\n${markerFor(f)}`;
 }
 
+/**
+ * The outcome of a single inline-comment CREATE. GitHub rejects an inline comment
+ * whose line is not part of the PR diff hunk with a 422
+ * (`pull_request_review_thread.line ... could not be resolved`) — that rejection is
+ * NOT a failure to swallow as a phantom "created": it means the finding cannot be
+ * anchored inline and must fall back to the summary surface (#207). A `create`
+ * therefore reports which surface the finding landed on rather than returning void:
+ *   - "created"           — posted inline, exactly as an in-hunk finding always has,
+ *   - "line-outside-diff" — a 422: the line is outside the diff hunk, so no inline
+ *                           anchor exists; the finding is NOT posted, it falls back,
+ *   - "failed"            — any other error (auth, network, 5xx); logged, non-fatal.
+ */
+export type CreateOutcome = "created" | "line-outside-diff" | "failed";
+
 /** The reconciliation plan: what to do to converge the PR to `findings`. */
 export interface ReconcilePlan {
   /** Findings with no existing comment — POST a new one. */
@@ -132,6 +146,14 @@ export interface ReconcilePlan {
   readonly remove: readonly number[];
   /** Comment ids left untouched (body already identical) — no API call. */
   readonly unchanged: readonly number[];
+  /**
+   * Findings GitHub refused to inline because their line falls OUTSIDE the PR diff
+   * hunk (a 422 on create — see {@link CreateOutcome}). Collected, never swallowed
+   * as a phantom "created", so the caller knows they reached only the fallback
+   * (summary) surface and no finding vanishes silently (#207). Empty at plan time —
+   * a pure {@link reconcile} has executed nothing yet; populated by {@link syncComments}.
+   */
+  readonly notInlined: readonly Finding[];
 }
 
 /**
@@ -192,7 +214,7 @@ export function reconcile(
     if (!desired.has(k)) remove.push(c.id);
   }
 
-  return { create, update, remove, unchanged };
+  return { create, update, remove, unchanged, notInlined: [] };
 }
 
 /**
@@ -211,8 +233,14 @@ export interface PrCommentClient {
    * which swallows the throw and skips the run) rather than half-reconciling.
    */
   list(): Promise<ReviewComment[]>;
-  /** POST a new inline review comment for `f`. */
-  create(f: Finding): Promise<void>;
+  /**
+   * POST a new inline review comment for `f`, reporting which surface it reached
+   * ({@link CreateOutcome}). A GitHub 422 for a line outside the diff hunk MUST come
+   * back as `"line-outside-diff"`, never a swallowed void that {@link syncComments}
+   * then mislogs as a success (#207) — that phantom success is the exact bug this
+   * contract widening fixes.
+   */
+  create(f: Finding): Promise<CreateOutcome>;
   /** PATCH the body of comment `id` to match `f`. */
   update(id: number, f: Finding): Promise<void>;
   /** DELETE comment `id` (its finding was fixed, or it is a leftover duplicate). */
@@ -233,9 +261,21 @@ export async function syncComments(
   const existing = await client.list();
   const plan = reconcile(findings, existing, self);
 
+  // Findings GitHub could not anchor inline (line outside the diff hunk). We do NOT
+  // log these as "created" — that phantom success is the #207 bug — but fall back:
+  // they stay on the summary surface, which lists every finding regardless of diff
+  // position, so the finding is surfaced rather than silently dropped from the PR.
+  const notInlined: Finding[] = [];
   for (const f of plan.create) {
-    await client.create(f);
-    log(`created comment for ${findingKey(f)}`);
+    const outcome = await client.create(f);
+    if (outcome === "created") {
+      log(`created comment for ${findingKey(f)}`);
+    } else if (outcome === "line-outside-diff") {
+      notInlined.push(f);
+      log(`could not inline ${findingKey(f)} (line outside the diff hunk) — falling back to the summary surface`);
+    } else {
+      log(`failed to post inline comment for ${findingKey(f)} (see the error above)`);
+    }
   }
   for (const { id, finding } of plan.update) {
     await client.update(id, finding);
@@ -246,10 +286,10 @@ export async function syncComments(
     log(`removed comment ${id} (finding fixed or duplicate)`);
   }
   log(
-    `sync: ${plan.create.length} created, ${plan.update.length} updated, ` +
-      `${plan.remove.length} removed, ${plan.unchanged.length} unchanged`,
+    `sync: ${plan.create.length - notInlined.length} created, ${plan.update.length} updated, ` +
+      `${plan.remove.length} removed, ${plan.unchanged.length} unchanged, ${notInlined.length} not inlined (line outside diff)`,
   );
-  return plan;
+  return { ...plan, notInlined };
 }
 
 /**
