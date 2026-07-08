@@ -17,6 +17,7 @@
 import { scopeChangedTsxFromEnv } from "../diff-scope";
 import { resolvePostingToken } from "../github-identity";
 import {
+  type CreateOutcome,
   type Finding,
   type PrCommentClient,
   renderBody,
@@ -132,16 +133,29 @@ function makeClient(target: GithubPostTarget, token: string, log: Logger): PrCom
       return out;
     },
 
-    async create(f: Finding): Promise<void> {
+    async create(f: Finding): Promise<CreateOutcome> {
       // side:"RIGHT" anchors the comment on the head (post-change) version of the
       // file — the line only exists there when it is part of the PR diff.
       const payload = { body: renderBody(f), commit_id: commitId, path: f.file, line: f.line, side: "RIGHT" };
       const url = `${api}/repos/${repo}/pulls/${pr}/comments`;
       try {
         const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
-        if (!res.ok) log(`create ${f.file}:${f.line} -> ${res.status} ${(await res.text()).slice(0, 200)}`);
+        if (res.ok) return "created";
+        const detail = (await res.text().catch(() => "")).slice(0, 200);
+        // A 422 on this endpoint is GitHub refusing to position the comment: the
+        // finding's line is not in the PR diff hunk (`pull_request_review_thread.line
+        // ... could not be resolved`). It CANNOT be inlined — report it so the sync
+        // falls back to the summary surface instead of mislogging a phantom success
+        // and silently dropping the finding from the PR (#207).
+        if (res.status === 422) {
+          log(`create ${f.file}:${f.line} -> 422 line outside diff hunk (falling back to summary): ${detail}`);
+          return "line-outside-diff";
+        }
+        log(`create ${f.file}:${f.line} -> ${res.status} ${detail}`);
+        return "failed";
       } catch (e) {
         log(`create failed for ${f.file}:${f.line}: ${e instanceof Error ? e.message : String(e)}`);
+        return "failed";
       }
     },
 
