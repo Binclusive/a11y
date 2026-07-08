@@ -29,11 +29,12 @@
 import { relative, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { FindingPayload } from "@binclusive/a11y-contract";
 import { z } from "zod";
 import { collectTsx } from "./collect";
-import { scanUrl } from "./collect-dom";
 import { learn } from "./commands";
 import { scan } from "./core";
+import { toFindingPayload } from "./emit-contract";
 import { VERSION } from "./version";
 import {
   type BaselineRuleInfo,
@@ -134,32 +135,29 @@ export async function checkA11y(dir: string): Promise<CheckA11yResult> {
   return { root, filesScanned: files.length, coverage: result.coverage, findings };
 }
 
-/** The `check_url` result: the audited URL plus its rendered-DOM findings. */
-export interface CheckUrlResult {
-  readonly url: string;
-  readonly findings: readonly CheckFinding[];
-}
-
 /**
- * `check_url`: render a live URL in a real browser, run axe-core against the
- * DOM (`scanUrl`), and run those findings through `enrichAll` — the same
- * enrichment pass `check_a11y` uses. The only difference is the source: a
- * rendered page instead of `.tsx` files, so `file` is the URL (kept as-is, NOT
- * relativized) and each finding carries the axe `selector`. No new a11y logic.
+ * `check_url`: render a live URL in a real browser, run axe-core against the DOM
+ * (`scanUrl`), enrich those findings (`enrichAll`, the same pass `check_a11y`
+ * uses), and project them onto the canonical `@binclusive/a11y-contract`
+ * {@link FindingPayload} — the SAME wire shape every other URL surface emits (the
+ * CLI URL path, phone-home; #216 / #2335), single-sourced through
+ * {@link toFindingPayload} so the MCP and CLI contracts can never diverge. An MCP
+ * consumer therefore sees one contract, not an MCP-local DTO.
+ *
+ * `collect-dom` (the playwright/@axe-core browser lane) is imported LAZILY so the
+ * MCP server's startup never pulls it in — only an actual URL scan does, mirroring
+ * the CLI's `await import("./collect-dom")`. A rendered-DOM finding's `file` is the
+ * page URL, so the emit path resolves each to a page `{ kind: "page", url }`
+ * location; `scope` is the scanned URL.
  */
-export async function checkUrl(url: string): Promise<CheckUrlResult> {
+export async function checkUrl(url: string): Promise<FindingPayload> {
+  const { scanUrl } = await import("./collect-dom");
   const result = await scanUrl(url);
   // A failed render is surfaced as a thrown error (the MCP tool handler reports it),
   // never a silent empty finding set — the same failed-vs-clean invariant #218 makes
-  // explicit on the CLI. scanUrl now returns this as data; re-throw to keep the MCP
-  // surface's fail-loud behavior.
+  // explicit on the CLI.
   if (result.status === "failed") throw new Error(result.error);
-  const enriched = enrichAll(result.findings);
-
-  // `file` stays the URL (NOT relativized) for the rendered-DOM path.
-  const findings: CheckFinding[] = enriched.map((f) => toCheckFinding(f, f.file));
-
-  return { url: result.url, findings };
+  return toFindingPayload(enrichAll(result.findings), result.url);
 }
 
 /** The `check_unity` result: the scanned project root plus its enriched findings. */
@@ -284,7 +282,7 @@ export function registerTools(server: McpServer): void {
 
   server.tool(
     "check_url",
-    "Render a live URL in a real browser and run axe-core against the rendered DOM, returning each finding (the URL as file, axe ruleId, WCAG SC, impact, the representative fix, and the CSS selector of the offending node). Unlike check_a11y, this needs no source: it works on non-React, server-rendered, or otherwise source-less pages, while returning the same baseline findings.",
+    "Render a live URL in a real browser and run axe-core against the rendered DOM, returning the canonical @binclusive/a11y-contract finding payload — each finding carrying its page location URL, WCAG criterion, element selector, evidence, scope, and provenance, the same contract every other a11y surface emits. Unlike check_a11y, this needs no source: it works on non-React, server-rendered, or otherwise source-less pages, while returning the same baseline findings.",
     { url: z.string().describe("The page URL to render and audit.") },
     async ({ url }) => jsonContent(await checkUrl(url)),
   );
