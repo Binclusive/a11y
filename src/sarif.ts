@@ -15,7 +15,7 @@
 import { relative } from "node:path";
 import type { Impact } from "@binclusive/a11y-contract";
 import { hasSelector, toContractProvenance } from "./emit-contract";
-import { evidenceHelpUrl, evidenceImpact, type EnrichedFinding, resolveDisplay } from "./evidence";
+import { evidenceImpact, type EnrichedFinding, resolveDisplay } from "./evidence";
 import { type LocationOptions, resolveLocations } from "./source-identity";
 
 /**
@@ -167,15 +167,18 @@ export function formatSarif(
             informationUri: "https://binclusive.io",
             rules: ruleIds.map((id) => {
               const f = ruleById.get(id);
-              const helpUri = f ? evidenceHelpUrl(f) : null;
-              // The rule-generic fix prose. Copilot Autofix reads `help`/
-              // `fullDescription` (NOT `result.fixes[]`) to GENERATE its edit, so
-              // this is the lever for auto-fixability — the SC/rule-accurate fix
-              // guidance, single-sourced through {@link resolveDisplay}. It stays
-              // prose (suggestions-not-patches): guidance to generate from, never a
-              // fabricated edit. Absent when a finding carries no fix (evidence
-              // `none`) — then Autofix falls back to the message + help URL.
-              const fixProse = f ? resolveDisplay(f).fix : null;
+              // Both the fix prose AND the deque `helpUri` come off the ONE
+              // {@link resolveDisplay} lookup, so the SARIF `helpUri` and the text
+              // report's `ref:` line cite the SAME rule — the finding's OWN deque
+              // rule, never the SC-first cross-wired ref that misdirected both
+              // surfaces (#192). Copilot Autofix reads `help`/`fullDescription`
+              // (NOT `result.fixes[]`) to GENERATE its edit, so the fix prose is the
+              // auto-fixability lever; it stays prose (suggestions-not-patches),
+              // never a fabricated edit. Both are absent when a finding resolves to
+              // no deque rule — then Autofix falls back to the message.
+              const d = f ? resolveDisplay(f) : null;
+              const helpUri = d?.refUrl ?? null;
+              const fixProse = d?.fix ?? null;
               return {
                 id,
                 ...(f ? { shortDescription: { text: f.message } } : {}),
