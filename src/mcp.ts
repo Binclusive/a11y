@@ -149,6 +149,11 @@ export interface CheckUrlResult {
  */
 export async function checkUrl(url: string): Promise<CheckUrlResult> {
   const result = await scanUrl(url);
+  // A failed render is surfaced as a thrown error (the MCP tool handler reports it),
+  // never a silent empty finding set — the same failed-vs-clean invariant #218 makes
+  // explicit on the CLI. scanUrl now returns this as data; re-throw to keep the MCP
+  // surface's fail-loud behavior.
+  if (result.status === "failed") throw new Error(result.error);
   const enriched = enrichAll(result.findings);
 
   // `file` stays the URL (NOT relativized) for the rendered-DOM path.
