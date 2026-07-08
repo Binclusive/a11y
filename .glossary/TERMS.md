@@ -87,7 +87,8 @@ live in `CLAUDE.md` / `.patterns/`; architecture-decision rationale lives in
 |------|------------|-----|
 | **check-swift** | The CLI command that scans `.swift` for SwiftUI accessibility findings (static, provenance `"swiftui"`). | |
 | **A11ySwiftScan** | The external SwiftPM binary (SwiftSyntax-based rules) that `collect-swift` spawns; it emits JSON findings on stdout. The external-static-analyzer pattern (ADR 0004). | An out-of-process analyzer, not an in-editor extension. |
-| **SwiftRuleId** | The static rule IDs the Swift engine emits: `"swiftui/image-no-label"` \| `"swiftui/control-no-name"`. | |
+| **SwiftRuleId** | The static rule IDs the Swift engine emits today: `"swiftui/image-no-label"` \| `"swiftui/control-no-name"`. The shipped subset of the SwiftUI rule ids row below; grows to match the spec as each planned rule ships. | |
+| **SwiftUI rule ids (`swiftui/*`)** | The canonical SwiftUI static-rule vocabulary, coined once in the rule spec table (`plugin/skills/swiftui-a11y/SKILL.md`). Shipped: `swiftui/image-no-label` (1.1.1), `swiftui/control-no-name` (4.1.2). Planned (epic #111): `swiftui/interactive-hidden` (4.1.2), `swiftui/control-no-value` (4.1.2), `swiftui/missing-trait` (4.1.2), `swiftui/heading-structure` (1.3.1/2.4.6), `swiftui/color-only-state` (1.4.1), `swiftui/field-no-label` (1.3.1/4.1.2), `swiftui/wrapper-unlabeled` (1.1.1/4.1.2). | Never re-coin a synonym — every rule implementation uses exactly these ids. |
 
 ## Unity
 
