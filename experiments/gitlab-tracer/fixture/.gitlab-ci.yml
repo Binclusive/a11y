@@ -1,0 +1,53 @@
+# a11y-checker GitLab vertical tracer (#214) — the copy-paste pipeline config a
+# human drops into a GitLab project (alongside src/Hero.tsx) to prove the
+# connected seam end-to-end: a real MR pipeline scans the fixture and the
+# jsx-a11y/alt-text finding surfaces as a native GitLab MR note.
+#
+# This MIRRORS the shipped, canonical config at examples/ci/gitlab/.gitlab-ci.yml
+# (the single source of truth for the knobs + env-var names). Keep them in sync;
+# see experiments/gitlab-tracer/README.md for the turnkey human-gated steps that
+# close AC1/AC3 (a real pipeline URL + a screenshot of the MR note).
+
+variables:
+  # checkout-depth.md: GitLab clones shallow at depth 20; a merge-request base
+  # older than 20 commits is then absent and the diff resolves against nothing.
+  # "0" = full history.
+  GIT_DEPTH: "0"
+  # Branch a non-MR pipeline diffs against when no MR target is set.
+  A11Y_DEFAULT_BRANCH: "main"
+
+a11y:
+  # run-docker-image.md: `image:` runs the whole job inside the container.
+  # `entrypoint: [""]` clears the image ENTRYPOINT so GitLab can run `script:`;
+  # we then invoke the entrypoint ourselves once the diff env is set.
+  image:
+    name: ghcr.io/binclusive/a11y:0.2.0
+    entrypoint: [""]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+  # exit-codes.md: a non-zero container exit fails the job — that is how the
+  # opt-in gate blocks a merge. Default is advisory (exit 0), which is what AC2
+  # of #214 asserts holds on GitLab.
+  script:
+    # ci-context.md: the base is a branch NAME (MR target, else the default
+    # branch); the head is CI_COMMIT_SHA.
+    - BASE_BRANCH="${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-$A11Y_DEFAULT_BRANCH}"
+    # checkout-depth.md: the base ref must be in local history before the diff
+    # can resolve — fetch it explicitly.
+    - git fetch --no-tags origin "$BASE_BRANCH"
+    - export GITHUB_WORKSPACE="$CI_PROJECT_DIR"
+    - export BASE_SHA="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-origin/$BASE_BRANCH}"
+    - export HEAD_SHA="$CI_COMMIT_SHA"
+    # Select the GitLab reporter (issue #213) so findings post as an MR note.
+    # CI_PROJECT_ID + CI_MERGE_REQUEST_IID identify the MR; CI_API_V4_URL is the
+    # REST base — all provided by GitLab in a merge_request pipeline. With no MR
+    # context (a plain branch pipeline) the adapter no-ops and the scan still runs.
+    - export A11Y_PLATFORM="gitlab"
+    # secrets-and-env.md: posting an MR note needs a token with `api` scope. The
+    # auto-injected CI_JOB_TOKEN has a narrower surface that cannot always create
+    # notes, so PREFER a project/personal access token stored as a MASKED CI/CD
+    # variable named A11Y_GITLAB_TOKEN (Settings -> CI/CD -> Variables) — it is
+    # auto-injected into the job env, so the adapter reads it with no wiring here.
+    # Absent both, the reporter no-ops (opt-in) and the scan still exits 0.
+    - /engine/entrypoint.sh
