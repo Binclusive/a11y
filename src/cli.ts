@@ -618,13 +618,24 @@ export async function runCheckUrl(
     const { scanUrl } = await import("./collect-dom");
     result = await scanUrl(target);
   } catch (err) {
-    // scanUrl re-throws a load/launch failure as an actionable one-line Error;
-    // print just that message (no stack) and exit 2 — a typo'd URL is a usage
-    // error, not a crash.
+    // A load-lane import/launch crash (e.g. playwright absent) still surfaces as a
+    // thrown Error; print just that message (no stack) and exit 2 — a usage error,
+    // not a crash. A navigation/render failure is the `failed` variant handled below.
     console.error(err instanceof Error ? err.message : String(err));
     process.exitCode = 2;
     return;
   }
+
+  // A FAILED render is NOT a clean pass: say so with a text label (never "No axe-core
+  // violations found.") and exit non-zero, so a CI `if check-url …; then` can't read a
+  // render/server failure as green (#218). This is the human + exit-code half of the
+  // failed-vs-clean fix the machine surfaces (--json/--sarif) already carry.
+  if (result.status === "failed") {
+    console.error(`a11y-checker — scan FAILED for ${target}: ${result.error}`);
+    process.exitCode = 2;
+    return;
+  }
+
   const findings = enrichAll(result.findings);
 
   // Group by axe rule for a readable report — the DOM path has no file to group

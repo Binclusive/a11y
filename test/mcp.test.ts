@@ -29,6 +29,7 @@ describe("check_url handler: axe findings emit axe's rule fix", () => {
     // contradictory SC-generic fix.
     const result: DomScanResult = {
       url: "file:///page.html",
+      status: "ok",
       findings: [
         {
           file: "file:///page.html",

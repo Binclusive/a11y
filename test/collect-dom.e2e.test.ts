@@ -34,7 +34,12 @@ describe("scanUrl: real render → axe → Finding pipeline (e2e, launches Chrom
   it(
     "emits axe-provenance findings for the known violations in the file:// fixture",
     async () => {
-      const { url, findings } = await scanUrl(FIXTURE);
+      const result = await scanUrl(FIXTURE);
+
+      // A reachable fixture is the `ok` variant; narrow before reading findings.
+      expect(result.status).toBe("ok");
+      if (result.status !== "ok") throw new Error(result.error);
+      const { url, findings } = result;
 
       expect(url).toBe(FIXTURE);
       expect(findings.length).toBeGreaterThan(0);
