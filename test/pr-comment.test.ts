@@ -321,6 +321,32 @@ describe("syncComments — a 422 for a line outside the diff hunk falls back, ne
     // the out-of-hunk finding never claims success
     expect(logs.some((m) => m.startsWith(`created comment for ${findingKey(outHunk)}`))).toBe(false);
   });
+
+  it("a non-422 'failed' create is NOT counted as created — no phantom success (the #207 defect, failed branch)", async () => {
+    const logs: string[] = [];
+    const ok = finding({ file: "src/Ok.tsx", line: 3 });
+    const boom = finding({ file: "src/Boom.tsx", line: 9 });
+    // one create lands, one raises a non-422 error → the "failed" outcome. Deriving the
+    // count as create.length - notInlined.length would report BOTH as created (2), the same
+    // phantom-success this test guards against for the failed branch.
+    const client: PrCommentClient = {
+      list: () => Promise.resolve([]),
+      create: (f) => Promise.resolve<CreateOutcome>(f.file === "src/Ok.tsx" ? "created" : "failed"),
+      update: () => Promise.resolve(),
+      remove: () => Promise.resolve(),
+    };
+    const plan = await syncComments([ok, boom], client, (m) => logs.push(m));
+
+    // the failed finding is tracked, and is neither created nor a fallback (notInlined)
+    expect(plan.failed).toEqual([boom]);
+    expect(plan.notInlined).toEqual([]);
+    // the ok finding logs a real created comment; the failed one never claims success
+    expect(logs).toContain(`created comment for ${findingKey(ok)}`);
+    expect(logs.some((m) => m.startsWith(`created comment for ${findingKey(boom)}`))).toBe(false);
+    // the summary is honest: 1 created / 1 failed — NOT 2 created
+    expect(logs.some((m) => m.startsWith("sync: 1 created") && m.includes("1 failed"))).toBe(true);
+    expect(logs.some((m) => m.startsWith("sync: 2 created"))).toBe(false);
+  });
 });
 
 /**

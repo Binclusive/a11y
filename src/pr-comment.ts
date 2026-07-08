@@ -154,6 +154,15 @@ export interface ReconcilePlan {
    * a pure {@link reconcile} has executed nothing yet; populated by {@link syncComments}.
    */
   readonly notInlined: readonly Finding[];
+  /**
+   * Findings whose create raised a non-422 error (the `"failed"` outcome). Tracked
+   * so the summary stays honest across ALL THREE outcomes: a "failed" is neither
+   * inlined nor a fallback — counting it as "created" (by deriving the count as
+   * `create.length - notInlined.length`) is the same phantom-success class #207
+   * exists to kill, left open for the "failed" branch. Empty at plan time; populated
+   * by {@link syncComments}.
+   */
+  readonly failed: readonly Finding[];
 }
 
 /**
@@ -214,7 +223,7 @@ export function reconcile(
     if (!desired.has(k)) remove.push(c.id);
   }
 
-  return { create, update, remove, unchanged, notInlined: [] };
+  return { create, update, remove, unchanged, notInlined: [], failed: [] };
 }
 
 /**
@@ -261,19 +270,26 @@ export async function syncComments(
   const existing = await client.list();
   const plan = reconcile(findings, existing, self);
 
-  // Findings GitHub could not anchor inline (line outside the diff hunk). We do NOT
-  // log these as "created" — that phantom success is the #207 bug — but fall back:
-  // they stay on the summary surface, which lists every finding regardless of diff
-  // position, so the finding is surfaced rather than silently dropped from the PR.
+  // Each create returns one of three outcomes; count them EXPLICITLY rather than
+  // deriving "created" as create.length - notInlined.length. That derivation counts
+  // a "failed" (non-422 error) as created — the same phantom-success class #207 kills,
+  // left open for the failed branch (create=[ok, outside-diff, failed] would report
+  // 2 created when only 1 landed). Only a "created" outcome is a created comment;
+  // "line-outside-diff" falls back to the summary surface (never dropped), and a
+  // "failed" is neither — it is tracked so the summary stays honest across all three.
+  const created: Finding[] = [];
   const notInlined: Finding[] = [];
+  const failed: Finding[] = [];
   for (const f of plan.create) {
     const outcome = await client.create(f);
     if (outcome === "created") {
+      created.push(f);
       log(`created comment for ${findingKey(f)}`);
     } else if (outcome === "line-outside-diff") {
       notInlined.push(f);
       log(`could not inline ${findingKey(f)} (line outside the diff hunk) — falling back to the summary surface`);
     } else {
+      failed.push(f);
       log(`failed to post inline comment for ${findingKey(f)} (see the error above)`);
     }
   }
@@ -286,10 +302,11 @@ export async function syncComments(
     log(`removed comment ${id} (finding fixed or duplicate)`);
   }
   log(
-    `sync: ${plan.create.length - notInlined.length} created, ${plan.update.length} updated, ` +
-      `${plan.remove.length} removed, ${plan.unchanged.length} unchanged, ${notInlined.length} not inlined (line outside diff)`,
+    `sync: ${created.length} created, ${plan.update.length} updated, ` +
+      `${plan.remove.length} removed, ${plan.unchanged.length} unchanged, ` +
+      `${notInlined.length} not inlined (line outside diff), ${failed.length} failed`,
   );
-  return { ...plan, notInlined };
+  return { ...plan, notInlined, failed };
 }
 
 /**
