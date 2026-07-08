@@ -98,9 +98,9 @@ An `Image(...)` or `Icon(...)` call with **no** `contentDescription` — not sup
 (named or 2nd positional), not the decorative `null`, and not set by an enclosing `semantics { }`
 / `clearAndSetSemantics { }` block. TalkBack announces nothing for it.
 
-- **Severity:** **serious** normally; **critical** when the unlabelled `Image`/`Icon` sits inside
+- **Severity:** **serious** normally; **critical** when the unlabeled `Image`/`Icon` sits inside
   an interactive control — a `Button`, `IconButton`, or `FloatingActionButton`, or anything made
-  tappable with `.clickable`. An unnamed control is unusable by TalkBack, so an unlabelled icon
+  tappable with `.clickable`. An unnamed control is unusable by TalkBack, so an unlabeled icon
   that *is* the tap target is the more urgent failure.
 - **Don't flag** (these are intentional or already labeled — the no-flag cases above):
   - `contentDescription = null` — explicitly decorative; the author's deliberate opt-out.
@@ -195,6 +195,11 @@ below.
 
 ATF reports issues by check; translate each into a WCAG success criterion so runtime findings
 read exactly like the web tool's findings.
+
+> **Two severity axes, two surfaces.** The static Rule 1 above carries the engine's *impact*
+> severity (`serious`/`critical`, emitted verbatim by the collector); the dynamic ATF checks below
+> carry an *enforcement* disposition (`warn`/`block`). Different producers, different axes — don't
+> reconcile them into one vocabulary.
 
 | ATF check | WCAG SC | What it means | Severity |
 |---|---|---|---|
