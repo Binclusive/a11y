@@ -133,6 +133,12 @@ live in `CLAUDE.md` / `.patterns/`; architecture-decision rationale lives in
 | **detect-stack** | Infer the `Stack` (framework, router, designSystem, language) from `package.json` and on-disk layout (`src/detect-stack.ts`). | |
 | **mcp / hook** | The MCP-server entrypoint (`src/mcp.ts`) and the git-hook entrypoint (`src/hook.ts`). | |
 
+## Distribution / packaging
+
+| Term | Definition | Not |
+|------|------------|-----|
+| **Distribution surface** | A separately-rooted way the tool is shipped or invoked. The surfaces: the Claude Code plugin (`plugin/` + `plugin/.claude-plugin/plugin.json`), the marketplace manifest (`.claude-plugin/marketplace.json`), the npm CLI (`package.json` `bin` → `bin/`), the two GitHub Actions (static `action.yml`, browser `action-url/action.yml`), the two Docker images (`Dockerfile` slim, `Dockerfile.browser`), and the CI templates (`examples/ci/*`, `examples/github-actions/`). Mapped canonically in [`../docs/ARCHITECTURE.md` §7](../docs/ARCHITECTURE.md). | Not a "collector"/"producer" (that is a *finding* source inside `scan()`); a distribution surface is a *packaging/entry* root outside `src/`. Not `scripts/` (internal dev/CI `.mjs` tooling, never published to consumers). |
+
 ## Architecture decisions (ADRs)
 
 | Term | Definition | Not |

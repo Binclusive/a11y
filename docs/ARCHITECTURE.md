@@ -6,6 +6,10 @@ you can explain the whole project from memory.
 
 > For *why* this engine exists and how it fits the wider strategy, see the
 > ecosystem frame: [`docs/ecosystem.md`](./ecosystem.md).
+>
+> Looking for "how do I *run* it" / which entrypoint is which? Jump to
+> [§7 Distribution surfaces](#7-distribution-surfaces-every-way-the-tool-ships-or-is-invoked)
+> — the canonical map of every plugin/CLI/action/image/CI surface.
 
 ---
 
@@ -405,6 +409,34 @@ ship. Three files per WCAG criterion, in two directories:
 | **the contract** | `binclusive.json` — the repo's committed a11y policy (escape hatch + block/warn + learned rules). |
 | **determinism boundary** | LLM judgment runs offline and is frozen as data; everything shipped is deterministic code. |
 | **the AGENTS block** | the generated section in `AGENTS.md`/`CLAUDE.md` that puts the corpus rules in front of the AI before it writes code. |
+
+---
+
+## 7. Distribution surfaces (every way the tool ships or is invoked)
+
+A **distribution surface** is a separately-rooted way the tool is shipped or
+invoked. They live *outside* `src/` and are easy to mistake for duplicates —
+this is the canonical map of what each one is and which is canonical for what.
+The confirm-and-document verdicts below are cited from the sibling
+investigations (#289 actions, #290 Dockerfiles, #291 plugin roots) and the
+`.mjs` consolidation (#288), not re-derived here.
+
+| Surface | Path(s) | Purpose — and which is canonical for what |
+|---|---|---|
+| **Claude Code plugin** | `plugin/` + `plugin/.claude-plugin/plugin.json` | The **plugin manifest**: defines the one plugin this repo ships (skills/hooks/MCP under `plugin/`). AI-delivery surface (`mcp`/`hook`). |
+| **Marketplace manifest** | `.claude-plugin/marketplace.json` | The **marketplace manifest**: *advertises* the plugin(s) this repo distributes; its `plugins[0].source: "./plugin"` points at the plugin root. Two distinct manifest *types*, both required (#291), cross-referenced by `source`. |
+| **npm CLI (published)** | `package.json` `bin` → `bin/a11y.mjs` (registered as `a11y-checker`); companion `bin/diff-scope.mjs` | The **published** entry wrappers — thin `tsx`-loader shells over `src/` shipped to consumers. Canonical for "run the checker as a CLI". |
+| **Dev/CI tooling (internal)** | `scripts/` (`check-action-pin.mjs`, `pr-summary.mjs`, `report.mjs`, `check-decisions.ts`) | The **internal** `.mjs`/tooling home — the single documented home per helper after the #288 move off the repo root. **Never published** to consumers; contrast with `bin/` (the published wrappers). |
+| **GitHub Action — static** | `action.yml` → `ghcr.io/binclusive/a11y:0.2.0` | Canonical for the **static** (source-scan) path; lean, never pulls Chromium. Consumed via `uses: Binclusive/a11y@v0.2.0`. |
+| **GitHub Action — browser** | `action-url/action.yml` → `ghcr.io/binclusive/a11y:browser-0.2.0` | Canonical for the **browser / URL** (rendered-DOM) path. A Docker action's `runs.image` is fixed per manifest, so the Chromium lane must be a separate manifest — **KEEP BOTH** (#289); the two cross-reference each other. |
+| **Docker image — slim** | `Dockerfile` (`node:20.18.1-alpine`, musl) | Backs the static Action's `:<version>` image. Slim/fast-pull. |
+| **Docker image — browser** | `Dockerfile.browser` (`node:20` Debian/glibc + Chromium) | Backs the browser Action's `:browser-<version>` image. **KEEP-SPLIT** (#290): Playwright's Chromium is a glibc build that won't run on Alpine/musl, so the base OS must differ; the glibc-vs-musl *why* is canonical in `Dockerfile.browser`, and `Dockerfile` points at it. Both built + pushed by `.github/workflows/release-image.yml`'s `variant` matrix. |
+| **Docker entrypoint (shared)** | `entrypoint.sh` | The one entrypoint both images use: `INPUT_SCAN_URL` set → `check-url` (browser image); empty → diff-scoped static `check` (via `bin/diff-scope.mjs`, the shared scoper). |
+| **CI templates** | `examples/ci/*` (gitlab, circleci, buildkite, jenkins, bitbucket), `examples/github-actions/*.yml` | Copy-paste starting points for wiring the tool into each CI system; not a runtime, documentation surface. |
+
+**Out of scope of this map:** moving code or changing any manifest's behavior —
+the `.mjs` move is #288, and the actions/Dockerfiles/plugin roots are confirmed
+as-is by #289/#290/#291.
 
 ---
 
