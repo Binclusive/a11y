@@ -283,6 +283,13 @@ describe("gitlab adapter — the sibling behind the seam (issue #213)", () => {
       expect(ctx.postTarget).toMatchObject({ api: "https://gitlab.example.com/api/v4", token: "job-tok", tokenHeader: "JOB-TOKEN" });
     });
 
+    it("strips a trailing slash off CI_API_V4_URL so the joined path has no `//`", () => {
+      const ctx = gitlabResolver.resolve({ ...mrEnv, CI_API_V4_URL: "https://gitlab.example.com/api/v4/" });
+      expect(ctx.postTarget?.api).toBe("https://gitlab.example.com/api/v4");
+      // the resolved base + the reporter's `/projects/…` join must not double the slash
+      expect(`${ctx.postTarget?.api}/projects/42`).not.toContain("v4//");
+    });
+
     it("no post-target (⇒ no-op) when the MR context is incomplete", () => {
       expect(gitlabResolver.resolve({ ...mrEnv, CI_MERGE_REQUEST_IID: undefined }).postTarget).toBeNull();
       expect(gitlabResolver.resolve({ ...mrEnv, CI_PROJECT_ID: undefined }).postTarget).toBeNull();
@@ -362,6 +369,31 @@ describe("gitlab adapter — the sibling behind the seam (issue #213)", () => {
         vi.unstubAllGlobals();
       }
       expect(putUrl).toBe("https://gitlab.example.com/api/v4/projects/42/merge_requests/7/notes/99");
+    });
+
+    it("pages past a full first page to find its marker note on page 2 — PUTs, never POSTs a duplicate", async () => {
+      const marker = "<!-- binclusive-a11y-mr-summary -->";
+      // page 1 is a FULL page (100 unrelated notes, no marker); the marker note is on page 2.
+      // A single-page list would miss it and POST a duplicate — pagination must find & PUT it.
+      const page1 = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, body: `unrelated note ${i}` }));
+      const page2 = [{ id: 4242, body: `old summary\n\n${marker}` }];
+      const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        if (init?.method === undefined) {
+          const page = new URL(String(url)).searchParams.get("page");
+          return new Response(JSON.stringify(page === "2" ? page2 : page1), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        await gitlabAdapter.reporter.report([finding()], target, noLog);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      const methods = fetchMock.mock.calls.map(([, i]) => (i as RequestInit | undefined)?.method);
+      expect(methods).not.toContain("POST"); // no duplicate created
+      const putUrl = fetchMock.mock.calls.map(([u, i]) => ((i as RequestInit | undefined)?.method === "PUT" ? String(u) : "")).find((u) => u !== "");
+      expect(putUrl).toBe("https://gitlab.example.com/api/v4/projects/42/merge_requests/7/notes/4242");
     });
 
     it("swallows a failing API call — logs, never throws (advisory exit-0)", async () => {

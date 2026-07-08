@@ -48,7 +48,9 @@ const nonEmpty = (v: string | undefined): v is string => v !== undefined && v !=
  * env-provided base always wins over the default.
  */
 function resolveApiBase(env: NodeJS.ProcessEnv): string {
-  if (nonEmpty(env.CI_API_V4_URL)) return env.CI_API_V4_URL;
+  // Strip a trailing slash on every branch: a `CI_API_V4_URL` with one would else
+  // yield `…/api/v4//projects/…` once the reporter joins its `/projects/…` path.
+  if (nonEmpty(env.CI_API_V4_URL)) return env.CI_API_V4_URL.replace(/\/+$/, "");
   if (nonEmpty(env.CI_SERVER_URL)) return `${env.CI_SERVER_URL.replace(/\/+$/, "")}/api/v4`;
   return "https://gitlab.com/api/v4";
 }
@@ -131,13 +133,25 @@ export const gitlabReporter: FindingsReporter<GitlabPostTarget> = {
     const notesUrl = `${api}/projects/${encodeURIComponent(projectId)}/merge_requests/${mrIid}/notes`;
     const body = renderMrNote(findings);
 
-    // Reconcile: find our prior summary note so a re-run updates it in place. A
-    // failed list degrades to "post a fresh note" — worst case a duplicate, never a throw.
+    // Reconcile: find our prior summary note so a re-run updates it in place. GitLab
+    // paginates `/notes` at 100/page, so we page through ALL notes before concluding
+    // the marker is absent — on an MR with >100 notes the marker falls off page 1, and
+    // a single-page list would re-POST a duplicate instead of PUT-updating in place
+    // (mirrors github-adapter's paginated `list()`). A failed or short page degrades to
+    // "post a fresh note" — worst case a duplicate, never a throw.
     let existingId: number | null = null;
     try {
-      const res = await fetch(`${notesUrl}?per_page=100`, { headers });
-      if (res.ok) existingId = findOwnNoteId(await res.json());
-      else log(`gitlab: list MR notes -> ${res.status} ${(await res.text().catch(() => "")).slice(0, 200)}`);
+      for (let page = 1; existingId === null; page++) {
+        const res = await fetch(`${notesUrl}?per_page=100&page=${page}`, { headers });
+        if (!res.ok) {
+          log(`gitlab: list MR notes p${page} -> ${res.status} ${(await res.text().catch(() => "")).slice(0, 200)}`);
+          break;
+        }
+        const batch = await res.json();
+        existingId = findOwnNoteId(batch);
+        // A short page (or a non-array/empty body) is the last page — stop paging.
+        if (!Array.isArray(batch) || batch.length < 100) break;
+      }
     } catch (e) {
       log(`gitlab: list MR notes failed: ${e instanceof Error ? e.message : String(e)}`);
     }
