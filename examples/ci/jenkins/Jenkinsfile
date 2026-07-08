@@ -14,7 +14,7 @@ pipeline {
   // container on the executing node, with the Jenkins workspace mounted.
   agent {
     docker {
-      image 'ghcr.io/binclusive/a11y:0.2.0' // x-release-please-version
+      image 'ghcr.io/binclusive/a11y:0.3.0' // x-release-please-version
       // Run as root so git trusts the mounted workspace (the entrypoint sets
       // safe.directory on it); the Docker container's .git is owned by the node.
       args '-u root:root'

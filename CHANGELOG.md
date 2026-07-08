@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0](https://github.com/Binclusive/a11y/compare/v0.2.0...v0.3.0) (2026-07-08)
+
+
+### Features
+
+* **check-url:** join the unified output-format + gate seam ([#243](https://github.com/Binclusive/a11y/issues/243)) ([#260](https://github.com/Binclusive/a11y/issues/260)) ([661e54f](https://github.com/Binclusive/a11y/commit/661e54fb4b5deb45e04e8fa4178dcab7053dc7fd))
+* **compose:** check_kotlin MCP tool + .kt editor-hook parity ([#117](https://github.com/Binclusive/a11y/issues/117)) ([#266](https://github.com/Binclusive/a11y/issues/266)) ([e185f03](https://github.com/Binclusive/a11y/commit/e185f03837e70ac5fd4e933d6ac53718bda265e0))
+* **compose:** check-kotlin CLI verb + collect-kotlin boundary + compose provenance ([#114](https://github.com/Binclusive/a11y/issues/114)) ([#255](https://github.com/Binclusive/a11y/issues/255)) ([66584d5](https://github.com/Binclusive/a11y/commit/66584d56080905e3a653a505a3e08dc8a4b1cdec))
+* **compose:** compose-matrix corpus regression gate + blessed baseline ([#118](https://github.com/Binclusive/a11y/issues/118)) ([#259](https://github.com/Binclusive/a11y/issues/259)) ([e334bbd](https://github.com/Binclusive/a11y/commit/e334bbd761e793974cae3e95e545e465480e5b8f))
+* **detect-stack:** recognize Jetpack Compose Kotlin projects + route ([#113](https://github.com/Binclusive/a11y/issues/113)) ([#262](https://github.com/Binclusive/a11y/issues/262)) ([01a3435](https://github.com/Binclusive/a11y/commit/01a3435169da6fa96a4f094125d3ed77ccf3bf05))
+* **enforce:** first-run with no binclusive.json is advisory, not block-all ([#184](https://github.com/Binclusive/a11y/issues/184)) ([#250](https://github.com/Binclusive/a11y/issues/250)) ([9dcf4bb](https://github.com/Binclusive/a11y/commit/9dcf4bb9b10ae77d05e579048849416d50ba4f55))
+* **mcp:** emit the canonical a11y contract from checkUrl ([#216](https://github.com/Binclusive/a11y/issues/216)) ([#254](https://github.com/Binclusive/a11y/issues/254)) ([593d891](https://github.com/Binclusive/a11y/commit/593d891bbf04733ca5e0a17fb70da237a49c221b))
+* **reporter:** Buildkite annotation adapter behind the reporter seam ([#212](https://github.com/Binclusive/a11y/issues/212)) ([#252](https://github.com/Binclusive/a11y/issues/252)) ([86bee91](https://github.com/Binclusive/a11y/commit/86bee9149b4a8a01218d5be8e100effb4bad2c42))
+* **reporter:** GitLab MR-note adapter behind the reporter seam ([#213](https://github.com/Binclusive/a11y/issues/213)) ([#244](https://github.com/Binclusive/a11y/issues/244)) ([252cc71](https://github.com/Binclusive/a11y/commit/252cc719f729d6b6621180d3cfd7ce9d5b9f30ec))
+
+
+### Bug Fixes
+
+* **ci:** rename-proof the SwiftPM cache key in swift.yml ([#299](https://github.com/Binclusive/a11y/issues/299)) ([#302](https://github.com/Binclusive/a11y/issues/302)) ([0456635](https://github.com/Binclusive/a11y/commit/04566357d960cff6102c898b442bf1b937a9e747))
+* **cli:** make a failed URL render distinguishable from a clean pass ([#218](https://github.com/Binclusive/a11y/issues/218)) ([#242](https://github.com/Binclusive/a11y/issues/242)) ([118009b](https://github.com/Binclusive/a11y/commit/118009b828435cc9f2345a97d89bfa280e5265e8))
+* **enforce:** route icon-only raw intrinsic &lt;button&gt; through the name-check ([#257](https://github.com/Binclusive/a11y/issues/257)) ([#264](https://github.com/Binclusive/a11y/issues/264)) ([06ac312](https://github.com/Binclusive/a11y/commit/06ac31286f928bc2b21237d68a2cc3a7f50ba2f4))
+* **evidence:** cite each finding's OWN deque rule, not the SC-first ref ([#192](https://github.com/Binclusive/a11y/issues/192)) ([#246](https://github.com/Binclusive/a11y/issues/246)) ([80445cf](https://github.com/Binclusive/a11y/commit/80445cfbcbecd43a8c3933db37ccea5824694a2e))
+* **reporter:** fall back instead of swallowing 422 for out-of-hunk inline comments ([#207](https://github.com/Binclusive/a11y/issues/207)) ([#241](https://github.com/Binclusive/a11y/issues/241)) ([58b214d](https://github.com/Binclusive/a11y/commit/58b214d10d9ee8cb50d971a19580ed513c5dfa2e))
+
 ## [0.2.0](https://github.com/Binclusive/a11y/compare/v0.1.4...v0.2.0) (2026-07-08)
 
 

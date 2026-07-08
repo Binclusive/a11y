@@ -50,7 +50,7 @@ steps:
       # run-docker-image.md: Buildkite runs the container via the docker plugin on
       # the agent host; the checkout dir is mounted as the workdir.
       - docker#v5.11.0:
-          image: "ghcr.io/binclusive/a11y:0.2.0" # x-release-please-version
+          image: "ghcr.io/binclusive/a11y:0.3.0" # x-release-please-version
           # The reporter shells out to `buildkite-agent annotate` from INSIDE the
           # container, so the agent binary + its access token must be mounted in.
           # The docker plugin does this when mount-buildkite-agent is on (its default);
