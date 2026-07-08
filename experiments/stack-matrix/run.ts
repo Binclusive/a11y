@@ -4,7 +4,10 @@
  *
  * Cold scan = no `init`, no `pnpm install`, no manual component declarations.
  * We are measuring OUT-OF-THE-BOX recall per stack, so we drive the checker
- * exactly as a first-time user would: `cli.ts check <srcDir> --json`.
+ * exactly as a first-time user would: `cli.ts check <srcDir> --json`. Unlike the
+ * finding-stream gates (unity/android/compose/shopify), stack shells the CLI and
+ * snapshots its coverage/summary report, so it keeps its own scan loop — but the
+ * clone-at-SHA primitives are shared (`experiments/_matrix/harness.ts`, #247).
  *
  * The checker EXITS NON-ZERO when it finds blocking issues — that is the
  * normal, expected path, NOT a failure. We parse stdout regardless of exit
@@ -14,10 +17,11 @@
  * reproducible from the pinned manifest).
  */
 
-import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ensureRepoAt, headSha, makeGit, slug } from "../_matrix/harness.ts";
 import { detectFramework } from "./matrix.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -30,6 +34,8 @@ const RESULTS_DIR = join(HERE, "results");
 const SCAN_TIMEOUT_MS = 120_000;
 const CLONE_TIMEOUT_MS = 120_000;
 
+const git = makeGit(CLONE_TIMEOUT_MS);
+
 interface ManifestEntry {
   repo: string;
   designSystem: string;
@@ -37,59 +43,6 @@ interface ManifestEntry {
   sha: string;
   stars: number;
   source: string;
-}
-
-const slug = (repo: string) => repo.replace("/", "__");
-
-const git = (args: string[]) =>
-  execFileSync("git", args, { stdio: "ignore", timeout: CLONE_TIMEOUT_MS });
-
-/**
- * Park a clone of `repo` at the EXACT pinned `sha` in `dir`. This is what makes
- * the corpus a regression baseline rather than a moving benchmark: with every
- * repo frozen at its manifest sha, the only thing that can move the checker's
- * numbers is the checker's own code — never the upstream repo drifting.
- *
- * GitHub serves a fetch of a specific reachable sha (`fetch --depth 1 origin
- * <sha>`), so we init + fetch-by-sha + checkout. If that is refused (a sha that
- * has since been force-pushed away), we degrade to a shallow branch clone and
- * record whatever HEAD we actually got — the result's `sha`/`pinned` fields make
- * the drift visible rather than silent.
- */
-function ensureRepoAt(repo: string, sha: string, branch: string, dir: string): void {
-  const url = `https://github.com/${repo}.git`;
-
-  if (existsSync(join(dir, ".git"))) {
-    if (headSha(dir) === sha) return; // cache already pinned
-    try {
-      git(["-C", dir, "fetch", "-q", "--depth", "1", "origin", sha]);
-      git(["-C", dir, "checkout", "-q", sha]);
-    } catch {
-      /* keep cached HEAD; result records the actual sha */
-    }
-    return;
-  }
-
-  try {
-    mkdirSync(dir, { recursive: true });
-    git(["-C", dir, "init", "-q"]);
-    git(["-C", dir, "remote", "add", "origin", url]);
-    git(["-C", dir, "fetch", "-q", "--depth", "1", "origin", sha]);
-    git(["-C", dir, "checkout", "-q", sha]);
-  } catch {
-    // Fetch-by-sha refused — fall back to a floating branch clone.
-    rmSync(dir, { recursive: true, force: true });
-    git(["clone", "--depth", "1", "--branch", branch, url, dir]);
-  }
-}
-
-/** Record the actual HEAD sha of a clone. */
-function headSha(dir: string): string {
-  try {
-    return execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-  } catch {
-    return "";
-  }
 }
 
 const SKIP_DIRS = new Set([
@@ -225,7 +178,7 @@ export function runAll() {
     const resultPath = join(RESULTS_DIR, `${slug(repo)}.json`);
 
     try {
-      ensureRepoAt(repo, sha, defaultBranch, dir);
+      ensureRepoAt(git, repo, sha, defaultBranch, dir);
       const clonedSha = headSha(dir) || sha;
 
       const { dir: tsxRoot, files: tsxFiles } = findTsxRoot(dir);
