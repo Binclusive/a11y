@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { collectTsx } from "../src/collect";
 import {
+  detectAndroid,
+  detectCompose,
   detectDesignSystem,
   detectFrameworkFromDeps,
   detectStack,
@@ -16,6 +18,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixture = join(here, "fixtures", "stack-fixture");
 const wsApp = join(here, "fixtures", "workspace-fixture", "apps", "web");
 const wsNestedSrc = join(wsApp, "src", "app");
+const composeProject = join(here, "fixtures", "compose-project");
+const kotlinJvmProject = join(here, "fixtures", "kotlin-jvm-project");
 
 describe("packageNameOf", () => {
   it("collapses per-component sub-paths onto the package", () => {
@@ -97,6 +101,34 @@ describe("detectStack: package-up from a nested dir + framework-primitive exclus
     const page = join(wsNestedSrc, "page.tsx");
     expect(detectDesignSystem([page])).not.toBe("next");
     expect(detectDesignSystem([page])).not.toBe("react");
+  });
+});
+
+describe("detectStack: recognizes a Jetpack Compose Kotlin project (routes to check-kotlin)", () => {
+  it("positive — a Gradle + Compose-dep + .kt project is detected as Compose, even with NO res/layout or manifest", () => {
+    // The Compose fixture has no AndroidManifest.xml and no res/layout* — the
+    // exact case detectAndroid (keyed on those markers) misses. The Compose
+    // dependency + .kt source is the confident signal.
+    expect(detectCompose(composeProject)).toBe(true);
+    expect(detectAndroid(composeProject)).toBe(false);
+    const stack = detectStack(composeProject, []);
+    expect(stack.framework).toBe("android");
+    // Compose vs XML rides on designSystem, NOT a new Language member (ADR 0008).
+    expect(stack.designSystem).toBe("jetpack-compose");
+    expect(stack.language).toBe("android-xml");
+  });
+
+  it("negative — a plain Kotlin/JVM Gradle project (no Compose dep) is NOT misread as Android/Compose", () => {
+    // Gradle + .kt but no Compose dependency and no Android UI — the precision
+    // seam: confident Compose signal or abstain, never a wrong-stack route.
+    expect(detectCompose(kotlinJvmProject)).toBe(false);
+    expect(detectAndroid(kotlinJvmProject)).toBe(false);
+    expect(detectStack(kotlinJvmProject, []).framework).not.toBe("android");
+  });
+
+  it("negative — a React/TSX repo is unchanged (no Compose, no Android)", () => {
+    expect(detectCompose(fixture)).toBe(false);
+    expect(detectStack(fixture, []).framework).toBe("next");
   });
 });
 

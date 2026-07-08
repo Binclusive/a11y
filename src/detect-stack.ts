@@ -166,6 +166,16 @@ function hasAndroidMarker(dir: string, maxDepth: number): boolean {
   return false;
 }
 
+/** True when `dir` is a Gradle project root (Groovy or Kotlin DSL). */
+function hasGradleRoot(dir: string): boolean {
+  return (
+    existsSync(join(dir, "build.gradle")) ||
+    existsSync(join(dir, "build.gradle.kts")) ||
+    existsSync(join(dir, "settings.gradle")) ||
+    existsSync(join(dir, "settings.gradle.kts"))
+  );
+}
+
 /**
  * True when `dir` is an Android project: a Gradle root (a `build.gradle` /
  * `settings.gradle`, in Groovy or Kotlin DSL) paired with an Android marker
@@ -174,16 +184,98 @@ function hasAndroidMarker(dir: string, maxDepth: number): boolean {
  * misread as Android.
  */
 export function detectAndroid(dir: string): boolean {
-  const gradle =
-    existsSync(join(dir, "build.gradle")) ||
-    existsSync(join(dir, "build.gradle.kts")) ||
-    existsSync(join(dir, "settings.gradle")) ||
-    existsSync(join(dir, "settings.gradle.kts"));
-  if (!gradle && !existsSync(join(dir, "AndroidManifest.xml"))) {
+  if (!hasGradleRoot(dir) && !existsSync(join(dir, "AndroidManifest.xml"))) {
     // No gradle root and no manifest right here — not the root of an Android repo.
     return false;
   }
   return hasAndroidMarker(dir, 5);
+}
+
+/**
+ * Jetpack Compose dependency/plugin markers as they appear in a Gradle build
+ * file or a version catalog: AndroidX Compose, Compose Multiplatform, or the
+ * Kotlin 2.0 Compose-compiler plugin. Any one is a confident Compose signal.
+ */
+const COMPOSE_DEP_RE =
+  /androidx\.compose|org\.jetbrains\.compose|kotlin[.-]plugin[.-]compose|compose[.-]compiler/;
+
+/** Gradle build / version-catalog files whose text we sniff for a Compose dep. */
+const GRADLE_DEP_FILES = ["build.gradle", "build.gradle.kts", "libs.versions.toml"];
+
+/** True when `name` is a Gradle build file or version catalog worth sniffing. */
+function isGradleDepFile(name: string): boolean {
+  return GRADLE_DEP_FILES.includes(name);
+}
+
+/**
+ * Bounded, skip-pruned find-down: does any Gradle build file / version catalog
+ * within `maxDepth` of `dir` declare a Jetpack Compose dependency? Compose deps
+ * live in the module (`app/build.gradle.kts`) or a `gradle/libs.versions.toml`,
+ * not the root, so a shallow descent is the reliable signal.
+ */
+function hasComposeDependency(dir: string, maxDepth: number): boolean {
+  let entries: ReturnType<typeof readdirSync>;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && isGradleDepFile(entry.name)) {
+      try {
+        if (COMPOSE_DEP_RE.test(readFileSync(join(dir, entry.name), "utf8"))) return true;
+      } catch {
+        // unreadable build file — best-effort signal, keep scanning
+      }
+    }
+  }
+  if (maxDepth <= 0) return false;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || ANDROID_SCAN_SKIP.has(entry.name)) continue;
+    if (hasComposeDependency(join(dir, entry.name), maxDepth - 1)) return true;
+  }
+  return false;
+}
+
+/** Bounded, skip-pruned find-down for a `.kt` (Kotlin) source file. */
+function hasKotlinSource(dir: string, maxDepth: number): boolean {
+  let entries: ReturnType<typeof readdirSync>;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name.endsWith(".kt")) return true;
+  }
+  if (maxDepth <= 0) return false;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || ANDROID_SCAN_SKIP.has(entry.name)) continue;
+    if (hasKotlinSource(join(dir, entry.name), maxDepth - 1)) return true;
+  }
+  return false;
+}
+
+/**
+ * True when `dir` is a Jetpack Compose Kotlin project: a Gradle root paired with
+ * BOTH a Compose dependency AND `.kt` source. This recognizes a Compose app even
+ * when it has NO `res/layout*` (Compose replaces XML layouts) or its
+ * `AndroidManifest.xml` sits beyond the marker probe — exactly the case
+ * `detectAndroid` (keyed on manifest/layout markers) misses. Requiring the
+ * Compose dep AND `.kt` keeps a plain Kotlin/JVM Gradle project (no Compose)
+ * from being misread as a Compose surface — the detect-stack analog of the
+ * precision invariant: route confidently or abstain, never mis-route.
+ *
+ * Compose is expressed through this stack signal, NOT a new `Language` member —
+ * see ADR 0008 (`Language` stays `android-xml` for every Android surface; the
+ * Compose-vs-XML distinction rides on `designSystem` + finding `provenance`).
+ */
+export function detectCompose(dir: string): boolean {
+  if (!hasGradleRoot(dir)) return false;
+  // `.kt` sources sit under a deep reverse-domain package path
+  // (`app/src/main/kotlin/com/example/app/ui/…`), so the source probe descends
+  // deeper than the build-file probe (build.gradle lives at the module root).
+  return hasComposeDependency(dir, 6) && hasKotlinSource(dir, 12);
 }
 
 /**
@@ -255,11 +347,20 @@ export function detectDesignSystem(tsxFiles: readonly string[], rootDir?: string
  */
 export function detectStack(dir: string, tsxFiles: readonly string[]): Stack {
   // Android is a distinct platform from the React/TSX path: an Android repo has
-  // no `package.json`/tsconfig to read, and its UI is `res/layout*` XML, not
-  // `.tsx`. Detect it first so it routes to the Android XML collector instead of
-  // degrading to a `framework: unknown · custom · js` web stack.
-  if (detectAndroid(dir)) {
-    return { framework: "android", router: null, designSystem: "android-views", language: "android-xml" };
+  // no `package.json`/tsconfig to read, and its UI is `res/layout*` XML or
+  // Jetpack Compose `.kt`, not `.tsx`. Detect it first so it routes to an Android
+  // collector instead of degrading to a `framework: unknown · custom · js` web
+  // stack. The Compose-vs-XML surface distinction rides on `designSystem` (the
+  // routing hint that selects `check-kotlin` vs `check-android`) — `language`
+  // stays `android-xml` for every Android surface, never a new member (ADR 0008).
+  const compose = detectCompose(dir);
+  if (compose || detectAndroid(dir)) {
+    return {
+      framework: "android",
+      router: null,
+      designSystem: compose ? "jetpack-compose" : "android-views",
+      language: "android-xml",
+    };
   }
   // Package-up: a scan pointed at a nested `src/` finds the app's package.json
   // (and the on-disk app/pages layout) one or more levels above.
