@@ -395,9 +395,12 @@ a finding your contract marks **block** fired, and the exit code is identical ac
 `--fail-on` / `--max-violations` to set the threshold, `--ci` to run advisory (always
 exit 0). So a stack scan gates a job exactly like the `.tsx` scan does (next section).
 
-> Until you run `init` to write a `binclusive.json`, every finding counts as
-> block-level, so an ungated scan fails on anything it finds — that first-run
-> default is tracked in [#184](https://github.com/Binclusive/a11y/issues/184).
+> With **no** `binclusive.json`, a scan is **advisory**: every finding is
+> reported but none block, so the run exits **0** and your build stays green
+> ([#184](https://github.com/Binclusive/a11y/issues/184) / ADR 0010). Blocking is
+> opt-in — arm it by committing a `binclusive.json` with an `enforcement.block`
+> list (run `init`), or by adding a `--fail-on <impact>` / `--max-violations <n>`
+> gate flag (the equivalent Action inputs work too).
 
 **What to do next:** make the gate automatic.
 
