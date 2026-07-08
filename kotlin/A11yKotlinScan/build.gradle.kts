@@ -28,6 +28,14 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.21")
 
     testImplementation(kotlin("test"))
+
+    // Property-based precision guard (ComposePrecisionPropertyTest, #258 — parity
+    // with test/source-trace.pbt.test.ts). kotest-property is a pure generator
+    // library: `Arb` + `checkAll` run inside the existing kotlin.test @Test on the
+    // JUnit Platform runner already configured below — no second test engine, no
+    // new CI workflow. checkAll is a suspend fun, so runBlocking (coroutines-core).
+    testImplementation("io.kotest:kotest-property:5.9.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 }
 
 kotlin {
