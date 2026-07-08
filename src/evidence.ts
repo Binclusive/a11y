@@ -228,11 +228,12 @@ export function evidenceBestPractice(c: Evidence): boolean {
  * policy. Every consumer (the CLI `detailLines` printer, the MCP `CheckFinding`)
  * reads this instead of re-deriving the policy, so they can never disagree.
  *
- * The policy: for a `provenance === "axe"` (rendered-DOM) finding the baseline
- * `fix` is SC-GENERIC, so for axe findings we show the rule's own per-rule help
- * (`message`)/`ref` instead. For source findings (`jsx-a11y` / `enforce`) the
- * rule↔SC mapping is clean via wcag-map, so the baseline `fix` is rule-accurate
- * and shown verbatim.
+ * The policy: an axe (rendered-DOM) finding shows its own per-rule help
+ * (`message`) and runtime `ref`. A source finding (`jsx-a11y` / `enforce`) shows
+ * the fix + `ref` of its OWN deque rule, resolved by rule id through
+ * {@link SOURCE_RULE_TO_AXE} — never the SC-first grab, which cross-wired an
+ * unrelated deque rule onto both surfaces (#192). Impact is left as `enrich`
+ * resolved it; this contract corrects only the fix/ref association.
  */
 export interface DisplayContract {
   /** Uppercased impact for the `impact:` line, or null to omit it. */
@@ -241,25 +242,68 @@ export interface DisplayContract {
   readonly fixLine: string | null;
   /**
    * The rule-accurate fix string for API emission (MCP `CheckFinding.fix`): axe
-   * findings get axe's per-rule help (`message`); source findings get the
-   * baseline `fix`. Unlike `fixLine` this is never suppressed.
+   * findings get axe's per-rule help (`message`); source findings get their OWN
+   * deque rule's fix (see {@link SOURCE_RULE_TO_AXE}). Unlike `fixLine` this is
+   * never suppressed.
    */
   readonly fix: string | null;
   /** The Deque help URL to render as a `ref:` line, or null to omit it. */
   readonly refUrl: string | null;
 }
 
+/**
+ * A source rule's OWN deque rule — the axe rule whose Deque doc describes the
+ * SAME failure the source rule detects. This is the finding-to-ref association
+ * keyed by the finding's own rule id, the fix for #192: previously a source
+ * finding's fix-prose + deque ref were pulled off {@link baselineBySc}, which
+ * returns the FIRST axe rule (in ruleId-sorted catalog order) that happens to
+ * tag the finding's SC — an unrelated rule. So `jsx-a11y/alt-text` (SC 1.1.1)
+ * got `aria-meter-name` (the alphabetically-first 1.1.1 rule), and
+ * `enforce/dialog-no-name` got `area-alt` — a systematic mis-key that corrupted
+ * BOTH the report `fix:`/`ref:` lines and the SARIF `helpUri`. An SC maps to
+ * many axe rules, so SC alone can never name the RIGHT one; the correspondent is
+ * declared here per rule instead. A rule with no clean single axe correspondent
+ * is intentionally absent — it then shows no deque ref rather than a wrong one.
+ */
+const SOURCE_RULE_TO_AXE: Readonly<Record<string, string>> = {
+  "jsx-a11y/alt-text": "image-alt",
+  "jsx-a11y/anchor-has-content": "link-name",
+  "jsx-a11y/label-has-associated-control": "label",
+  "jsx-a11y/heading-has-content": "empty-heading",
+  "jsx-a11y/aria-props": "aria-valid-attr-value",
+  "jsx-a11y/role-has-required-aria-props": "aria-required-attr",
+  "jsx-a11y/role-supports-aria-props": "aria-allowed-attr",
+  "enforce/button-no-name": "button-name",
+  "enforce/image-no-alt": "image-alt",
+  "enforce/link-no-name": "link-name",
+  "enforce/dialog-no-name": "aria-dialog-name",
+  "enforce/input-no-name": "label",
+};
+
+/**
+ * The baseline catalog entry for a SOURCE finding's own deque rule, or null when
+ * the rule has no declared correspondent (→ no cross-wired ref is shown). Keyed
+ * by the finding's own rule id, never by a shared SC. See {@link SOURCE_RULE_TO_AXE}.
+ */
+function dequeRuleFor(f: EnrichedFinding): BaselineRuleEntry | null {
+  const axeId = SOURCE_RULE_TO_AXE[f.ruleId];
+  if (axeId === undefined) return null;
+  return BASELINE.byRule.get(axeId) ?? null;
+}
+
 export function resolveDisplay(f: EnrichedFinding): DisplayContract {
-  const c = f.corpus;
   const isAxe = f.provenance === "axe";
+  // Impact stays exactly as `enrich` resolved it — #192 corrects only the
+  // fix-prose → deque-ref association, never the impact / SC / rule id.
   const impact = evidenceImpact(f);
-  // axe → rule-accurate help (its own message); source → SC-keyed baseline fix.
-  const ruleFix = isAxe ? (f.message ?? null) : evidenceFix(c);
-  // A baseline fix is axe's per-rule help (rule-accurate), so it is shown for axe
-  // and source alike; `none` never carries a fix line.
-  const fixLine = evidenceFix(c);
-  // `ref:` shows for every axe finding, and for every finding carrying a help URL.
-  const refUrl = evidenceHelpUrl(f);
+  // The deque rule to cite is the one describing THIS finding's own failure: an
+  // axe finding carries its own runtime help/url; a source finding resolves its
+  // own declared axe correspondent — NOT the SC-first grab that cross-wired an
+  // unrelated deque rule onto both the `fix:` line and the SARIF `helpUri` (#192).
+  const deque = isAxe ? null : dequeRuleFor(f);
+  const ruleFix = isAxe ? (f.message ?? null) : (deque?.help ?? null);
+  const fixLine = isAxe ? evidenceFix(f.corpus) : (deque?.help ?? null);
+  const refUrl = isAxe ? evidenceHelpUrl(f) : (deque?.helpUrl ?? null);
   return {
     impactLabel: impact === null ? null : impact.toUpperCase(),
     fixLine,

@@ -245,7 +245,7 @@ describe("rule-accurate fix: axe findings show axe guidance, source findings sho
     expect(text).toContain("coverage: axe baseline rule SC 1.1.1");
   });
 
-  it("a SOURCE-PASS finding on the same SC shows the baseline fix verbatim", () => {
+  it("a SOURCE-PASS finding shows its OWN deque rule's fix, not the SC-first ref (#192)", () => {
     const e = enrich({
       file: "/x.tsx",
       line: 7,
@@ -255,14 +255,23 @@ describe("rule-accurate fix: axe findings show axe guidance, source findings sho
       enforcement: "block",
       provenance: "jsx-a11y",
     });
+    // The corpus/coverage layer is unchanged — it still cross-refs the SC. The fix
+    // is the SC-first pick (`aria-meter-name`, first 1.1.1 rule in catalog order)
+    // that used to leak into the `fix:` line; #192 keeps it OFF the display.
     expect(e.corpus.source).toBe("baseline");
     if (e.corpus.source !== "baseline") throw new Error("unreachable");
-    // A source finding shows the SC-keyed baseline fix (axe's per-rule help).
-    expect(resolveDisplay(e).fix).toBe(evidenceFix(e.corpus));
-    expect(resolveDisplay(e).fix).toBe(e.corpus.fix);
+    // The display now cites alt-text's OWN deque rule (`image-alt`), never the
+    // SC-first `aria-meter-name` the corpus evidence carries.
+    expect(resolveDisplay(e).fix).toBe("Images must have alternative text");
+    expect(resolveDisplay(e).fix).not.toBe(evidenceFix(e.corpus));
 
     const text = detailLines(e).join("\n");
+    // Coverage line (SC cross-ref) is untouched...
     expect(text).toContain("coverage: axe baseline rule SC 1.1.1");
-    expect(text).toMatch(/fix:\s+/); // baseline fix still rendered for source findings
+    // ...and the ref/fix point at image-alt, not aria-meter-name.
+    expect(text).toContain(
+      "ref:    https://dequeuniversity.com/rules/axe/4.11/image-alt?application=axeAPI",
+    );
+    expect(text).not.toContain("aria-meter-name");
   });
 });
