@@ -61,6 +61,17 @@ mirroring `test/fixtures/`. Dir-level scans assert against the dedicated
 collision class). CI runs `./gradlew test` on every push/PR touching the package
 (`.github/workflows/kotlin.yml`), so an engine regression fails the build.
 
+Beyond the enumerated fixtures, `ComposePrecisionPropertyTest.kt` is the Kotlin-side
+property-based precision guard — the mirror of `test/source-trace.pbt.test.ts` (kotest
+`io.kotest.property`, `checkAll` + an `Arb` running in-process inside `./gradlew test`).
+It generates synthetic Compose control snippets (`Image`/`Icon`, each with/without a
+`contentDescription`, with/without a naming `semantics {}` block, wrapped in varied
+interactive/nesting contexts) and asserts correct-tier-or-opaque over hundreds of
+inputs. **New Compose rules must widen the `Arb`** — add the new shape to
+`ComposeSnippet` + `renderSnippet` and its ground truth to `labeled`/`expectedSeverity`,
+mirroring the resolver rule "extend its generators when you add resolver capability."
+Every generated shape must stay syntactically valid Kotlin the PSI parser accepts.
+
 ## If you touched the resolver or enforce rules — run the real-world gate
 
 "The resolver" = `src/source-trace.ts`, `src/resolve-components.ts`,
