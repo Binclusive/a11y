@@ -36,6 +36,31 @@ thin shell over it); tests drive the climb against fixture `.swift` files under
 a fixture + assertion alongside any rule change, mirroring `test/fixtures/`. CI runs
 `swift test` on every push/PR touching the package (`.github/workflows/swift.yml`).
 
+## If you touched the Kotlin/Compose collector — run its tests
+
+The Compose collector (`kotlin/A11yKotlinScan/`, the Android/Jetpack-Compose-static
+path; ADR 0008) holds the same precision invariant as the JS resolver: map to the
+correct host or stay opaque, never the wrong host. Its guard is a Gradle/JUnit test
+target — run it from the package before finishing any Kotlin change (needs a JDK; on
+this machine `JAVA_HOME=/opt/homebrew/opt/openjdk`):
+
+```
+cd kotlin/A11yKotlinScan && ./gradlew test    # builds the PSI engine + runs the fixture suite
+```
+
+The committed Gradle wrapper pins the toolchain, so the command is reproducible. Tests
+(`src/test/kotlin/.../ScanTest.kt`) drive the PSI scan against fixture `.kt` files under
+`src/test/resources/fixtures/` with known expected findings — a positive
+(`MissingContentDescription.kt`: a `contentDescription`-less `Image`/`Icon` → one
+`compose/image-no-label` finding) and a negative (`LabeledImage.kt`: a labelled or
+decorative control → no false positive). The fixtures live under `resources/` so they
+are *parsed as source text*, never compiled into the test module (the Swift
+`exclude: ["Fixtures"]` analogue). Add a fixture + assertion alongside any rule change,
+mirroring `test/fixtures/`. Dir-level scans assert against the dedicated
+`fixtures/aggregate/` subtree, never the shared `fixtures/` dir (the #84 cross-PR
+collision class). CI runs `./gradlew test` on every push/PR touching the package
+(`.github/workflows/kotlin.yml`), so an engine regression fails the build.
+
 ## If you touched the resolver or enforce rules — run the real-world gate
 
 "The resolver" = `src/source-trace.ts`, `src/resolve-components.ts`,
