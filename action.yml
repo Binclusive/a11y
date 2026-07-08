@@ -2,6 +2,15 @@ name: "Binclusive a11y-checker (tracer bullet)"
 description: "Scan changed .tsx files with the Binclusive accessibility engine, comment on the PR, and emit SARIF for native code-scanning annotations. Static path, non-blocking."
 author: "Binclusive"
 
+# The STATIC, Chromium-free lane: it scans .tsx source from the checkout and never
+# pulls a browser. Its opt-in browser sibling is `action-url/action.yml` (the URL /
+# rendered-DOM scan, pinned to the `:browser-<version>` image). Two actions exist —
+# not a stale duplicate — because a Docker action's `runs.image` is fixed per manifest,
+# so the browser lane cannot be a runtime flag on this action; it must be a separate
+# manifest under `action-url/` (`uses: owner/repo/action-url@ref`). See #2336/#2133 and
+# .patterns/github-actions/uses-resolution.md. Both image pins are repinned in lockstep
+# by release-please (`x-release-please-version` below + release-please-config.json).
+
 inputs:
   github-token:
     description: "Token used to post inline review comments on the PR."
