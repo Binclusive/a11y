@@ -154,9 +154,9 @@ describe("@effect/cli dispatch: each subcommand parses + invokes its runner", ()
       expect(report.findings.some((f) => f.ruleId === "unity/missing-accessible-label")).toBe(
         true,
       );
-      // Floor findings include blocking ones → exit code 1, the same exit semantics as
-      // the other check verbs.
-      expect(exitCode).toBe(1);
+      // No binclusive.json ⇒ advisory floor findings (ADR 0010) → exit 0, the same
+      // first-run semantics as the other check verbs. Blocking is opt-in (gate flags).
+      expect(exitCode ?? 0).toBe(0);
     },
   );
 

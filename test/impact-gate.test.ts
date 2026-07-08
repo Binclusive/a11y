@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Impact } from "@binclusive/a11y-contract";
+import { enforcementFor } from "../src/config-scan";
+import type { Contract } from "../src/contract";
 import {
   GATE_ADVISORY,
   GATE_OFF,
@@ -115,5 +117,56 @@ describe("gateExitCode — OPT-IN --max-violations volume gate", () => {
     expect(
       gateExitCode(belowImpactButOverCount, { failOn: "critical", maxViolations: 1, advisory: false }),
     ).toBe(1);
+  });
+});
+
+/**
+ * The first-run gating policy (ADR 0010), verified end-to-end over the REAL
+ * path: `core`/collectors tag each finding `enforcementFor(wcag, contract)`, and
+ * `cli` derives the exit as `gateExitCode(findings.map(toGateFinding), gate)`
+ * where `toGateFinding` sets `blocking = enforcement === "block"`. These cases
+ * compose those two seams to prove the disposition drives the exit.
+ */
+describe("first-run gating: no binclusive.json is ADVISORY, not block-all (ADR 0010)", () => {
+  // A contract that BLOCKS 1.3.1 only — the configured-opt-in case.
+  const blockingContract: Contract = {
+    version: 1,
+    stack: { framework: "next", router: "app", designSystem: "@acme/ui", language: "ts" },
+    enforcement: { block: ["1.3.1"], warn: ["2.4.4"] },
+    learned: [],
+    declarations: { components: {}, injectsChildren: [], ignore: [] },
+  };
+
+  /** Mirror the real path: enforcement disposition → gate's `blocking` flag. */
+  const gf = (wcag: readonly string[], contract: Contract | null, impact: Impact = "serious"): GateFinding => ({
+    impact,
+    blocking: enforcementFor(wcag, contract) === "block",
+  });
+
+  it("NO contract + findings ⇒ every finding advisory ⇒ default exit 0 (findings still reported, build not red)", () => {
+    // The bug this ADR fixes: with no config every finding used to be `block`, so
+    // a first run gated (exit 1) on everything. Now the disposition is advisory.
+    const findings = [gf(["1.3.1"], null), gf(["2.4.4"], null), gf(["4.1.2"], null)];
+    expect(findings.every((f) => !f.blocking)).toBe(true); // reported, but none blocking
+    expect(gateExitCode(findings, GATE_OFF)).toBe(0);
+  });
+
+  it("CONFIGURED-block contract ⇒ a blocked SC still blocks ⇒ exit 1 (opt-in blocking unchanged)", () => {
+    const findings = [gf(["1.3.1"], blockingContract), gf(["2.4.4"], blockingContract)];
+    expect(findings.some((f) => f.blocking)).toBe(true);
+    expect(gateExitCode(findings, GATE_OFF)).toBe(1);
+  });
+
+  it("NO contract + --fail-on flag ⇒ the gate flag forces blocking on top of the advisory baseline", () => {
+    // Advisory-default is the no-config BASELINE, never a cap: an explicit gate
+    // flag re-arms a failing exit even though every finding is warn-level.
+    const findings = [gf(["2.4.4"], null, "critical")];
+    expect(findings.every((f) => !f.blocking)).toBe(true); // advisory disposition…
+    expect(gateExitCode(findings, { failOn: "critical", maxViolations: null, advisory: false })).toBe(1); // …but the flag blocks
+  });
+
+  it("NO contract + --max-violations flag ⇒ the volume gate forces blocking on the advisory baseline", () => {
+    const findings = [gf(["2.4.4"], null), gf(["4.1.2"], null), gf(["1.1.1"], null)];
+    expect(gateExitCode(findings, { failOn: null, maxViolations: 2, advisory: false })).toBe(1);
   });
 });

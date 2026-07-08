@@ -33,6 +33,7 @@
  */
 
 import type { UnityAsset, UnityScanResult } from "./collect-unity";
+import { NO_CONTRACT_ENFORCEMENT } from "./config-scan";
 import type { Finding } from "./core";
 import {
   type UnityComponent,
@@ -105,9 +106,9 @@ function makeFinding(file: string): Finding {
       "no name to assistive technology, so a screen-reader user cannot identify it. " +
       "Add a text child with the control's label, or set the accessible name explicitly.",
     wcag: RULE_WCAG,
-    // The static floor's default enforcement (the `decideEnforcement` no-contract
-    // default is `block`), matching the sibling Unity rules.
-    enforcement: "block",
+    // No per-file contract seam on the Unity path yet ⇒ the no-contract default:
+    // advisory, blocking opt-in via the CLI gate flags (ADR 0010).
+    enforcement: NO_CONTRACT_ENFORCEMENT,
     provenance: "unity",
   };
 }

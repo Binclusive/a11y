@@ -32,7 +32,7 @@
 
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { EnforcementLevel } from "./config-scan";
+import { type EnforcementLevel, NO_CONTRACT_ENFORCEMENT } from "./config-scan";
 
 /**
  * Build/library dirs that are not project source — skipped on the walk, mirroring
@@ -195,7 +195,7 @@ async function gatherEvidence(dir: string, evidence: ProjectEvidence): Promise<v
   }
 }
 
-/** Options for the project-level scan; `enforcement` defaults to `block`. */
+/** Options for the project-level scan; `enforcement` defaults to advisory (ADR 0010). */
 export interface UnityBaselineOptions {
   readonly enforcement?: EnforcementLevel;
 }
@@ -217,7 +217,9 @@ export async function runUnityBaselineRules(
   options: UnityBaselineOptions = {},
 ): Promise<UnityProjectFinding[]> {
   const root = resolve(dir);
-  const enforcement: EnforcementLevel = options.enforcement ?? "block";
+  // No per-file contract seam on the Unity path yet, so this is the no-contract
+  // case: advisory by default, blocking opt-in via the CLI gate flags (ADR 0010).
+  const enforcement: EnforcementLevel = options.enforcement ?? NO_CONTRACT_ENFORCEMENT;
 
   // A non-existent project root is "no project to evaluate", not "a project with
   // everything absent" — return an empty scan rather than firing every absence rule

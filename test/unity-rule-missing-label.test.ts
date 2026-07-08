@@ -48,7 +48,8 @@ describe("unity-rule-missing-label — the Absent-state missing-accessible-label
     expect(finding?.provenance).toBe("unity");
     expect(finding?.file).toBe(asset.file);
     expect(finding?.line).toBe(0);
-    expect(finding?.enforcement).toBe("block");
+    // No contract on the Unity path ⇒ advisory by default (ADR 0010).
+    expect(finding?.enforcement).toBe("warn");
     expect(finding?.wcag).toEqual(["1.1.1", "4.1.2"]);
   });
 

@@ -2,8 +2,8 @@
   "BoringBoredom/UEFI-Editor": {
     "sha": "44e8c9ba4a05dbd6fc4b1c247ed17948b6e58f8d",
     "findings": 2,
-    "blocking": 2,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 2,
     "coverage": {
       "checked": 0,
       "trusted": 23,
@@ -21,8 +21,8 @@
   "DarkInventor/easy-ui": {
     "sha": "0bfdd128fcb7c0ec36cc0c77ed0081b4b280ec29",
     "findings": 52,
-    "blocking": 52,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 52,
     "coverage": {
       "checked": 27,
       "trusted": 91,
@@ -60,8 +60,8 @@
   "StenAL/new-tab": {
     "sha": "52b1a9a87f4ca906c204f4a300b339f2a7ecc3b0",
     "findings": 1,
-    "blocking": 1,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 1,
     "coverage": {
       "checked": 0,
       "trusted": 0,
@@ -78,8 +78,8 @@
   "Supernova3339/changerawr": {
     "sha": "a72f1c9e9084bfbc3cfc61f47fabad2c66243a64",
     "findings": 145,
-    "blocking": 145,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 145,
     "coverage": {
       "checked": 40,
       "trusted": 144,
@@ -120,8 +120,8 @@
   "alibaba/lowcode-demo": {
     "sha": "680a8b4b8f315deed49f88833f488d4de373b857",
     "findings": 15,
-    "blocking": 15,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 15,
     "coverage": {
       "checked": 0,
       "trusted": 0,
@@ -139,8 +139,8 @@
   "antiwork/shortest": {
     "sha": "45a8dcfe89992b37ed2dfb1f76618048cff0f45c",
     "findings": 3,
-    "blocking": 3,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 3,
     "coverage": {
       "checked": 9,
       "trusted": 19,
@@ -159,8 +159,8 @@
   "corbt/agent.exe": {
     "sha": "e2440622aa0206b9c9223c776f89cb511bbc9f8b",
     "findings": 2,
-    "blocking": 2,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 2,
     "coverage": {
       "checked": 3,
       "trusted": 5,
@@ -193,8 +193,8 @@
   "elastic/synthetics-recorder": {
     "sha": "cbe360ccffb288a5e5bbb2413283bed2b6c3ea22",
     "findings": 1,
-    "blocking": 1,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 1,
     "coverage": {
       "checked": 0,
       "trusted": 0,
@@ -211,8 +211,8 @@
   "googleanalytics/ga-dev-tools": {
     "sha": "14217f42eca6358cfa973ce0e65bc128038ba42e",
     "findings": 5,
-    "blocking": 5,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 5,
     "coverage": {
       "checked": 6,
       "trusted": 44,
@@ -248,8 +248,8 @@
   "hathora/builder": {
     "sha": "a4182519ea1e4381def6484ba46a09a16f930769",
     "findings": 12,
-    "blocking": 12,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 12,
     "coverage": {
       "checked": 0,
       "trusted": 5,
@@ -285,8 +285,8 @@
   "iamzhihuix/skills-manage": {
     "sha": "467d0423beaf71a31c520d4e3795ec88acae5ab2",
     "findings": 14,
-    "blocking": 14,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 14,
     "coverage": {
       "checked": 11,
       "trusted": 12,
@@ -307,8 +307,8 @@
   "jaiarobotics/jaiabot": {
     "sha": "1df70c4068c7ade04dc749a9ee0a2da271eb4661",
     "findings": 118,
-    "blocking": 118,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 118,
     "coverage": {
       "checked": 5,
       "trusted": 21,
@@ -329,8 +329,8 @@
   "jolbol1/jolly-ui": {
     "sha": "aac97a84f8e0c2071a5e255c2f6ec190e238c1c2",
     "findings": 295,
-    "blocking": 295,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 295,
     "coverage": {
       "checked": 88,
       "trusted": 324,
@@ -350,8 +350,8 @@
   "kamp-us/phoenix": {
     "sha": "083d6048c437ff701eedab755b059ce86ff0d63b",
     "findings": 7,
-    "blocking": 7,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 7,
     "coverage": {
       "checked": 2,
       "trusted": 0,
@@ -384,8 +384,8 @@
   "modagavr/pancake-wizard": {
     "sha": "f9d36e6352eb5a05544aaee92a0b56368b67c82e",
     "findings": 5,
-    "blocking": 5,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 5,
     "coverage": {
       "checked": 0,
       "trusted": 2,
@@ -404,8 +404,8 @@
   "olros/stats": {
     "sha": "afb5dc7d00bbeff205187b1ce579966027789888",
     "findings": 2,
-    "blocking": 2,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 2,
     "coverage": {
       "checked": 22,
       "trusted": 86,
@@ -422,8 +422,8 @@
   "patdx/edge-cms": {
     "sha": "0b30389e5117c4a8bf1e17e2f2146348c269cb1d",
     "findings": 1,
-    "blocking": 1,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 1,
     "coverage": {
       "checked": 0,
       "trusted": 0,
@@ -456,8 +456,8 @@
   "shadcn-ui/taxonomy": {
     "sha": "298a8857c7128a0d121e7f699dfd729f23b3966d",
     "findings": 4,
-    "blocking": 4,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 4,
     "coverage": {
       "checked": 31,
       "trusted": 129,
@@ -475,8 +475,8 @@
   "sjohnston00/sorted": {
     "sha": "14a962c6cc28cdefa76c96dda660f764352baf31",
     "findings": 2,
-    "blocking": 2,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 2,
     "coverage": {
       "checked": 3,
       "trusted": 5,
@@ -510,8 +510,8 @@
   "thomasgauvin/claude-agent-sdk-in-cloudflare-containers": {
     "sha": "12f81a1205b086b596bb06f2b983c1cb993c1844",
     "findings": 14,
-    "blocking": 14,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 14,
     "coverage": {
       "checked": 0,
       "trusted": 0,
@@ -529,8 +529,8 @@
   "umijs/umi": {
     "sha": "155dc3e52e81daa4de58282364519e252e89218e",
     "findings": 167,
-    "blocking": 167,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 167,
     "coverage": {
       "checked": 13,
       "trusted": 51,
@@ -553,8 +553,8 @@
   "untitleduico/react": {
     "sha": "d97ce86cdf93fa8703c67610acfae5662c62793a",
     "findings": 174,
-    "blocking": 174,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 174,
     "coverage": {
       "checked": 43,
       "trusted": 91,
@@ -578,8 +578,8 @@
   "vikejs/bati": {
     "sha": "10ee521892ec5db66def9cd75ec676999e9e8043",
     "findings": 4,
-    "blocking": 4,
-    "warning": 0,
+    "blocking": 0,
+    "warning": 4,
     "coverage": {
       "checked": 0,
       "trusted": 9,

@@ -162,16 +162,29 @@ export function ignoredRuleIds(ignore: readonly string[]): ReadonlySet<string> {
 export type EnforcementLevel = "block" | "warn";
 
 /**
+ * The disposition applied to every finding when there is NO committed contract
+ * (`binclusive.json` absent — the first-run / zero-config case): ADVISORY, i.e.
+ * `warn`, never `block`. Blocking is a deliberate opt-in — a committed contract
+ * that declares `enforcement.block`, or a CLI/Action gate flag (`--fail-on` /
+ * `--max-violations`). A day-one scan that red-builds every finding is an
+ * uninstall trigger and contradicts the README's "advisory by default, exits 0,
+ * never blocks" promise. See ADR 0010.
+ */
+export const NO_CONTRACT_ENFORCEMENT: EnforcementLevel = "warn";
+
+/**
  * Decide a finding's enforcement level from its WCAG SC against the contract.
  * A finding is `block` iff ANY of its SC is in `enforcement.block`; otherwise
- * `warn`. With no contract the level is `block` for everything — the historical
- * behavior where every finding gated the CLI exit code.
+ * `warn`. With NO contract every finding is advisory ({@link NO_CONTRACT_ENFORCEMENT},
+ * an explicit path — not a fall-through); blocking then requires an opt-in gate
+ * flag layered on top, which the exit-code gate applies independent of this level.
  */
 export function enforcementFor(
   wcag: readonly string[],
   contract: Contract | null,
 ): EnforcementLevel {
-  if (contract === null) return "block";
+  // Zero-config first run: advisory-by-default, never block-all (ADR 0010).
+  if (contract === null) return NO_CONTRACT_ENFORCEMENT;
   const block = new Set(contract.enforcement.block);
   return wcag.some((sc) => block.has(sc)) ? "block" : "warn";
 }

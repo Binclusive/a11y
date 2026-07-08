@@ -160,8 +160,9 @@ describe("Unity E2E: producer → aggregator → enrich → render on the real f
       expect(stdout).toContain("scanning Unity Force-Text scenes");
       expect(stdout).toContain(MISSING_LABEL);
       expect(stdout).toContain(COLOR_ONLY);
-      // Blocking floor findings → exit 1, the same exit semantics as the other verbs.
-      expect(exitCode).toBe(1);
+      // No binclusive.json ⇒ advisory floor findings (ADR 0010) → exit 0, the same
+      // first-run semantics as the other verbs. Blocking is opt-in (gate flags).
+      expect(exitCode ?? 0).toBe(0);
     });
 
     it("--json emits the shared report schema and enriched Unity findings", async () => {
@@ -201,9 +202,11 @@ describe("Unity E2E: producer → aggregator → enrich → render on the real f
       expect(ml.evidence.source).toBe("baseline");
       expect(ml.evidence.sc).toBe("1.1.1");
 
-      // Blocking floor findings → exit 1.
-      expect(report.summary.blocking).toBeGreaterThan(0);
-      expect(exitCode).toBe(1);
+      // No binclusive.json ⇒ advisory floor findings (ADR 0010): reported, not
+      // blocking, so the first-run scan exits 0. Blocking is opt-in (gate flags).
+      expect(report.summary.findings).toBeGreaterThan(0);
+      expect(report.summary.blocking).toBe(0);
+      expect(exitCode ?? 0).toBe(0);
     });
 
     it(

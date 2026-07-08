@@ -56,7 +56,8 @@ describe("unity-rules-baseline — project-level structural-absence", () => {
         expect(finding.provenance).toBe("unity");
         expect(finding.file).toBe(BARE);
         expect(finding.line).toBe(0);
-        expect(finding.enforcement).toBe("block");
+        // No contract on the Unity path ⇒ advisory by default (ADR 0010).
+        expect(finding.enforcement).toBe("warn");
       }
     });
   });

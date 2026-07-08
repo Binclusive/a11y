@@ -67,7 +67,7 @@ describe("scanLiquid: parse errors are skipped, not fatal", () => {
 });
 
 describe("--json report shape (consistent with check)", () => {
-  it("builds a JsonReport with zeroed coverage and a blocking summary", async () => {
+  it("builds a JsonReport with zeroed coverage and an advisory (non-blocking) summary", async () => {
     const { root, files, findings: raw } = await scanLiquid(themeDir);
     const findings = enrichAll(raw);
     const report = buildJsonReport(
@@ -80,8 +80,9 @@ describe("--json report shape (consistent with check)", () => {
     expect(report.filesScanned).toBe(3);
     expect(report.coverage.total).toBe(0);
     expect(report.summary.findings).toBe(findings.length);
-    // bad.liquid's findings are blocking with no contract present.
-    expect(report.summary.blocking).toBeGreaterThan(0);
+    expect(report.summary.findings).toBeGreaterThan(0);
+    // No contract ⇒ every finding is advisory (warn), so nothing is blocking (ADR 0010).
+    expect(report.summary.blocking).toBe(0);
     expect(report.findings.every((f) => f.provenance === "liquid")).toBe(true);
   });
 });
