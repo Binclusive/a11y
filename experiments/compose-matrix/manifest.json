@@ -1,0 +1,29 @@
+{
+  "//": "SHA-pinned Jetpack Compose corpus for the Compose a11y-checker regression gate (#118, ADR 0008). Each entry is frozen at an exact commit so the only thing that can move the baseline numbers is THIS checker's own code (the Compose producer: the out-of-process Kotlin PSI engine at kotlin/A11yKotlinScan/ with the rule compose/image-no-label (1.1.1), and its TS boundary src/collect-kotlin.ts / scanKotlin), never upstream repo drift. The engine is OUT-OF-PROCESS (JDK/gradle) — build it once before scanning: `cd kotlin/A11yKotlinScan && ./gradlew installDist -q` (see README). The gated quantity is the FINDING stream: count, per-rule counts, and the full sorted finding list (file:line:ruleId). The lock is non-trivial: Automattic/pocket-casts-android yields exactly 6 compose/image-no-label findings, while the two Google-quality reference apps yield 0 — locking BOTH a real-catch and the no-false-positive precision invariant against well-labeled code. NOTE: this is the Compose sibling of experiments/android-matrix, which gates the separate Android XML-layout surface (#109/#122) — two distinct engines and gates; do not conflate them (NewPipe/AntennaPod are legacy-View XML apps, the WRONG surface for Compose). To extend: add a public Jetpack Compose repo with real .kt UI, resolve its sha (`git ls-remote https://github.com/<owner>/<repo> HEAD`), append an entry, then re-bless with `pnpm compose:matrix:baseline`.",
+  "repos": [
+    {
+      "repo": "Automattic/pocket-casts-android",
+      "ref": "HEAD",
+      "sha": "0466b77dce4b2eabdfe1db8ab16fba765f994b4f",
+      "defaultBranch": "main",
+      "stars": 2817,
+      "source": "Pocket Casts — Automattic's production podcast app, a large real-world Kotlin/Jetpack-Compose codebase (2000+ .kt files across feature modules). It carries genuine a11y gaps: 6 Image/Icon call sites with no contentDescription (all `serious`) across the profile, referrals, and reimagine feature modules. This is the non-trivial anchor — a real app whose real omissions the rule catches, so the gate locks a meaningful count rather than an all-clean corpus."
+    },
+    {
+      "repo": "android/nowinandroid",
+      "ref": "HEAD",
+      "sha": "7d45eae4f8720a0c77f507712ba2437ff974b6ed",
+      "defaultBranch": "main",
+      "stars": 18000,
+      "source": "Now in Android — Google's official, fully-Jetpack-Compose sample app and the reference for modern Android architecture. Every Image/Icon is deliberately labeled (or marked decorative with contentDescription = null), so it yields 0 findings — a clean anchor that locks the precision invariant: the rule must NOT mis-flag Google-authored, correctly-labeled Compose UI (a false positive on a labeled control is the failure mode that gets an a11y tool uninstalled — ADR 0008)."
+    },
+    {
+      "repo": "chrisbanes/tivi",
+      "ref": "HEAD",
+      "sha": "a0c62c2c763c83e3a0ecf79b283224374bb06c4a",
+      "defaultBranch": "main",
+      "stars": 6500,
+      "source": "Tivi — Chris Banes' (Google/Android dev-rel) TV-show tracker, a widely-cited all-Compose + Kotlin-Multiplatform showcase. Production-grade, consistently-labeled Compose screens; a second independent 0-finding anchor so the precision invariant is not proven against a single author's style."
+    }
+  ]
+}
