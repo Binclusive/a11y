@@ -267,6 +267,34 @@ API call is logged and swallowed, never failing the pipeline. Re-runs update the
 MR note in place rather than adding a new one per push. Opt into a failing job with
 `FAIL_ON` / `MAX_VIOLATIONS` (see the config).
 
+## Use it on Buildkite (native annotation reporter)
+
+On Buildkite, the engine has a **native reporter adapter** (like the GitHub and
+GitLab ones): it publishes the findings as a **build annotation** — grouped, with
+each finding's `file:line` and a WCAG-criteria summary — instead of only emitting an
+artifact. Drop the ready-made [`examples/ci/buildkite/pipeline.yml`](examples/ci/buildkite/pipeline.yml)
+into your pipeline — it runs the image over the `.tsx` changed in each PR and selects
+the Buildkite reporter.
+
+Enable it with two things:
+
+1. **Select the adapter** — set `A11Y_PLATFORM=buildkite` (the config already does).
+   The PR is identified from Buildkite's own `BUILDKITE_PULL_REQUEST`; a non-PR build
+   sets it to the string `"false"`, in which case the adapter no-ops.
+2. **Give the container the agent** — the reporter shells out to `buildkite-agent
+   annotate` from *inside* the engine container, so the `buildkite-agent` binary and
+   its access token must be mounted in. The docker plugin does this via
+   `mount-buildkite-agent: true` (its default; the config pins it explicitly). No API
+   token to manage — `buildkite-agent` authenticates with the agent's own token.
+
+**Opt-in, no-op by default.** With **no PR context** (`BUILDKITE_PULL_REQUEST` absent
+or `"false"`), the reporter posts nothing — the scan still runs, the artifacts still
+emit, and the step still exits 0 (advisory). Posting is best-effort: a non-zero
+`buildkite-agent` exit or a missing binary is logged and swallowed, never failing the
+build. Re-runs update the **same annotation in place** (a stable `--context=a11y`)
+rather than appending a new one per push. Opt into a failing step with `FAIL_ON` /
+`MAX_VIOLATIONS` (see the config).
+
 ## Use it on any other CI/CD (generic `--ci` mode)
 
 Not on GitHub or GitLab? The engine runs the same scan on **CircleCI, Jenkins, Drone,

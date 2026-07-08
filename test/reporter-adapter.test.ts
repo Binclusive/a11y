@@ -11,6 +11,14 @@ import {
   type PlatformAdapter,
   resolvePlatformKey,
 } from "../src/reporter/contract";
+import {
+  ANNOTATION_CONTEXT,
+  buildkiteAdapter,
+  buildkiteResolver,
+  type CommandResult,
+  type CommandRunner,
+  renderAnnotation,
+} from "../src/reporter/buildkite-adapter";
 import { githubAdapter, githubResolver } from "../src/reporter/github-adapter";
 import { gitlabAdapter, gitlabResolver, renderMrNote } from "../src/reporter/gitlab-adapter";
 import { makeNullAdapter, nullAdapter, renderLine } from "../src/reporter/null-adapter";
@@ -65,13 +73,14 @@ describe("resolvePlatformKey", () => {
 });
 
 describe("AdapterRegistry — selection by explicit key", () => {
-  it("selects the shipped github + null + gitlab adapters, undefined for unknown", () => {
+  it("selects the shipped github + null + gitlab + buildkite adapters, undefined for unknown", () => {
     const reg = defaultRegistry();
     expect(reg.select("github")?.key).toBe("github");
     expect(reg.select("null")?.key).toBe("null");
     expect(reg.select("gitlab")?.key).toBe("gitlab");
-    expect(reg.select("buildkite")).toBeUndefined();
-    expect(reg.keys().sort()).toEqual(["github", "gitlab", "null"]);
+    expect(reg.select("buildkite")?.key).toBe("buildkite");
+    expect(reg.select("gitea")).toBeUndefined();
+    expect(reg.keys().sort()).toEqual(["buildkite", "github", "gitlab", "null"]);
   });
 });
 
@@ -406,5 +415,111 @@ describe("gitlab adapter — the sibling behind the seam (issue #213)", () => {
       }
       expect(log).toHaveBeenCalled();
     });
+  });
+});
+
+describe("buildkite adapter — the sibling behind the seam (issue #212)", () => {
+  const prEnv = {
+    BUILDKITE_PULL_REQUEST: "42",
+    BUILDKITE_PULL_REQUEST_BASE_BRANCH: "main",
+    BUILDKITE_COMMIT: "deadbeef",
+    CHANGED_FILES: "src/A.tsx src/b.ts src/C.tsx",
+  } satisfies NodeJS.ProcessEnv;
+
+  it("is registered as the shipped `buildkite` adapter", () => {
+    expect(buildkiteAdapter.key).toBe("buildkite");
+  });
+
+  describe("resolver — the PR diff-context half", () => {
+    it("yields a post-target + the changed .tsx when a Buildkite PR context is present", () => {
+      const ctx = buildkiteResolver.resolve(prEnv);
+      expect(ctx.changedTsx).toEqual(["src/A.tsx", "src/C.tsx"]);
+      expect(ctx.postTarget).toMatchObject({ prNumber: "42", context: ANNOTATION_CONTEXT });
+    });
+
+    it("no post-target (⇒ no-op) when BUILDKITE_PULL_REQUEST is the literal string \"false\" (a non-PR build)", () => {
+      expect(buildkiteResolver.resolve({ ...prEnv, BUILDKITE_PULL_REQUEST: "false" }).postTarget).toBeNull();
+    });
+
+    it("no post-target when BUILDKITE_PULL_REQUEST is absent", () => {
+      expect(buildkiteResolver.resolve({ ...prEnv, BUILDKITE_PULL_REQUEST: undefined }).postTarget).toBeNull();
+    });
+
+    it("no-context env dispatches WITHOUT error — the opt-in no-op path end to end (artifacts still emit, exit 0)", async () => {
+      // Non-PR env ⇒ null target ⇒ bound reporter is never built ⇒ dispatch no-ops.
+      const resolved = bindAdapter(buildkiteAdapter).resolve({ BUILDKITE_PULL_REQUEST: "false", CHANGED_FILES: "src/A.tsx" });
+      expect(resolved.report).toBeNull();
+      await expect(dispatch(resolved, [finding()], noLog)).resolves.toBeUndefined();
+    });
+  });
+
+  describe("renderAnnotation — the findings→annotation transform (canonical contract in → annotation body out)", () => {
+    it("renders each finding with impact, rule, WCAG, message, and file:line, plus a WCAG-criteria rollup", () => {
+      const body = renderAnnotation([
+        finding(),
+        finding({ ruleId: "label", file: "src/B.tsx", line: 3, wcag: ["4.1.2"], impact: "serious", message: "Control needs a label." }),
+      ]);
+      expect(body).toContain("found 2 accessibility finding(s)");
+      expect(body).toContain("`critical` **image-alt** (WCAG 1.1.1) — Image missing alt text. — `src/App.tsx:12`");
+      expect(body).toContain("`serious` **label** (WCAG 4.1.2) — Control needs a label. — `src/B.tsx:3`");
+      expect(body).toContain("_WCAG criteria: 1.1.1, 4.1.2._"); // the grouped WCAG summary
+    });
+
+    it("renders a clean pass for an empty finding set", () => {
+      expect(renderAnnotation([])).toContain("no accessibility findings");
+    });
+  });
+
+  describe("reporter — publishes via the INJECTED command runner, best-effort", () => {
+    /** A fake runner that records its args + stdin and returns a scripted result — no real binary. */
+    function recordingRunner(result: CommandResult = { code: 0, stdout: "", stderr: "" }) {
+      const calls: { args: readonly string[]; stdin: string }[] = [];
+      const run: CommandRunner = async (args, stdin) => {
+        calls.push({ args, stdin });
+        return result;
+      };
+      return { run, calls };
+    }
+
+    it("shells out to `buildkite-agent annotate` with the exact args + the rendered body on stdin", async () => {
+      const { run, calls } = recordingRunner();
+      await buildkiteReporterReport([finding()], { prNumber: "42", context: ANNOTATION_CONTEXT, runCommand: run });
+      expect(calls).toHaveLength(1);
+      // critical finding ⇒ error style; the canonical finding reached the annotation payload on stdin
+      expect(calls[0].args).toEqual(["annotate", "--style", "error", "--context", "a11y"]);
+      expect(calls[0].stdin).toContain("**image-alt**");
+      expect(calls[0].stdin).toContain("`src/App.tsx:12`");
+    });
+
+    it("uses the SAME stable --context across runs, so a re-run UPDATES the annotation in place (no duplicate)", async () => {
+      const { run, calls } = recordingRunner();
+      await buildkiteReporterReport([finding()], { prNumber: "42", context: ANNOTATION_CONTEXT, runCommand: run });
+      await buildkiteReporterReport([finding({ ruleId: "label", impact: "minor" })], { prNumber: "42", context: ANNOTATION_CONTEXT, runCommand: run });
+      const contexts = calls.map((c) => c.args[c.args.indexOf("--context") + 1]);
+      expect(contexts).toEqual(["a11y", "a11y"]); // identical context = idempotent in-place update
+    });
+
+    it("swallows a NON-ZERO buildkite-agent exit — logs, never throws (advisory exit-0)", async () => {
+      const log = vi.fn();
+      const { run } = recordingRunner({ code: 1, stdout: "", stderr: "annotate failed" });
+      await expect(buildkiteReporterReport([finding()], { prNumber: "42", context: ANNOTATION_CONTEXT, runCommand: run }, log)).resolves.toBeUndefined();
+      expect(log).toHaveBeenCalledWith(expect.stringContaining("exited 1"));
+    });
+
+    it("swallows a runner that THROWS (e.g. missing binary) — logs, never throws", async () => {
+      const log = vi.fn();
+      const throwing: CommandRunner = async () => { throw new Error("buildkite-agent not found"); };
+      await expect(buildkiteReporterReport([finding()], { prNumber: "42", context: ANNOTATION_CONTEXT, runCommand: throwing }, log)).resolves.toBeUndefined();
+      expect(log).toHaveBeenCalledWith(expect.stringContaining("annotate failed"));
+    });
+
+    // Thin alias so each assertion reads against `report(findings, target, log)` without the vi noise.
+    async function buildkiteReporterReport(
+      findings: readonly Finding[],
+      target: { prNumber: string; context: string; runCommand: CommandRunner },
+      log: (m: string) => void = noLog,
+    ): Promise<void> {
+      await buildkiteAdapter.reporter.report(findings, target, log);
+    }
   });
 });
