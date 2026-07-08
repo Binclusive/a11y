@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/Binclusive/a11y/compare/v0.1.4...v0.2.0) (2026-07-08)
+
+
+### Features
+
+* **compose:** A11yKotlinScan engine + compose/image-no-label rule ([#112](https://github.com/Binclusive/a11y/issues/112)) ([#235](https://github.com/Binclusive/a11y/issues/235)) ([f01a36e](https://github.com/Binclusive/a11y/commit/f01a36edc39e7471da7c17cd1b96845d5da94a0d))
+
+
+### Bug Fixes
+
+* **sarif:** anchor relatedLocations on a physicalLocation for GitHub code-scanning ([#239](https://github.com/Binclusive/a11y/issues/239)) ([548208c](https://github.com/Binclusive/a11y/commit/548208cc357a8079cff571dc6ce05dc5239ad83d)), closes [#238](https://github.com/Binclusive/a11y/issues/238)
+
 ## [0.1.4](https://github.com/Binclusive/a11y/compare/v0.1.3...v0.1.4) (2026-07-07)
 
 

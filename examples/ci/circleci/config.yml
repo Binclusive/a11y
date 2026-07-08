@@ -17,7 +17,7 @@ jobs:
     # run-docker-image.md: the `docker:` executor runs the steps inside the first
     # image.
     docker:
-      - image: ghcr.io/binclusive/a11y:0.1.4 # x-release-please-version
+      - image: ghcr.io/binclusive/a11y:0.2.0 # x-release-please-version
     environment:
       A11Y_DEFAULT_BRANCH: main
     steps:
