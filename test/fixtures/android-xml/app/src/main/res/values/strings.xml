@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- A non-layout resource dir. The collector must NOT scan `res/values`, only
-     `res/layout*`. (If it did, this file has no widgets anyway, but its presence
-     pins the directory filter.) -->
-<resources>
-    <string name="thumbnail_desc">Thumbnail</string>
-    <string name="play_desc">Play</string>
-    <string name="submit">Submit</string>
-</resources>
