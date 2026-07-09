@@ -116,12 +116,16 @@ The full walkthrough — install once, read the output, the `(rendered-DOM / axe
 
 ## Use it in CI (GitHub Action)
 
-Drop the Action into a pull-request workflow. On every PR it scans the changed
-`.tsx` files, posts inline review comments, and writes a SARIF file. Feed that
-file to GitHub's own `upload-sarif` step and the findings also render as
-**native code-scanning annotations** on the PR diff — the reference UX, à la
-CodeQL. The scan is **advisory by default: it exits 0** and never blocks a merge
-— unless you [opt into a blocking check](#optional--opt-into-a-blocking-check-default-off).
+Drop the Action into a pull-request workflow. On every PR it runs the Binclusive
+accessibility engine on the **changed files** (diff against the PR base), **gates
+the PR**, and writes a SARIF file. Feed that file to GitHub's own `upload-sarif`
+step and the findings render as **native code-scanning annotations** on the PR
+diff — the reference UX, à la CodeQL.
+
+The action is a **thin `docker://` shell** over the engine image the Binclusive
+monorepo builds and publishes to GHCR — it makes **zero GitHub API calls** and
+needs **no token**. It is the **deterministic free lane**; BYOK / AI enrichment
+is the separate paid lane and is not wired here.
 
 ```yaml
 name: a11y
@@ -129,117 +133,42 @@ on: pull_request
 
 permissions:
   contents: read
-  pull-requests: write   # inline review comments
   security-events: write # upload SARIF as code-scanning annotations
 
 jobs:
   a11y:
     runs-on: ubuntu-latest
     steps:
-      # fetch-depth: 0 — the a11y diff scan needs base history; a shallow clone finds 0 changed files (a11y#198)
+      # fetch-depth: 0 — the diff scan needs base history; a shallow clone finds 0 changed files
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - id: a11y
-        uses: Binclusive/a11y@v0.2.0 # x-release-please-version
-      - if: always()  # advisory gate exits 0; upload regardless of findings
+        uses: Binclusive/a11y@v2
+        with:
+          base: ${{ github.event.pull_request.base.ref }}  # diff against the PR base
+          # fail-on: block   # block|warn — default block (a gating finding fails the build)
+      - if: always()  # upload SARIF regardless of the gate outcome
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ steps.a11y.outputs.sarif-file }}
 ```
 
-Annotations land on the exact changed file + line, and each carries its
-provenance (`deterministic` vs `agent`) in the SARIF property bag. The SARIF
-file exists only to render on **your** GitHub — it carries file/line for local
-annotation and is never sent to the Binclusive dashboard.
+Inputs:
 
-> **Pin for supply-chain safety.** The examples pin to the released tag
-> `@v0.2.0`. <!-- x-release-please-version --> For production, pin to a commit SHA — `uses:
-> Binclusive/a11y@<sha>  # v0.2.0` <!-- x-release-please-version --> — rather than a floating tag or branch, so a
-> moved tag can't silently change what runs in your CI. Dependabot
-> (`github-actions` ecosystem) will bump the pin for you.
-
-### Optional — opt into a blocking check (default off)
-
-The check is **non-blocking by default**: it exits 0 on any severity or volume of
-findings, so it never breaks your CI. Blocking is **strictly opt-in**. Set either
-input below and the check **fails** (non-zero, surfaced as an Action failure) when
-the threshold is met — the inline comments, PR summary, and SARIF still post either
-way.
-
-| Input | Set it to | Effect | Absent (default) |
+| Input | Set it to | Default | Effect |
 |---|---|---|---|
-| `fail-on` | `critical` \| `major` \| `minor` | Fail when any finding is **at or above** that severity (the engine's `critical < major < minor` ordering) | Non-blocking — findings never fail the check on severity |
-| `max-violations` | an integer `N` | Fail when the total finding count **exceeds** `N` | No volume gate |
+| `base` | a git ref (e.g. the PR base) | `""` (whole checkout) | Diff against this ref; only changed files are scanned. Empty scans the whole checkout. |
+| `fail-on` | `block` \| `warn` | `block` | The enforcement level that fails the build. `block` fails on a gating finding; `warn` never fails. |
 
-```yaml
-      - id: a11y
-        uses: Binclusive/a11y@v0.2.0 # x-release-please-version
-        with:
-          fail-on: critical    # optional — block only on critical findings
-          # max-violations: 0  # optional — block on any finding at all
-```
+Annotations land on the exact changed file + line. The SARIF file exists only to
+render on **your** GitHub — it carries file/line for local annotation and is
+never sent anywhere else.
 
-Both use the **same** severity vocabulary as the engine's `check` command — there
-is no separate CI severity map. Leaving both unset keeps the reference,
-always-green advisory behavior.
-
-### Optional secrets — AI lane & dashboard
-
-The deterministic floor above needs **no account and no secret**. Two optional,
-independent inputs unlock the extra lanes — supply neither, one, or both. Absent
-means "lane off", never an error; the scan still exits 0.
-
-| Input | Secret it carries | Absent → | Notes |
-|---|---|---|---|
-| `llm-api-key` | Your **own** LLM provider key (BYOK) | AI enrichment lane skipped; deterministic floor still runs | Provider-agnostic — no provider is baked into the Action or image. Your credential; it never leaves the runner for the dashboard. |
-| `llm-model` | — (a model id, not a secret) | Engine default — Anthropic `claude-haiku-4-5-20251001` | Overrides the model the AI lane uses. Only meaningful with `llm-api-key`. |
-| `llm-provider` | — (a provider id, not a secret) | Engine default — `anthropic` | Selects the AI-lane provider. Only meaningful with `llm-api-key`; an unrecognized value degrades to the deterministic floor. |
-| `b8e-token` | A Binclusive `b8e_` apiKey | No phone-home; scan stays fully local | Mint it in the Binclusive dashboard. Metadata-only ingestion bearer. Unrelated to the LLM key. |
-
-```yaml
-      - id: a11y
-        uses: Binclusive/a11y@v0.2.0 # x-release-please-version
-        with:
-          llm-api-key:  ${{ secrets.LLM_API_KEY }}  # optional — your BYOK model key
-          llm-model:    ""                          # optional — override the model
-          llm-provider: ""                          # optional — override the provider
-          b8e-token:    ${{ secrets.B8E_TOKEN }}    # optional — dashboard ingestion
-```
-
-Store both as encrypted repo (or org) secrets. The `b8e-token` authenticates the
-phone-home to Binclusive; the `llm-api-key` never touches Binclusive auth — the
-two are orthogonal. No Binclusive LLM credential ships in the image or the
-Action defaults.
-
-### Optional — post comments as the branded Binclusive bot
-
-By default the PR comments (both the inline per-finding comments and the single
-rollup comment) post under the workflow's `github-token`, which GitHub attributes
-to **`github-actions[bot]`**. Install the **Binclusive GitHub App** and supply its
-id + private key to have the comments post under the branded App identity — name +
-avatar — instead. This is a pure identity swap: *who* posts changes, *what* posts
-does not, and nothing new crosses the wire.
-
-| Input | Carries | Absent → |
-|---|---|---|
-| `binclusive-app-id` | The Binclusive GitHub App id | Comments post under `github-token` as `github-actions[bot]` (no change) |
-| `binclusive-app-private-key` | The App's PEM private key (a secret) | Same fallback |
-| `binclusive-app-installation-id` | The App's installation id (optional) | Discovered automatically from the repo |
-
-```yaml
-      - id: a11y
-        uses: Binclusive/a11y@v0.2.0 # x-release-please-version
-        with:
-          binclusive-app-id:          ${{ vars.BINCLUSIVE_APP_ID }}
-          binclusive-app-private-key: ${{ secrets.BINCLUSIVE_APP_PRIVATE_KEY }}
-```
-
-**Least privilege:** the App needs only **`Pull requests: write`** — enough to
-post inline review comments and the rollup comment, nothing more. If the App is
-unconfigured, the id/key is wrong, or the token mint fails for any reason, the
-Action **falls back to `github-token` and still exits 0** — a failed brand is
-never a failed check.
+> **Pin for supply-chain safety.** The example pins the moving major tag `@v2`,
+> which tracks the latest v2 release. For production, pin to a commit SHA — `uses:
+> Binclusive/a11y@<sha>  # v2` — so a moved tag can't silently change what runs in
+> your CI. Dependabot (`github-actions` ecosystem) will bump the pin for you.
 
 ## Use it on GitLab (native MR-note reporter)
 

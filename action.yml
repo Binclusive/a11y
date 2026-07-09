@@ -1,183 +1,22 @@
-name: "Binclusive a11y-checker (tracer bullet)"
-description: "Scan changed .tsx files with the Binclusive accessibility engine, comment on the PR, and emit SARIF for native code-scanning annotations. Static path, non-blocking."
+name: "Binclusive accessibility (CI gate)"
+description: "Run the Binclusive accessibility engine on changed files, gate the PR, emit SARIF."
 author: "Binclusive"
-
-# The STATIC, Chromium-free lane: it scans .tsx source from the checkout and never
-# pulls a browser. Its opt-in browser sibling is `action-url/action.yml` (the URL /
-# rendered-DOM scan, pinned to the `:browser-<version>` image). Two actions exist —
-# not a stale duplicate — because a Docker action's `runs.image` is fixed per manifest,
-# so the browser lane cannot be a runtime flag on this action; it must be a separate
-# manifest under `action-url/` (`uses: owner/repo/action-url@ref`). See #2336/#2133 and
-# .patterns/github-actions/uses-resolution.md. Both image pins are repinned in lockstep
-# by release-please (`x-release-please-version` below + release-please-config.json).
-
 inputs:
-  github-token:
-    description: "Token used to post inline review comments on the PR."
-    required: true
-    default: ${{ github.token }}
-  binclusive-app-id:
-    description: >
-      OPTIONAL. The Binclusive GitHub App id. Set it (with
-      `binclusive-app-private-key`) to attribute the PR comments to the branded
-      Binclusive App — name + avatar — instead of `github-actions[bot]`. Absent →
-      comments post under `github-token` exactly as before (no behavior change).
-      The App needs only `pull requests: write` (least privilege) to post inline
-      review comments and the single rollup comment. Store the id as a repo
-      variable or secret.
-    required: false
-    default: ""
-  binclusive-app-private-key:
-    description: >
-      OPTIONAL. The Binclusive GitHub App's PEM private key, paired with
-      `binclusive-app-id`. Store it as a repo secret. When either this or the id
-      is absent — or a token mint fails — the Action falls back to `github-token`
-      and still exits 0 (a failed brand is never a failed check).
-    required: false
-    default: ""
-  binclusive-app-installation-id:
-    description: >
-      OPTIONAL. The App's installation id on this repo. Absent → it is discovered
-      automatically from the repository, so a customer normally only installs the
-      App and sets the id + key.
-    required: false
-    default: ""
-  llm-api-key:
-    description: >
-      OPTIONAL. The customer's OWN LLM provider key (BYOK), for the AI enrichment
-      lane. Provider-agnostic: no provider is baked into this Action or the image.
-      Pass your model key here from a repo secret. Absent → the AI lane is skipped
-      and only the deterministic floor runs (never an error). This key is the
-      customer's own credential — it is orthogonal to `b8e-token` and never leaves
-      the runner for the Binclusive dashboard.
-    required: false
-    default: ""
-  llm-model:
-    description: >
-      OPTIONAL. Override the model the AI enrichment lane uses. Absent (empty) →
-      the engine's provider default (Anthropic `claude-haiku-4-5-20251001`).
-      Only meaningful alongside `llm-api-key`; ignored when the AI lane is off.
-    required: false
-    default: ""
-  llm-provider:
-    description: >
-      OPTIONAL. Select the LLM provider the AI enrichment lane uses. Absent
-      (empty) → the engine default (`anthropic`). Only meaningful alongside
-      `llm-api-key`; an unrecognized value degrades to the deterministic floor
-      (never an error).
-    required: false
-    default: ""
-  b8e-token:
-    description: >
-      OPTIONAL. A Binclusive `b8e_` apiKey (the ingestion bearer) for phoning
-      metadata-only findings home to the dashboard. Mint it in the Binclusive
-      dashboard and store it as a repo secret. Absent → no phone-home; the scan
-      stays fully local (never an error). This is NOT an LLM key and is unrelated
-      to `llm-api-key`.
-    required: false
-    default: ""
-  b8e-org-id:
-    description: >
-      OPTIONAL. The Binclusive organization id the dashboard findings belong to.
-      Required alongside `b8e-token` + `b8e-project-id` for phone-home; if any is
-      absent the run stays fully local (never an error).
-    required: false
-    default: ""
-  b8e-project-id:
-    description: >
-      OPTIONAL. The Binclusive project id the dashboard findings belong to. See
-      `b8e-org-id`.
-    required: false
-    default: ""
-  b8e-audit-id:
-    description: >
-      OPTIONAL. The audit run these findings attach to on the dashboard. Absent →
-      the workflow run id (`GITHUB_RUN_ID`) is used.
-    required: false
-    default: ""
-  b8e-ingest-url:
-    description: >
-      OPTIONAL. Override the Kontrol GraphQL ingest endpoint (defaults to
-      https://kontrol.binclusive.io/graphql). For staging/self-host only.
+  base:
+    description: "Git ref to diff against (e.g. the PR base). Empty scans the whole checkout."
     required: false
     default: ""
   fail-on:
-    description: >
-      OPTIONAL, default OFF. Opt-in blocking gate. Set to a severity —
-      `critical`, `major`, or `minor` — to FAIL the check (non-zero, surfaced as
-      an Action failure) when any finding is at or above that threshold, using
-      the engine's own `critical < major < minor` ordering. Absent (empty, the
-      default) → the check is NON-BLOCKING: it exits 0 on any severity or volume
-      of findings, so it never breaks a customer's CI. Blocking is strictly
-      opt-in — the deterministic floor is always the safe, non-blocking default.
+    description: "block|warn — the enforcement level that fails the build. Default block."
     required: false
-    default: ""
-  max-violations:
-    description: >
-      OPTIONAL, default OFF. Opt-in blocking gate. Set to an integer N to FAIL
-      the check when the total finding count exceeds N. Absent (empty, the
-      default) → no volume gate; the check stays non-blocking. Independent of
-      `fail-on`; either or both may be set.
-    required: false
-    default: ""
-
+    default: "block"
 outputs:
   sarif-file:
-    description: >
-      Path (relative to the workspace) of the SARIF 2.1.0 file the engine writes.
-      Feed it to a `github/codeql-action/upload-sarif@v3` step so findings render
-      as native inline code-scanning annotations on the PR diff. That step
-      requires `permissions: security-events: write` on the job; the scan itself
-      stays non-blocking (this action always exits 0). SARIF carries file/line
-      only for LOCAL rendering on the customer's GitHub — it is never sent to the
-      Binclusive dashboard.
-
+    description: "Path to the SARIF file; feed to github/codeql-action/upload-sarif (needs security-events: write)."
 runs:
   using: "docker"
-  # Pinned to the pre-published GHCR image (release-image.yml pushes it on every
-  # version bump) instead of "Dockerfile": a local build would rebuild the whole
-  # image — pnpm install --prod, the layer strip — in EVERY consumer's CI run,
-  # defeating the slim-image / fast-pull goal (#2133). This tag is the exact
-  # package.json version and is bumped in lockstep with it, so the Action a
-  # consumer resolves at ref `v<version>` always maps to that same image digest.
-  image: "docker://ghcr.io/binclusive/a11y:0.2.0" # x-release-please-version
-  # Only `inputs` is available in an action's metadata env — the `github`
-  # context is not. GITHUB_REPOSITORY / GITHUB_API_URL / GITHUB_EVENT_PATH /
-  # GITHUB_WORKSPACE are auto-injected into Docker actions; the entrypoint reads
-  # the PR number + base/head SHAs from the event payload at GITHUB_EVENT_PATH.
-  # The token is the one value the runner does not pass by default.
+  # Moving major tag — tracks the latest v2 image; no exact pin (release-please deferred, monorepo#2553).
+  image: "docker://ghcr.io/binclusive/binclusive:2"
   env:
-    GITHUB_TOKEN: ${{ inputs.github-token }}
-    # Branded-bot identity (#2130), all OPTIONAL. When the App id + private key are
-    # set the comment step mints a short-lived installation token and posts under
-    # the Binclusive App; any of them absent (or a mint failure) falls back to
-    # GITHUB_TOKEN — so an unset input passes "" through and keeps today's behavior.
-    BINCLUSIVE_APP_ID: ${{ inputs.binclusive-app-id }}
-    BINCLUSIVE_APP_PRIVATE_KEY: ${{ inputs.binclusive-app-private-key }}
-    BINCLUSIVE_APP_INSTALLATION_ID: ${{ inputs.binclusive-app-installation-id }}
-    # Both are OPTIONAL and independent (local-first). LLM_API_KEY drives the
-    # provider-agnostic AI lane; B8E_TOKEN is the phone-home ingestion bearer.
-    # No Binclusive credential is baked in — an unset input passes an empty string
-    # through, which the runner reads as "lane off". B8E_TOKEN is the name the CLI
-    # already expects for a `b8e_` apiKey; keeping it identical means one env var
-    # for the token everywhere.
-    LLM_API_KEY: ${{ inputs.llm-api-key }}
-    # AI-lane model/provider overrides (both OPTIONAL, empty = engine default).
-    # The runner reads an empty string as "use the default", so an unset input
-    # passes "" through and falls back to Anthropic / claude-haiku-4-5-20251001 —
-    # they only matter when LLM_API_KEY is also set (the AI lane is otherwise off).
-    LLM_MODEL: ${{ inputs.llm-model }}
-    LLM_PROVIDER: ${{ inputs.llm-provider }}
-    B8E_TOKEN: ${{ inputs.b8e-token }}
-    # Phone-home targeting (all OPTIONAL, local-first). Absent org/project/audit
-    # → the runner skips phone-home; a run never fails for a missing dashboard id.
-    B8E_ORG_ID: ${{ inputs.b8e-org-id }}
-    B8E_PROJECT_ID: ${{ inputs.b8e-project-id }}
-    B8E_AUDIT_ID: ${{ inputs.b8e-audit-id }}
-    B8E_INGEST_URL: ${{ inputs.b8e-ingest-url }}
-    # OPT-IN blocking gate (#2134), both default OFF. An unset input passes ""
-    # through, which the entrypoint reads as "gate off" — so `check` runs WITHOUT
-    # `--fail-on` / `--max-violations` and exits 0 on any findings (today's
-    # non-blocking behavior). Set either to opt a repo into a failing check.
-    FAIL_ON: ${{ inputs.fail-on }}
-    MAX_VIOLATIONS: ${{ inputs.max-violations }}
+    INPUT_BASE: ${{ inputs.base }}
+    INPUT_FAIL_ON: ${{ inputs.fail-on }}
