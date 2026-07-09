@@ -2,7 +2,7 @@ name: "Binclusive accessibility (URL scan)"
 description: "Render a live URL in real Chromium, run the Binclusive/axe engine over the DOM, emit SARIF."
 author: "Binclusive"
 # The URL counterpart to the root static action (../action.yml). Same thin-shell shape — a docker://
-# action over the monorepo GHCR image — but the BROWSER variant (:2-browser), which ships Playwright
+# action over the monorepo GHCR image — but the BROWSER variant (:0-browser), which ships Playwright
 # + Chromium so `binclusive scan --url` can render a live page (engine decision 0001). KEEP-SPLIT
 # from the static image (monorepo#290): a separate tag, so this heavy variant is an explicit opt-in.
 # Same R2/R3 discipline as the static action: NO github-token, NO llm-api-key — the deterministic
@@ -20,8 +20,8 @@ outputs:
     description: "Absolute path to the SARIF file; feed to github/codeql-action/upload-sarif (needs security-events: write)."
 runs:
   using: "docker"
-  # Moving major browser tag — tracks the latest v2 browser image; no exact pin (release-please deferred, monorepo#2553).
-  image: "docker://ghcr.io/binclusive/binclusive:2-browser"
+  # Moving major browser tag — tracks the latest v0 browser image; no exact pin (release-please deferred, monorepo#2553).
+  image: "docker://ghcr.io/binclusive/binclusive:0-browser"
   env:
     INPUT_URL: ${{ inputs.url }}
     INPUT_TIMEOUT_MS: ${{ inputs.timeout-ms }}

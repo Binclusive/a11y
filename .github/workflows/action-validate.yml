@@ -25,6 +25,6 @@ jobs:
 
       - name: Assert the GHCR image refs are intact
         run: |
-          grep -q 'docker://ghcr.io/binclusive/binclusive:2' action.yml
-          grep -q 'docker://ghcr.io/binclusive/binclusive:2-browser' action-url/action.yml
+          grep -q 'docker://ghcr.io/binclusive/binclusive:0' action.yml
+          grep -q 'docker://ghcr.io/binclusive/binclusive:0-browser' action-url/action.yml
           echo "ok: image refs present"
