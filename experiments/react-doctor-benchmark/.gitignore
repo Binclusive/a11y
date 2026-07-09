@@ -1,3 +1,0 @@
-# Cloned OSS repos and raw per-repo benchmark results are reproducible — never commit them.
-.cache/
-results/

@@ -1,5 +1,0 @@
-# Cloned OSS Android repos and raw per-repo scan results are reproducible from
-# the pinned manifest — never commit them. The committed regression record is
-# baseline.json.
-.cache/
-results/

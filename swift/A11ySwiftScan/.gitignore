@@ -1,5 +1,0 @@
-# SwiftPM build artifacts — the compiled swift-syntax checkout + the release
-# binary. Rebuilt with `swift build -c release`; never committed.
-.build/
-.swiftpm/
-*.xcodeproj

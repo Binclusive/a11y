@@ -1,0 +1,30 @@
+name: validate-action
+
+# The repo ships only the two action.yml shells; this is the single gate that keeps
+# them consumable — parse both as YAML and assert each still points at its GHCR image.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse both action.yml files
+        run: |
+          for f in action.yml action-url/action.yml; do
+            python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$f"
+            echo "ok: $f parses"
+          done
+
+      - name: Assert the GHCR image refs are intact
+        run: |
+          grep -q 'docker://ghcr.io/binclusive/binclusive:2' action.yml
+          grep -q 'docker://ghcr.io/binclusive/binclusive:2-browser' action-url/action.yml
+          echo "ok: image refs present"

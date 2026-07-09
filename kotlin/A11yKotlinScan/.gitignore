@@ -1,4 +1,0 @@
-# Gradle build artifacts — rebuilt with `./gradlew build`; never committed.
-build/
-.gradle/
-.kotlin/
