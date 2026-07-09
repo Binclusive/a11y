@@ -15,8 +15,8 @@ outputs:
     description: "Path to the SARIF file; feed to github/codeql-action/upload-sarif (needs security-events: write)."
 runs:
   using: "docker"
-  # Moving major tag — tracks the latest v2 image; no exact pin (release-please deferred, monorepo#2553).
-  image: "docker://ghcr.io/binclusive/binclusive:2"
+  # Moving major tag — tracks the latest v0 image; no exact pin (release-please deferred, monorepo#2553).
+  image: "docker://ghcr.io/binclusive/binclusive:0"
   env:
     INPUT_BASE: ${{ inputs.base }}
     INPUT_FAIL_ON: ${{ inputs.fail-on }}

@@ -4,14 +4,14 @@ Two thin [Docker container actions](https://docs.github.com/en/actions/creating-
 that run the Binclusive accessibility engine in CI and emit [SARIF](https://sarifweb.azurewebsites.net/)
 for GitHub code scanning. No account, no token, no LLM key — the deterministic free lane needs none.
 
-- **`Binclusive/a11y@v2`** — the **static** CI gate. Runs the engine over your changed files
+- **`Binclusive/a11y@v0`** — the **static** CI gate. Runs the engine over your changed files
   (React/TSX, Shopify/Liquid, SwiftUI, Jetpack Compose, Unity), fails the build on blocking
   findings, writes SARIF.
-- **`Binclusive/a11y/action-url@v2`** — the **URL** scan. Renders a live URL in real Chromium
-  (the `:2-browser` image) and audits the rendered DOM.
+- **`Binclusive/a11y/action-url@v0`** — the **URL** scan. Renders a live URL in real Chromium
+  (the `:0-browser` image) and audits the rendered DOM.
 
 Both are pinned-image shells over the published GHCR images
-(`ghcr.io/binclusive/binclusive:2` and `:2-browser`). **The engine source lives in the Binclusive
+(`ghcr.io/binclusive/binclusive:0` and `:0-browser`). **The engine source lives in the Binclusive
 monorepo** (`packages/a11y`); this repo is only the published Action surface.
 
 ## Static CI gate
@@ -31,7 +31,7 @@ jobs:
           fetch-depth: 0    # need history so the action can diff against the base
 
       - id: scan
-        uses: Binclusive/a11y@v2
+        uses: Binclusive/a11y@v0
         with:
           base: ${{ github.event.pull_request.base.sha }}
           fail-on: block     # block | warn — the level that fails the build
@@ -59,7 +59,7 @@ jobs:
 
 ```yaml
       - id: scan
-        uses: Binclusive/a11y/action-url@v2
+        uses: Binclusive/a11y/action-url@v0
         with:
           url: https://example.com
           timeout-ms: "30000"   # optional; engine default 30000
@@ -77,7 +77,7 @@ jobs:
 
 ## Versioning
 
-`@v2` is a moving major tag that tracks the latest `:2` (and `:2-browser`) image. Pin to `@v2`
+`@v0` is a moving major tag that tracks the latest `:0` (and `:0-browser`) image. Pin to `@v0`
 for automatic patch/minor image updates, or to a commit SHA for a frozen pin.
 
 ## Engine
