@@ -5,11 +5,7 @@
   "description": "Local accessibility checker for React/TSX, grounded in axe-core's published rule catalog. Runs entirely on your machine — no network, no upload.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "bin": {
-    "a11y-checker": "./bin/a11y.mjs"
-  },
   "files": [
-    "bin",
     "src",
     "data/baseline-rules.json"
   ],
@@ -25,13 +21,9 @@
     "node": ">=20.18.1"
   },
   "scripts": {
-    "scan": "tsx ./src/cli.ts check",
-    "scan:url": "tsx ./src/cli.ts check-url",
-    "mcp": "tsx ./src/mcp.ts",
     "gen:baseline": "tsx ./src/baseline/gen-baseline.ts",
     "typecheck": "tsc --noEmit",
     "decisions:check": "tsx ./scripts/check-decisions.ts",
-    "check:action-pin": "node ./scripts/check-action-pin.mjs",
     "test": "vitest run",
     "//test:e2e": "Rendered-DOM e2e (real Chromium). Excluded from `test`. CI must run `npx playwright install chromium` first.",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
