@@ -1,0 +1,52 @@
+name: release-please
+
+# Self-versions the action repo so no release is ever hand-tagged again (issue monorepo#2668).
+# On every push to main, release-please maintains ONE open "release PR" that bumps version.txt +
+# the manifest from conventional-commit history. Merging that PR IS the release: release-please
+# cuts the next v0.x tag + GitHub Release, then the move-major-pin step below repoints the floating
+# `@v0` pin at it — the two things that were manual after the unify gut.
+#
+# Image repin is OUT OF SCOPE by design: both action shells reference monorepo-owned MOVING major
+# image tags (ghcr.io/binclusive/binclusive:0 and :0-browser), so there is no per-release image pin
+# in this repo to bump.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write # create the release PR branch, the v<version> tag + Release, and move the @v0 pin
+  pull-requests: write # open/update the release PR
+
+jobs:
+  release-please:
+    name: Maintain the release PR and move the major pin
+    runs-on: ubuntu-latest
+    steps:
+      # Third-party actions are SHA-pinned (a moving tag is a code-injection vector);
+      # Dependabot (.github/dependabot.yml) bumps the pin. Comment tag: v4.
+      - id: release
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # A release just landed → repoint the floating `@v0` major pin at the new tag so consumers
+      # pinned to `Binclusive/a11y@v0` pick it up. Without this the pin silently lags the release.
+      - name: Move the floating @v0 major pin to the new release
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ steps.release.outputs.tag_name }}
+          MAJOR: ${{ steps.release.outputs.major }}
+          SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          echo "Moving v${MAJOR} -> ${NEW_TAG} (${SHA})"
+          REF="tags/v${MAJOR}"
+          # PATCH an existing major pin, POST when this is the first tag on a new major line.
+          if gh api "repos/${GITHUB_REPOSITORY}/git/refs/${REF}" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/${REF}" -f sha="${SHA}" -F force=true
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/${REF}" -f sha="${SHA}"
+          fi

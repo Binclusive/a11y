@@ -86,6 +86,23 @@ is derived server-side from the token — there is no `b8e-org-id` input by desi
 `@v0` is a moving major tag that tracks the latest `:0` (and `:0-browser`) image. Pin to `@v0`
 for automatic patch/minor image updates, or to a commit SHA for a frozen pin.
 
+### Releasing (automated — no hand-tagging)
+
+Releases are cut by [release-please](.github/workflows/release-please.yml); nothing is tagged by
+hand. Conventional-commit messages on `main` (`feat:` → minor, `fix:` → patch) drive it:
+
+1. release-please keeps **one open "release PR"** that bumps `version.txt` + the manifest from the
+   commit history since the last release.
+2. **Merging that release PR is the release** — release-please cuts the next `v0.x` tag and the
+   GitHub Release.
+3. The same workflow then **moves the floating `@v0` major pin** to the new tag, so consumers on
+   `Binclusive/a11y@v0` pick it up automatically.
+
+**Image repin is out of scope here by design:** both action shells reference monorepo-owned
+*moving* major image tags (`ghcr.io/binclusive/binclusive:0` and `:0-browser`), so there is no
+per-release image pin in this repo to bump — the image tracks its own major line, owned by the
+monorepo (monorepo#2553).
+
 ## Engine
 
 The accessibility engine, its rule packs, the native SwiftUI/Compose collectors, and the corpus
