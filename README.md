@@ -48,6 +48,12 @@ jobs:
 |-------|---------|-------------|
 | `base` | `""` | Git ref to diff against (e.g. the PR base SHA). Empty scans the whole checkout. |
 | `fail-on` | `block` | `block` \| `warn` — the enforcement level that fails the build. |
+| `b8e-token` | `""` | Optional Binclusive `b8e_` apiKey. Present → findings phone home to the dashboard; absent → fully local (exit 0, never an error). Store as a repo secret. |
+| `b8e-project-id` | `""` | Optional. The project id findings belong to. Required alongside `b8e-token` — selects which project; cannot be derived from the token. |
+| `b8e-api-url` | `""` | Optional. Override the Kontrol GraphQL endpoint (default `https://kontrol.binclusive.io/graphql`). Staging / self-host only. |
+
+Phone-home is opt-in and local-first: with no `b8e-token` the gate behaves exactly as before. Org
+is derived server-side from the token — there is no `b8e-org-id` input by design.
 
 ### Output
 

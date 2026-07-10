@@ -1,5 +1,5 @@
 name: "Binclusive accessibility (CI gate)"
-description: "Run the Binclusive accessibility engine on changed files, gate the PR, emit SARIF."
+description: "Run the Binclusive accessibility engine on changed files, gate the PR, emit SARIF, and (with a token) phone findings home to the dashboard."
 author: "Binclusive"
 inputs:
   base:
@@ -10,6 +10,32 @@ inputs:
     description: "block|warn — the enforcement level that fails the build. Default block."
     required: false
     default: "block"
+  # Phone-home surface (all OPTIONAL, local-first): the `ci` command uploads findings to the
+  # dashboard ONLY when `b8e-token` is set. Absent token → the scan stays fully local (stdout +
+  # SARIF), exit 0 — never an error. The CLI reads these off `B8E_*` env directly; the Docker
+  # runner passes this action's `env:` block into the container, so they reach the CLI unchanged.
+  # `b8e-org-id` is DELIBERATELY absent: org is derived server-side from the token's own membership
+  # (ADR 0038); re-adding it re-opens the #2100/#2160 confused-deputy surface.
+  b8e-token:
+    description: >
+      OPTIONAL. A Binclusive `b8e_` apiKey (the ingestion bearer). Present → the run phones its
+      findings home to the dashboard; absent → fully local, exit 0 (never an error). Mint it in the
+      dashboard and store it as a repo secret. NOT an LLM key.
+    required: false
+    default: ""
+  b8e-project-id:
+    description: >
+      OPTIONAL. The Binclusive project id the findings belong to. Required alongside `b8e-token`
+      for phone-home — it selects WHICH project and cannot be derived from the token (one key spans
+      many projects). Absent (with a token set) is a loud error from the CLI.
+    required: false
+    default: ""
+  b8e-api-url:
+    description: >
+      OPTIONAL. Override the Kontrol GraphQL endpoint the findings are sent to (default
+      https://kontrol.binclusive.io/graphql). For staging / self-host only. The ONE endpoint var.
+    required: false
+    default: ""
 outputs:
   sarif-file:
     description: "Path to the SARIF file; feed to github/codeql-action/upload-sarif (needs security-events: write)."
@@ -18,5 +44,13 @@ runs:
   # Moving major tag — tracks the latest v0 image; no exact pin (release-please deferred, monorepo#2553).
   image: "docker://ghcr.io/binclusive/binclusive:0"
   env:
+    # Scope + gate: the image entrypoint marshals these INPUT_* vars into `binclusive ci` flags
+    # (INPUT_BASE → --base, INPUT_FAIL_ON → --fail-on).
     INPUT_BASE: ${{ inputs.base }}
     INPUT_FAIL_ON: ${{ inputs.fail-on }}
+    # Phone-home: the `ci` command reads these off process.env directly (no entrypoint marshalling).
+    # `b8e-api-url` maps to B8E_KONTROL_URL — the CLI's single endpoint var (supersedes the old
+    # per-ingest B8E_INGEST_URL).
+    B8E_TOKEN: ${{ inputs.b8e-token }}
+    B8E_PROJECT_ID: ${{ inputs.b8e-project-id }}
+    B8E_KONTROL_URL: ${{ inputs.b8e-api-url }}
