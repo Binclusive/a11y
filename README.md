@@ -86,6 +86,25 @@ is derived server-side from the token — there is no `b8e-org-id` input by desi
 `@v0` is a moving major tag that tracks the latest `:0` (and `:0-browser`) image. Pin to `@v0`
 for automatic patch/minor image updates, or to a commit SHA for a frozen pin.
 
+### Releasing (automated)
+
+Releases are **automatic** — there is no manual tagging step. When a change to either action shell
+(`action.yml` or `action-url/**`) lands on `main`, [`.github/workflows/release.yml`](.github/workflows/release.yml)
+cuts the next `v0.x` tag and **moves the floating `@v0` major pin** to it, so consumers pinned to
+`Binclusive/a11y@v0` ride the new release with no human in the loop. The bump follows Conventional
+Commits: a `feat:` since the last tag is a minor bump, anything else is a patch. Each release also
+cuts a matching GitHub Release.
+
+Two deliberate non-goals:
+
+- **No release-please.** The only release artifact here is a git tag plus the moving `@v0` pin —
+  there is no package to publish and no changelog to build, so release-please's release-PR machinery
+  is overkill (and its bot release-PR is org-gated in this org). release-please stays a monorepo-wide
+  platform decision, not a per-action-repo rider (monorepo#2553).
+- **No image repin.** Both shells pin a **moving** image tag (`:0` / `:0-browser`) that the monorepo's
+  `release-image.yml` re-points to the latest digest on every prod push. The action rides new images
+  automatically, so there is nothing to repin in this repo (the #2553 moving-tag approach).
+
 ## Engine
 
 The accessibility engine, its rule packs, the native SwiftUI/Compose collectors, and the corpus

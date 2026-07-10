@@ -1,0 +1,88 @@
+name: release
+
+# Self-versions the action repo: on a change to either action shell landing on main, cut the
+# next v0.x tag and move the floating @v0 major pin to it — so consumers pinned to
+# Binclusive/a11y@v0 ride new releases with NO manual tagging step (monorepo#2668).
+#
+# Why a purpose-built workflow, not release-please: this repo's only release artifact is a git
+# tag + a moving @v0 major pin. There is no package to publish and no changelog to build, so
+# release-please's release-PR machinery is overkill — and its bot release-PR is org-gated here
+# ("Actions not permitted to create PRs"). release-please also never moves a floating major tag
+# natively; that step is always bespoke. So the smaller correct fit for a single-action repo is
+# this tag-and-move workflow. release-please stays a monorepo-wide platform decision, not a
+# per-action-repo rider (monorepo#2553).
+#
+# Image repin is out of scope by design: both action.yml shells pin a MOVING image tag
+# (:0 / :0-browser) that the monorepo's release-image.yml re-points to the latest digest on every
+# prod push, so the action rides new images automatically — there is nothing to repin here
+# (mirrors the #2553 moving-tag approach).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - action.yml
+      - action-url/**
+      - .github/workflows/release.yml
+
+permissions:
+  contents: write   # create/move tags + cut a GitHub Release. No bot-PR permission needed (no release PR).
+
+concurrency:
+  group: release
+  cancel-in-progress: false   # serialize releases so a second push bumps from the first's new tag
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Cut the next v0.x tag and move @v0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Latest released tag on the v0 line; treat a fresh repo (no v0.x.y tag) as v0.0.0.
+          LATEST="$(git tag --list 'v0.*.*' | sort -V | tail -n1)"
+          LATEST="${LATEST:-v0.0.0}"
+          IFS=. read -r MAJ MIN PAT <<<"${LATEST#v}"
+
+          # Bump semantics mirror release-please (Conventional Commits) without the release-PR:
+          # a feat: since the last tag is a minor bump, anything else is a patch bump.
+          if git rev-parse -q --verify "refs/tags/${LATEST}" >/dev/null; then
+            RANGE="${LATEST}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          if git log --format='%s' ${RANGE} | grep -qiE '^feat(\(.+\))?!?:'; then
+            MIN=$((MIN + 1)); PAT=0
+          else
+            PAT=$((PAT + 1))
+          fi
+          NEW="v${MAJ}.${MIN}.${PAT}"
+
+          # Idempotent: a re-run on an already-released HEAD is a clean no-op, never a duplicate tag.
+          if git tag --points-at HEAD | grep -qx "${NEW}"; then
+            echo "HEAD already tagged ${NEW} — nothing to release."
+            exit 0
+          fi
+
+          echo "Releasing ${NEW} (from ${LATEST})."
+          git tag -a "${NEW}" -m "release ${NEW}"
+          git push origin "refs/tags/${NEW}"
+
+          # Move the floating major pin (@v0) to the new tag — the step release-please can't do.
+          git tag -f "v${MAJ}" -m "move v${MAJ} → ${NEW}"
+          git push --force origin "refs/tags/v${MAJ}"
+
+          gh release create "${NEW}" \
+            --title "${NEW}" \
+            --target "${GITHUB_SHA}" \
+            --notes "Automated release of the Binclusive action shells. Consumers pinned to @v${MAJ} now ride ${NEW}. The engine + image ship from the monorepo; this release versions the action.yml surface only."
