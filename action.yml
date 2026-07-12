@@ -86,13 +86,3 @@ runs:
     BINCLUSIVE_APP_ID: ${{ inputs.binclusive-app-id }}
     BINCLUSIVE_APP_PRIVATE_KEY: ${{ inputs.binclusive-app-private-key }}
     BINCLUSIVE_APP_INSTALLATION_ID: ${{ inputs.binclusive-app-installation-id }}
-    # Branded PR-review opt-in + head-sha anchor, GUARDED to pull_request events. The `ci` command
-    # gates its inline-review surface on B8E_REVIEW_COMMENTS and anchors the review to B8E_COMMIT_SHA.
-    # On a pull_request GITHUB_SHA is the MERGE commit, so the PR HEAD sha must be passed explicitly
-    # or the review attaches to the wrong/detached commit. Wiring this in the ACTION (not each
-    # consumer workflow) lands branded reviews for every consumer automatically and preserves the
-    # 2-step contract — the "separate change" the CLI's github-review-client doc-comment names. The
-    # guard leaves all three empty on non-PR events, which the CLI reads as a quiet no-op.
-    B8E_REVIEW_COMMENTS: ${{ github.event_name == 'pull_request' && 'true' || '' }}
-    B8E_COMMIT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
-    B8E_PR_NUMBER: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
