@@ -36,6 +36,32 @@ inputs:
       https://kontrol.binclusive.io/graphql). For staging / self-host only. The ONE endpoint var.
     required: false
     default: ""
+  # Branded bot identity (all OPTIONAL, local-first): with the id + private key set, the `ci`
+  # command mints a short-lived binclusive[bot] installation token so phone-home writes are
+  # attributed to the branded App instead of the default workflow bot. Any one blank → the run
+  # silently falls back to the workflow token, never an error. The CLI reads these off
+  # `BINCLUSIVE_APP_*` env directly (same pattern as `B8E_*`); the Docker runner passes this
+  # action's `env:` block into the container, so they reach the CLI unchanged.
+  binclusive-app-id:
+    description: >
+      OPTIONAL. The Binclusive GitHub App id. Present alongside the private key → phone-home writes
+      are attributed to the branded binclusive[bot]; absent → the default workflow bot. Store as a
+      repo secret.
+    required: false
+    default: ""
+  binclusive-app-private-key:
+    description: >
+      OPTIONAL. The Binclusive GitHub App private key (PEM). SECRET MATERIAL — store as a repo
+      secret; never log or echo it. Required alongside `binclusive-app-id` to mint the branded
+      token; absent → the default workflow bot.
+    required: false
+    default: ""
+  binclusive-app-installation-id:
+    description: >
+      OPTIONAL. The App installation id for this repo. Usually unnecessary — when absent it is
+      discovered from the repo, so you only install the App, never look up its id.
+    required: false
+    default: ""
 outputs:
   sarif-file:
     description: "Path to the SARIF file; feed to github/codeql-action/upload-sarif (needs security-events: write)."
@@ -54,3 +80,9 @@ runs:
     B8E_TOKEN: ${{ inputs.b8e-token }}
     B8E_PROJECT_ID: ${{ inputs.b8e-project-id }}
     B8E_KONTROL_URL: ${{ inputs.b8e-api-url }}
+    # Branded bot identity: read off process.env directly (like B8E_*) to mint a short-lived
+    # binclusive[bot] token (monorepo#2854); any blank → default workflow bot. Private key is
+    # secret material — never logged.
+    BINCLUSIVE_APP_ID: ${{ inputs.binclusive-app-id }}
+    BINCLUSIVE_APP_PRIVATE_KEY: ${{ inputs.binclusive-app-private-key }}
+    BINCLUSIVE_APP_INSTALLATION_ID: ${{ inputs.binclusive-app-installation-id }}
