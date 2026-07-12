@@ -15,29 +15,6 @@ inputs:
     description: "Max ms to wait for navigation + the page load event. Engine default 30000."
     required: false
     default: ""
-  # Branded bot identity (all OPTIONAL, local-first) — see ../action.yml for the full why. With the
-  # id + private key set the CLI mints a short-lived binclusive[bot] token (monorepo#2854); any one
-  # blank → the default workflow bot, never an error.
-  binclusive-app-id:
-    description: >
-      OPTIONAL. The Binclusive GitHub App id. Present alongside the private key → writes are
-      attributed to the branded binclusive[bot]; absent → the default workflow bot. Store as a repo
-      secret.
-    required: false
-    default: ""
-  binclusive-app-private-key:
-    description: >
-      OPTIONAL. The Binclusive GitHub App private key (PEM). SECRET MATERIAL — store as a repo
-      secret; never log or echo it. Required alongside `binclusive-app-id` to mint the branded
-      token; absent → the default workflow bot.
-    required: false
-    default: ""
-  binclusive-app-installation-id:
-    description: >
-      OPTIONAL. The App installation id for this repo. Usually unnecessary — when absent it is
-      discovered from the repo, so you only install the App, never look up its id.
-    required: false
-    default: ""
 outputs:
   sarif-file:
     description: "Absolute path to the SARIF file; feed to github/codeql-action/upload-sarif (needs security-events: write)."
@@ -48,8 +25,6 @@ runs:
   env:
     INPUT_URL: ${{ inputs.url }}
     INPUT_TIMEOUT_MS: ${{ inputs.timeout-ms }}
-    # Branded bot identity: read off process.env directly to mint a short-lived binclusive[bot]
-    # token (monorepo#2854); any blank → default workflow bot. Private key is secret — never logged.
-    BINCLUSIVE_APP_ID: ${{ inputs.binclusive-app-id }}
-    BINCLUSIVE_APP_PRIVATE_KEY: ${{ inputs.binclusive-app-private-key }}
-    BINCLUSIVE_APP_INSTALLATION_ID: ${{ inputs.binclusive-app-installation-id }}
+    # No BINCLUSIVE_APP_* branded-bot env here (unlike ../action.yml): `scan --url` emits SARIF only
+    # and never reaches the posting/mint path (that lives solely in `binclusive ci`), so those creds
+    # would be inert on this lane — a dead credential-contract surface (a11y#336).
