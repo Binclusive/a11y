@@ -78,6 +78,9 @@ runs:
     # `b8e-api-url` maps to B8E_KONTROL_URL — the CLI's single endpoint var (supersedes the old
     # per-ingest B8E_INGEST_URL).
     B8E_TOKEN: ${{ inputs.b8e-token }}
+    # Hosted branded mint reads BINCLUSIVE_API_KEY (same b8e_ key; #2919/#335) — until the
+    # env-name unify (a11y#333) collapses the prefixes.
+    BINCLUSIVE_API_KEY: ${{ inputs.b8e-token }}
     B8E_PROJECT_ID: ${{ inputs.b8e-project-id }}
     B8E_KONTROL_URL: ${{ inputs.b8e-api-url }}
     # Branded bot identity: read off process.env directly (like B8E_*) to mint a short-lived
