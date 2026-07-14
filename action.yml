@@ -11,26 +11,26 @@ inputs:
     required: false
     default: "block"
   # Phone-home surface (all OPTIONAL, local-first): the `ci` command uploads findings to the
-  # dashboard ONLY when `b8e-token` is set. Absent token → the scan stays fully local (stdout +
-  # SARIF), exit 0 — never an error. The CLI reads these off `B8E_*` env directly; the Docker
+  # dashboard ONLY when `binclusive-api-key` is set. Absent key → the scan stays fully local (stdout +
+  # SARIF), exit 0 — never an error. The CLI reads these off `BINCLUSIVE_*` env directly; the Docker
   # runner passes this action's `env:` block into the container, so they reach the CLI unchanged.
-  # `b8e-org-id` is DELIBERATELY absent: org is derived server-side from the token's own membership
+  # `binclusive-org-id` is DELIBERATELY absent: org is derived server-side from the key's own membership
   # (ADR 0038); re-adding it re-opens the #2100/#2160 confused-deputy surface.
-  b8e-token:
+  binclusive-api-key:
     description: >
       OPTIONAL. A Binclusive `b8e_` apiKey (the ingestion bearer). Present → the run phones its
       findings home to the dashboard; absent → fully local, exit 0 (never an error). Mint it in the
       dashboard and store it as a repo secret. NOT an LLM key.
     required: false
     default: ""
-  b8e-project-id:
+  binclusive-project-id:
     description: >
-      OPTIONAL. The Binclusive project id the findings belong to. Required alongside `b8e-token`
-      for phone-home — it selects WHICH project and cannot be derived from the token (one key spans
-      many projects). Absent (with a token set) is a loud error from the CLI.
+      OPTIONAL. The Binclusive project id the findings belong to. Required alongside `binclusive-api-key`
+      for phone-home — it selects WHICH project and cannot be derived from the key (one key spans
+      many projects). Absent (with a key set) is a loud error from the CLI.
     required: false
     default: ""
-  b8e-api-url:
+  binclusive-api-url:
     description: >
       OPTIONAL. Override the Kontrol GraphQL endpoint the findings are sent to (default
       https://kontrol.binclusive.io/graphql). For staging / self-host only. The ONE endpoint var.
@@ -75,14 +75,11 @@ runs:
     INPUT_BASE: ${{ inputs.base }}
     INPUT_FAIL_ON: ${{ inputs.fail-on }}
     # Phone-home: the `ci` command reads these off process.env directly (no entrypoint marshalling).
-    # `b8e-api-url` maps to B8E_KONTROL_URL — the CLI's single endpoint var (supersedes the old
-    # per-ingest B8E_INGEST_URL).
-    B8E_TOKEN: ${{ inputs.b8e-token }}
-    # Hosted branded mint reads BINCLUSIVE_API_KEY (same b8e_ key; #2919/#335) — until the
-    # env-name unify (a11y#333) collapses the prefixes.
-    BINCLUSIVE_API_KEY: ${{ inputs.b8e-token }}
-    B8E_PROJECT_ID: ${{ inputs.b8e-project-id }}
-    B8E_KONTROL_URL: ${{ inputs.b8e-api-url }}
+    # CLI 0.6.0 reads BINCLUSIVE_* only; `binclusive-api-url` maps to BINCLUSIVE_API_URL — the CLI's
+    # single endpoint var (supersedes the old per-ingest ingest URL).
+    BINCLUSIVE_API_KEY: ${{ inputs.binclusive-api-key }}
+    BINCLUSIVE_PROJECT_ID: ${{ inputs.binclusive-project-id }}
+    BINCLUSIVE_API_URL: ${{ inputs.binclusive-api-url }}
     # Branded bot identity: read off process.env directly (like B8E_*) to mint a short-lived
     # binclusive[bot] token (monorepo#2854); any blank → default workflow bot. Private key is
     # secret material — never logged.
