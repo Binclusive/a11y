@@ -69,6 +69,28 @@ runs:
   using: "docker"
   # Moving major tag — tracks the latest v0 image; no exact pin (release-please deferred, monorepo#2553).
   image: "docker://ghcr.io/binclusive/binclusive:0"
+  # Event router (a11y#342, companion to monorepo#3450 / ADR 0006). The image's baked entrypoint
+  # (`/usr/local/bin/binclusive-ci`) always runs the scan+gate (`binclusive ci`). We override it
+  # with a tiny sh shim that inspects the triggering event:
+  #   • `pull_request` with `action: closed`  → `binclusive ci close` — NO scan. A PR-close carries
+  #     no findings; it only POSTs the resolved PR ref home so the dashboard retires that PR's
+  #     ephemeral findings (Sentry-style manual resolve). This is the CI-lane delivery half of
+  #     monorepo#3450: only the customer's own CI sees their PR close (a Binclusive-hosted webhook
+  #     never sees a customer repo — ADR 0006), so the Action is the signal's only carrier.
+  #   • every other event → `exec` the baked scan entrypoint UNCHANGED (zero duplicated logic).
+  # Thin wrapper: the CLI owns both halves; this only routes. The close branch reads the event
+  # from GITHUB_EVENT_PATH — the SAME payload the CLI's `resolveCiPrRef` reads for repo + PR
+  # number + head SHA — so router and CLI agree on what "a close" is. The BINCLUSIVE_* env below
+  # and the runner-injected GITHUB_* (GITHUB_REPOSITORY / GITHUB_EVENT_PATH / GITHUB_EVENT_NAME)
+  # reach both paths, so `ci close` gets the same credentials + PR context the scan path does.
+  entrypoint: "/bin/sh"
+  args:
+    - "-c"
+    - |
+      if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && node -e 'const fs=require("fs");process.exit(JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH,"utf8")).action==="closed"?0:1)' 2>/dev/null; then
+        exec node /app/dist/bin.js ci close
+      fi
+      exec /usr/local/bin/binclusive-ci
   env:
     # Scope + gate: the image entrypoint marshals these INPUT_* vars into `binclusive ci` flags
     # (INPUT_BASE → --base, INPUT_FAIL_ON → --fail-on).

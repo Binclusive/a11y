@@ -61,6 +61,41 @@ is derived server-side from the token — there is no `b8e-org-id` input by desi
 |--------|-------------|
 | `sarif-file` | Path to the SARIF file. Feed it to `github/codeql-action/upload-sarif` (needs `security-events: write`). |
 
+### Retiring findings when a PR closes
+
+Findings phoned home from a PR scan are **ephemeral** — scoped to that PR (Sentry-style). When the
+PR closes (merged or abandoned) they should be retired, but only the PR's own repo ever learns that
+it closed: a Binclusive-hosted webhook only ever sees *our* repo, never yours ([monorepo ADR 0006](https://github.com/Binclusive/monorepo)).
+So the close signal rides this Action, on the CI lane.
+
+Add a `pull_request: types: [closed]` trigger and run the Action with your `binclusive-api-key` +
+`binclusive-project-id` — **the same** Action, no extra input. When it runs on a `closed` event it
+detects that automatically and invokes `binclusive ci close` (no scan, no SARIF): it just POSTs the
+PR ref home and the dashboard retires that PR's findings.
+
+```yaml
+name: accessibility (retire findings on close)
+on:
+  pull_request:
+    types: [closed]      # fires once, when the PR merges or is abandoned
+permissions:
+  contents: read
+jobs:
+  a11y-close:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Binclusive/a11y@v0
+        with:
+          binclusive-api-key: ${{ secrets.BINCLUSIVE_API_KEY }}
+          binclusive-project-id: ${{ secrets.BINCLUSIVE_PROJECT_ID }}
+          # no `base`, no `fail-on`, no checkout, no SARIF upload — the close path runs no scan.
+```
+
+You can keep this as its own workflow file, or add `closed` to an existing `pull_request` workflow's
+`types` — the Action scans on `opened`/`synchronize` and retires on `closed`, routing itself by the
+event. The close path is a no-op without `binclusive-api-key` (local-first, exit 0), exactly like the
+scan path.
+
 ## URL scan
 
 ```yaml
