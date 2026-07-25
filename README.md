@@ -61,40 +61,41 @@ is derived server-side from the token — there is no `b8e-org-id` input by desi
 |--------|-------------|
 | `sarif-file` | Path to the SARIF file. Feed it to `github/codeql-action/upload-sarif` (needs `security-events: write`). |
 
-### Retiring findings when a PR closes
+### Retire findings when a PR closes
 
 Findings phoned home from a PR scan are **ephemeral** — scoped to that PR (Sentry-style). When the
-PR closes (merged or abandoned) they should be retired, but only the PR's own repo ever learns that
-it closed: a Binclusive-hosted webhook only ever sees *our* repo, never yours ([monorepo ADR 0006](https://github.com/Binclusive/monorepo)).
-So the close signal rides this Action, on the CI lane.
+PR closes (merged or abandoned) they should be retired. The close signal rides your own CI, because
+only your repo ever learns that its PR closed.
 
-Add a `pull_request: types: [closed]` trigger and run the Action with your `binclusive-api-key` +
-`binclusive-project-id` — **the same** Action, no extra input. When it runs on a `closed` event it
-detects that automatically and invokes `binclusive ci close` (no scan, no SARIF): it just POSTs the
-PR ref home and the dashboard retires that PR's findings.
+This is **not** an Action. The scan is heavy — it needs the Binclusive Docker image and a real
+browser, so it runs as the `Binclusive/a11y@v0` Action. The close is the opposite: a lightweight
+`ci close` CLI call that reads the closed PR's ref from the workflow event and POSTs it home. No
+scan, no browser, no image — so it's a plain `npx @binclusive/cli` step, nothing to configure.
+
+Add this job (its own workflow file, or a `closed`-typed trigger alongside an existing one):
 
 ```yaml
-name: accessibility (retire findings on close)
+# Clear a PR's accessibility findings when it closes — a plain CLI step, no Action needed.
 on:
   pull_request:
-    types: [closed]      # fires once, when the PR merges or is abandoned
-permissions:
-  contents: read
+    types: [closed]
 jobs:
-  a11y-close:
+  retire-findings:
     runs-on: ubuntu-latest
     steps:
-      - uses: Binclusive/a11y@v0
-        with:
-          binclusive-api-key: ${{ secrets.BINCLUSIVE_API_KEY }}
-          binclusive-project-id: ${{ secrets.BINCLUSIVE_PROJECT_ID }}
-          # no `base`, no `fail-on`, no checkout, no SARIF upload — the close path runs no scan.
+      - run: npx @binclusive/cli@0 ci close
+        env:
+          BINCLUSIVE_API_KEY: ${{ secrets.BINCLUSIVE_API_KEY }}
+          BINCLUSIVE_PROJECT_ID: ${{ secrets.BINCLUSIVE_PROJECT_ID }}
 ```
 
-You can keep this as its own workflow file, or add `closed` to an existing `pull_request` workflow's
-`types` — the Action scans on `opened`/`synchronize` and retires on `closed`, routing itself by the
-event. The close path is a no-op without `binclusive-api-key` (local-first, exit 0), exactly like the
-scan path.
+`@binclusive/cli@0` pins the CLI to its stable v0 major, matching the `@v0` convention used for the
+Action. The two same secrets the scan uses (`BINCLUSIVE_API_KEY` + `BINCLUSIVE_PROJECT_ID`) are all
+it needs — `ci close` reads them straight off the environment.
+
+This step is for **prompt** cleanup. Findings also auto-expire via a server-side TTL, so a PR whose
+close event you never wire up still gets swept eventually — the `ci close` step just retires them
+immediately instead of waiting out the TTL.
 
 ## URL scan
 
