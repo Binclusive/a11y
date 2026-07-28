@@ -36,6 +36,20 @@ inputs:
       https://kontrol.binclusive.io/graphql). For staging / self-host only. The ONE endpoint var.
     required: false
     default: ""
+  # WHICH deployment this run scanned (monorepo#3679). Read only on the phone-home path, so it is
+  # inert on a local-first run. DELIBERATELY has NO `default:` — the rule the CLI deleted was
+  # "no PR ref ⇒ production", and `production` is the dashboard's DEFAULT filter, so a guess here
+  # silently lands a staging scan in the customer's most-trusted view. A default would reproduce
+  # that guess one layer out; the safe state must be visibly broken, not quietly production.
+  # Unprefixed like `base`/`fail-on` (a fact about the SCAN), not `binclusive-*` (a credential).
+  environment:
+    description: >
+      Which deployment this run scanned — `pr`, `staging` or `production`. NOT needed on an
+      `on: pull_request` workflow: the run's own PR ref stamps `pr`. REQUIRED on any non-PR
+      trigger (push / schedule / workflow_dispatch) that also sets `binclusive-api-key` — such a
+      run cannot be told apart from a staging pipeline or a developer's manual run, so the CLI
+      refuses to send rather than guess. No default by design.
+    required: false
   # Branded bot identity (all OPTIONAL, local-first): with the id + private key set, the `ci`
   # command mints a short-lived binclusive[bot] installation token so phone-home writes are
   # attributed to the branded App instead of the default workflow bot. Any one blank → the run
@@ -80,6 +94,13 @@ runs:
     BINCLUSIVE_API_KEY: ${{ inputs.binclusive-api-key }}
     BINCLUSIVE_PROJECT_ID: ${{ inputs.binclusive-project-id }}
     BINCLUSIVE_API_URL: ${{ inputs.binclusive-api-url }}
+    # Deployment stamp: an `env:` key cannot be conditionally omitted, so an unset `environment`
+    # input reaches the container as BINCLUSIVE_ENVIRONMENT="". That is EXACTLY equivalent to
+    # unset here — `resolveCiEnvironment` trims and treats blank as absent, so a PR run still
+    # stamps `pr` and a non-PR run still refuses loudly. (This is the one place the empty-forward
+    # is safe by construction; `BINCLUSIVE_API_URL` needed a CLI-side fix for the same shape,
+    # monorepo#3135 — do not assume it, the CLI's blank-is-absent test is the guarantee.)
+    BINCLUSIVE_ENVIRONMENT: ${{ inputs.environment }}
     # Branded bot identity: read off process.env directly (like B8E_*) to mint a short-lived
     # binclusive[bot] token (monorepo#2854); any blank → default workflow bot. Private key is
     # secret material — never logged.
