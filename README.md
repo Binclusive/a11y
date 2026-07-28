@@ -48,12 +48,53 @@ jobs:
 |-------|---------|-------------|
 | `base` | `""` | Git ref to diff against (e.g. the PR base SHA). Empty scans the whole checkout. |
 | `fail-on` | `block` | `block` \| `warn` — the enforcement level that fails the build. |
-| `b8e-token` | `""` | Optional Binclusive `b8e_` apiKey. Present → findings phone home to the dashboard; absent → fully local (exit 0, never an error). Store as a repo secret. |
-| `b8e-project-id` | `""` | Optional. The project id findings belong to. Required alongside `b8e-token` — selects which project; cannot be derived from the token. |
-| `b8e-api-url` | `""` | Optional. Override the Kontrol GraphQL endpoint (default `https://kontrol.binclusive.io/graphql`). Staging / self-host only. |
+| `environment` | *(none — by design)* | Which deployment this run scanned: `pr` \| `staging` \| `production`. Leave unset on `on: pull_request`. **Required on any non-PR trigger that phones home** — see [Declaring the environment](#declaring-the-environment). |
+| `binclusive-api-key` | `""` | Optional Binclusive `b8e_` apiKey. Present → findings phone home to the dashboard; absent → fully local (exit 0, never an error). Store as a repo secret. |
+| `binclusive-project-id` | `""` | Optional. The project id findings belong to. Required alongside `binclusive-api-key` — selects which project; cannot be derived from the key. |
+| `binclusive-api-url` | `""` | Optional. Override the Kontrol GraphQL endpoint (default `https://kontrol.binclusive.io/graphql`). Staging / self-host only. |
+| `binclusive-app-id` | `""` | Optional. Binclusive GitHub App id — set with the private key to attribute phone-home writes to `binclusive[bot]` instead of the default workflow bot. |
+| `binclusive-app-private-key` | `""` | Optional. The App private key (PEM). Secret material — store as a repo secret. |
+| `binclusive-app-installation-id` | `""` | Optional. The App installation id for this repo. Usually unnecessary — discovered from the repo when absent. |
 
-Phone-home is opt-in and local-first: with no `b8e-token` the gate behaves exactly as before. Org
-is derived server-side from the token — there is no `b8e-org-id` input by design.
+Phone-home is opt-in and local-first: with no `binclusive-api-key` the gate behaves exactly as
+before. Org is derived server-side from the key — there is no `binclusive-org-id` input by design.
+
+### Declaring the environment
+
+Every phoned-home run has to say **which deployment it scanned**, so the dashboard can separate a
+pre-merge PR scan from your live production site. There are exactly two ways it gets stamped:
+
+- **`on: pull_request`** — the run carries a PR ref, which is positive evidence it scanned a pull
+  request. It stamps `pr` on its own. **Nothing to declare.**
+- **Anything else** (`on: push`, a schedule, `workflow_dispatch`) — there is no PR ref, and a
+  scheduled production scan, a staging pipeline and a developer's manual run are indistinguishable
+  from inside the container. So you declare it, or the run **fails loudly** rather than guessing.
+
+The input has **no default on purpose**. `production` is the dashboard's default filter, so
+guessing it would silently drop a staging scan into your most-trusted view — a wrong answer that
+looks right. A red job you fix once is the better failure.
+
+One workflow that covers both triggers:
+
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# …
+
+      - uses: Binclusive/a11y@v0
+        with:
+          environment: ${{ github.event_name == 'pull_request' && 'pr' || 'production' }}
+          fail-on: warn
+          binclusive-api-key: ${{ secrets.BINCLUSIVE_API_KEY }}
+          binclusive-project-id: ${{ secrets.BINCLUSIVE_PROJECT_ID }}
+```
+
+Leaving `environment` out entirely is fine for a PR-only workflow — an unset input is forwarded as
+an empty value, which the CLI treats exactly as unset. A **typo** is not: `prod` is rejected with a
+loud error rather than quietly ignored, so a misdeclared run can never land under the wrong filter.
 
 ### Output
 
