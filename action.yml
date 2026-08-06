@@ -31,14 +31,12 @@ inputs:
     required: false
     default: "false"
   # The token every PR-comment surface authenticates with. A Docker container action receives NO
-  # token automatically — `.patterns/github-actions/docker-actions.md:85`: "The `GITHUB_TOKEN` is
-  # not passed to a container automatically as an input — forward it explicitly." Without the
-  # forward, `resolvePrContext` (monorepo `packages/cli/src/output/pr-summary-comment.ts:47-51`)
-  # reads an empty `fallbackToken` and returns null, `upsertPrSummaryComment` short-circuits to
+  # token automatically — GitHub does not pass it as an input; it must be
+  # forwarded explicitly. Without the forward the CLI's PR-context resolver
+  # reads an empty token and returns null, `upsertPrSummaryComment` short-circuits to
   # `skipped`, and the run exits 0 having posted nothing — `summary: true` declared and DARK, the
   # same defect this file's `env:` comment names.
-  # The branded App does NOT rescue it: `emitPrSummary` (monorepo
-  # `packages/cli/src/commands/ci/pr-summary.ts:70-75`) resolves the context FIRST and only then
+  # The branded App does NOT rescue it: the summary lane resolves the context FIRST and only then
   # swaps in the minted `binclusive[bot]` token, so with no fallback there is no context to swap
   # into and the minted token is discarded.
   # An INPUT (defaulted to `${{ github.token }}`) rather than a bare `${{ github.token }}` in
@@ -141,8 +139,8 @@ runs:
     # Sticky PR summary: `--summary` carries no value, so the entrypoint matches this var's VALUE
     # (`true` on; `false` and `""` off; anything else REFUSES with exit 4) instead of testing
     # presence — the `-n` guard the two value-carrying vars use would read the string "false" as ON.
-    # Exit 4 is `CLI_EXIT.config`, NOT 2: `crash` and `auth` are BOTH 2 (monorepo
-    # `packages/cli/src/exit-codes.ts:45-53`), so a typo'd boolean refused with 2 would be
+    # Exit 4 is `CLI_EXIT.config`, NOT 2: `crash` and `auth` are BOTH 2 in the CLI's exit-code
+    # table, so a typo'd boolean refused with 2 would be
     # indistinguishable from "you are not logged in" — and 4 is already the code `ci.ts` gives an
     # unrecognised `--format` / `--fail-on`.
     # An `env:` key cannot be conditionally omitted, so this var is ALWAYS set — but with
@@ -152,10 +150,9 @@ runs:
     # BINCLUSIVE_ENVIRONMENT shape below — that input has no `default:` at all, which is exactly
     # why it empty-forwards.)
     INPUT_SUMMARY: ${{ inputs.summary }}
-    # The PR-comment token. A Docker action receives none automatically
-    # (`.patterns/github-actions/docker-actions.md:85`), and every comment surface resolves its
-    # identity through `fallbackToken` (monorepo `packages/cli/src/output/github-identity.ts:98-100`),
-    # which reads exactly `GITHUB_TOKEN` / `BINCLUSIVE_GITHUB_TOKEN`. Absent ⇒ `resolvePrContext`
+    # The PR-comment token. A Docker action receives none automatically, and every
+    # comment surface resolves its identity through one seam that reads exactly
+    # `GITHUB_TOKEN` / `BINCLUSIVE_GITHUB_TOKEN`. Absent ⇒ `resolvePrContext`
     # returns null ⇒ the sticky comment skips at exit 0. THIS LINE is what makes `summary: true`
     # reach the pull request at all; the `$GITHUB_STEP_SUMMARY` half needs no token and works
     # without it. Not a widening: the token's scopes are whatever the calling job's `permissions:`
