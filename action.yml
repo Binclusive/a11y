@@ -10,6 +10,24 @@ inputs:
     description: "block|warn — the enforcement level that fails the build. Default block."
     required: false
     default: "block"
+  # PR comment surface (OPTIONAL, local-first, default OFF). Independent of phone-home: the sticky
+  # summary is stateless — no key, no project id, no ingest — so on a local-first run it is the ONLY
+  # PR comment surface that exists. The inline review-comment lane is verdict-driven (no
+  # `binclusive-api-key` → no ingest → no verdicts → that lane skips), so this is not a second copy
+  # of the findings: it is one index comment beside N per-line comments.
+  # Default OFF is deliberate. `emitPrSummary` fails LOUD under present intent (throws
+  # `PrCommentError`, monorepo#2908), so switching it on against a mis-scoped `pull-requests:`
+  # permission is a RED BUILD, not a missing comment. That has to be the workflow author's choice,
+  # never a silent default. `"false"` (not `""`) because the entrypoint matches the VALUE.
+  summary:
+    description: >
+      OPTIONAL. `true` posts ONE sticky rollup comment on the pull request — finding counts by
+      level plus the top offending files — rewritten in place each run rather than appended.
+      Opt-in, default `false`. Requires `permissions: pull-requests: write` on the job: with the
+      permission missing the run FAILS the build rather than quietly skipping the comment, so turn
+      both on together. Needs no `binclusive-api-key` — this lane is fully local.
+    required: false
+    default: "false"
   # Phone-home surface (all OPTIONAL, local-first): the `ci` command uploads findings to the
   # dashboard ONLY when `binclusive-api-key` is set. Absent key → the scan stays fully local (stdout +
   # SARIF), exit 0 — never an error. The CLI reads these off `BINCLUSIVE_*` env directly; the Docker
@@ -85,9 +103,18 @@ runs:
   image: "docker://ghcr.io/binclusive/binclusive:0"
   env:
     # Scope + gate: the image entrypoint marshals these INPUT_* vars into `binclusive ci` flags
-    # (INPUT_BASE → --base, INPUT_FAIL_ON → --fail-on).
+    # (INPUT_BASE → --base, INPUT_FAIL_ON → --fail-on, INPUT_SUMMARY → --summary). The mapping is
+    # EXPLICIT — nothing here rides GitHub's implicit INPUT_* convention, so an input declared
+    # above and missing from this block is a dark feature (monorepo#4430).
     INPUT_BASE: ${{ inputs.base }}
     INPUT_FAIL_ON: ${{ inputs.fail-on }}
+    # Sticky PR summary: `--summary` carries no value, so the entrypoint matches this var's VALUE
+    # (`true` on; `false` and `""` off; anything else exits 2) instead of testing presence — the
+    # `-n` guard the two value-carrying vars use would read the string "false" as ON. Same
+    # empty-forward as BINCLUSIVE_ENVIRONMENT below: an `env:` key cannot be conditionally omitted,
+    # so an unset `summary:` input arrives as "" and is read as off. Hence the `"false"` default on
+    # the input — a genuine boolean-string, never `""` and never `true`.
+    INPUT_SUMMARY: ${{ inputs.summary }}
     # Phone-home: the `ci` command reads these off process.env directly (no entrypoint marshalling).
     # CLI 0.6.0 reads BINCLUSIVE_* only; `binclusive-api-url` maps to BINCLUSIVE_API_URL — the CLI's
     # single endpoint var (supersedes the old per-ingest ingest URL).

@@ -48,6 +48,7 @@ jobs:
 |-------|---------|-------------|
 | `base` | `""` | Git ref to diff against (e.g. the PR base SHA). Empty scans the whole checkout. |
 | `fail-on` | `block` | `block` \| `warn` — the enforcement level that fails the build. |
+| `summary` | `false` | `true` posts one sticky rollup comment on the PR (counts by level + top offending files), rewritten in place each run. Opt-in — needs `pull-requests: write`; see [The PR summary comment](#the-pr-summary-comment). |
 | `environment` | *(none — by design)* | Which deployment this run scanned: `pr` \| `staging` \| `production`. Leave unset on `on: pull_request`. **Required on any non-PR trigger that phones home** — see [Declaring the environment](#declaring-the-environment). |
 | `binclusive-api-key` | `""` | Optional Binclusive `b8e_` apiKey. Present → findings phone home to the dashboard; absent → fully local (exit 0, never an error). Store as a repo secret. |
 | `binclusive-project-id` | `""` | Optional. The project id findings belong to. Required alongside `binclusive-api-key` — selects which project; cannot be derived from the key. |
@@ -58,6 +59,40 @@ jobs:
 
 Phone-home is opt-in and local-first: with no `binclusive-api-key` the gate behaves exactly as
 before. Org is derived server-side from the key — there is no `binclusive-org-id` input by design.
+
+### The PR summary comment
+
+`summary: true` posts **one** comment on the pull request — counts by level plus the top offending
+files — and rewrites that same comment on every run instead of stacking a new one per push.
+
+It is **stateless**: no api key, no project id, no dashboard round-trip. That matters because the
+other PR surface, the inline per-line review comments, is verdict-driven — no `binclusive-api-key`
+means no ingest, which means no verdicts, which means that lane skips entirely. So on a local-first
+setup (no account, no token) the summary is the **only** PR comment surface there is. The two are
+not redundant even when both run: the summary is one index comment beside N per-line comments, not
+a second copy of the findings.
+
+```yaml
+permissions:
+  contents: read
+  security-events: write   # SARIF upload
+  pull-requests: write     # required by `summary: true` — the comment write
+
+# …
+
+      - uses: Binclusive/a11y@v0
+        with:
+          base: ${{ github.event.pull_request.base.sha }}
+          summary: "true"
+```
+
+It stays **default-off on purpose.** The comment write fails **loudly**: on a job whose
+`pull-requests:` scope is missing or read-only, the run goes **red** — it does not silently omit
+the comment. A red build is the right answer for a surface you asked for and cannot get, but only
+if you asked. So enabling it and granting `pull-requests: write` is one deliberate decision, never
+a default that turns a working workflow red on an image bump. The value is matched exactly:
+`"true"` and `"false"` are the only accepted strings, and anything else fails the step rather than
+being read as off.
 
 ### Declaring the environment
 
