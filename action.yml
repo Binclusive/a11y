@@ -39,13 +39,16 @@ inputs:
   # The branded App does NOT rescue it: the summary lane resolves the context FIRST and only then
   # swaps in the minted `binclusive[bot]` token, so with no fallback there is no context to swap
   # into and the minted token is discarded.
-  # An INPUT (defaulted to `${{ github.token }}`) rather than a bare `${{ github.token }}` in
-  # `runs.env`: both halves ship in real DOCKER actions today. `stoplightio/spectral-action` is
-  # `runs.using: docker`, declares `repo_token` with `default: ${{ github.token }}`, carries NO
-  # `env:` block at all, and reads `INPUT_REPO_TOKEN` in its source; `alstr/todo-to-issue-action`
-  # runs the same `docker://` pre-built-image shape with `TOKEN: default: ${{ github.token }}`.
-  # An input `default:` resolves before the action type matters. Settled — do not re-litigate.
-  # It is still zero-config: the default fires with no `with:` line, so it cannot be forgotten.
+  # NO `default:` expression. An input `default:` CANNOT use the `github` context in a Docker
+  # action — the runner rejects the whole file with "Unrecognized named-value: 'github'" and every
+  # consumer's build dies at `Set up job`, before a single step runs. That shipped on v0.9.0 and
+  # was reverted within minutes; the shape is recorded here so it is never tried again.
+  # `actions/checkout` carries `default: ${{ github.token }}` and works, but it is a JS action —
+  # the precedent does not transfer, and reasoning from it is what broke v0.9.0.
+  # So the token is passed by the CALLER. Not zero-config, and that is the honest cost:
+  #   with:
+  #     summary: "true"
+  #     github-token: ${{ github.token }}
   github-token:
     description: >
       OPTIONAL. The token the PR-comment surfaces authenticate with; defaults to the job's own
@@ -55,7 +58,7 @@ inputs:
       `binclusive[bot]` use `binclusive-app-*` instead, which overrides the identity without
       replacing this.
     required: false
-    default: ${{ github.token }}
+    default: ""
   # Phone-home surface (all OPTIONAL, local-first): the `ci` command uploads findings to the
   # dashboard ONLY when `binclusive-api-key` is set. Absent key → the scan stays fully local (stdout +
   # SARIF), exit 0 — never an error. The CLI reads these off `BINCLUSIVE_*` env directly; the Docker
