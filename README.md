@@ -49,7 +49,7 @@ jobs:
 | `base` | `""` | Git ref to diff against (e.g. the PR base SHA). Empty scans the whole checkout. |
 | `fail-on` | `block` | `block` \| `warn` — the enforcement level that fails the build. |
 | `summary` | `false` | `true` emits the rollup digest (counts by level + top offending files) to the run's job summary, and on a PR run also as one sticky comment rewritten in place each run. Opt-in — the comment half needs `pull-requests: write`; see [The rollup summary](#the-rollup-summary). |
-| `github-token` | `${{ github.token }}` | The token the PR-comment surfaces authenticate with. Defaults to the job's own token — nothing to set. Override only to post as a different actor; for `binclusive[bot]` use `binclusive-app-*` instead. |
+| `github-token` | `""` | The token the PR-comment surfaces authenticate with. **No default — `summary: true` requires you to pass it.** See below. Pass a PAT instead to post as a different actor; for `binclusive[bot]` use `binclusive-app-*`. |
 | `environment` | *(none — by design)* | Which deployment this run scanned: `pr` \| `staging` \| `production`. Leave unset on `on: pull_request`. **Required on any non-PR trigger that phones home** — see [Declaring the environment](#declaring-the-environment). |
 | `binclusive-api-key` | `""` | Optional Binclusive `b8e_` apiKey. Present → findings phone home to the dashboard; absent → fully local (exit 0, never an error). Store as a repo secret. |
 | `binclusive-project-id` | `""` | Optional. The project id findings belong to. Required alongside `binclusive-api-key` — selects which project; cannot be derived from the key. |
@@ -83,9 +83,11 @@ setup (no account, no token) the summary is the **only** PR comment surface ther
 not redundant even when both run: the summary is one index comment beside N per-line comments, not
 a second copy of the findings.
 
-The comment half authenticates with the `github-token` input, which defaults to the job's own
-`${{ github.token }}` — there is nothing to wire up. What that token may *do* is decided by your
-job's `permissions:` block:
+The comment half authenticates with the `github-token` input, and **it has no default — you pass
+it.** A container action cannot reach the `github` context from its own metadata, so the token has
+to be resolved in your workflow, where that context exists, and handed in as an input.
+
+What that token may *do* is then decided by your job's `permissions:` block:
 
 ```yaml
 permissions:
@@ -99,7 +101,11 @@ permissions:
         with:
           base: ${{ github.event.pull_request.base.sha }}
           summary: "true"
+          github-token: ${{ github.token }}   # required by `summary: true`
 ```
+
+Omit `github-token` and the comment lane finds no credential, reports a skip on stderr, and the
+run stays green — the digest still reaches the run's Summary page, which needs no token.
 
 It stays **default-off on purpose.** The comment write fails **loudly**: on a job whose
 `pull-requests:` scope is missing or read-only, GitHub refuses the write, the CLI raises
