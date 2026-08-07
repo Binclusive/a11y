@@ -43,20 +43,20 @@ inputs:
   # action — the runner rejects the whole file with "Unrecognized named-value: 'github'" and every
   # consumer's build dies at `Set up job`, before a single step runs. That shipped on v0.9.0 and
   # was reverted within minutes; the shape is recorded here so it is never tried again.
-  # `actions/checkout` carries `default: ${{ github.token }}` and works, but it is a JS action —
+  # `actions/checkout` carries that same default and works, but it is a JS action —
   # the precedent does not transfer, and reasoning from it is what broke v0.9.0.
   # So the token is passed by the CALLER. Not zero-config, and that is the honest cost:
   #   with:
   #     summary: "true"
-  #     github-token: ${{ github.token }}
+  #     github-token: <the job's own token expression>
   github-token:
     description: >
-      OPTIONAL. The token the PR-comment surfaces authenticate with; defaults to the job's own
-      `${{ github.token }}`, so there is nothing to set. What it may DO is governed by the calling
-      job's `permissions:` block — `summary: true` needs `pull-requests: write` there. Override
-      only to post as a different actor (a PAT, or a token you minted yourself); to post as
-      `binclusive[bot]` use `binclusive-app-*` instead, which overrides the identity without
-      replacing this.
+      OPTIONAL, but REQUIRED for `summary: true` — the token the PR-comment surfaces authenticate
+      with. There is no default; pass the job's own token explicitly (see the README). What it may
+      DO is governed by the calling job's `permissions:` block: `summary: true` needs
+      `pull-requests: write` there. Pass a PAT instead to post as a different actor; to post as
+      `binclusive[bot]` use `binclusive-app-*`, which overrides the identity without replacing
+      this.
     required: false
     default: ""
   # Phone-home surface (all OPTIONAL, local-first): the `ci` command uploads findings to the
