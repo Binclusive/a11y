@@ -103,10 +103,16 @@ permissions:
 
 It stays **default-off on purpose.** The comment write fails **loudly**: on a job whose
 `pull-requests:` scope is missing or read-only, GitHub refuses the write, the CLI raises
-`PrCommentError` rather than logging-and-continuing, and the step exits `2` — the crash pole, which
-is deliberately distinct from the findings gate's exit `1` so a `continue-on-error` meant to swallow
-findings cannot swallow this. The run goes **red**; it does not silently omit the comment. (The job
-summary still renders — it needed no token to begin with.)
+`PrCommentError` rather than logging-and-continuing, and the step exits `2` — the crash pole,
+deliberately distinct from the findings gate's exit `1`. The run goes **red**; it does not silently
+omit the comment. (The job summary still renders — it needed no token to begin with.)
+
+Be precise about what those distinct codes buy you: they are **distinguishable by a consumer who
+inspects them**, not unswallowable. `continue-on-error: true` greens the job on **any** non-zero
+exit — it never reads the number. So if you set it to tolerate findings, it also greens a run whose
+`pull-requests: write` was denied, which is exactly the silent skip this feature exists to end. If
+you need both, drop `continue-on-error` and branch on the code yourself (`exit 1` → findings,
+`exit 2` → the comment write failed).
 
 A red build is the right answer for a surface you asked for and cannot get, but only if you asked.
 So enabling it and granting `pull-requests: write` is one deliberate decision, never a default that
@@ -118,8 +124,11 @@ Two consequences worth knowing before you turn it on:
   `pull_request` event from a fork ([workflow syntax →
   `permissions`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions)),
   so the comment write is refused and the run reds — by design, but on traffic you do not control.
-  Leave `summary` off on fork-facing workflows, or gate it:
-  `summary: ${{ github.event.pull_request.head.repo.fork && 'false' || 'true' }}`.
+  Leave `summary` off on fork-facing workflows, or gate it on whether the head repo is *this* repo:
+  `summary: ${{ github.event.pull_request.head.repo.full_name != github.repository && 'false' || 'true' }}`.
+  Test the repo, not the `head.repo.fork` flag: that flag is true whenever the head repo is itself a
+  fork, so it also switches the summary off for same-repo pull requests inside your own downstream
+  fork — where the write would have succeeded.
 - **The value is matched exactly.** `"true"` turns it on; `"false"` and `""` (an explicitly blank
   input) turn it off. Anything else — `yes`, `True`, a typo — is **refused** with exit `4`, the
   "you invoked me wrong" code, rather than being quietly read as off.

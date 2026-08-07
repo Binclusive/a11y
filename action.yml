@@ -34,17 +34,17 @@ inputs:
   # token automatically — GitHub does not pass it as an input; it must be
   # forwarded explicitly. Without the forward the CLI's PR-context resolver
   # reads an empty token and returns null, `upsertPrSummaryComment` short-circuits to
-  # `skipped`, and the run exits 0 having posted nothing — `summary: true` declared and DARK, the
-  # same defect this file's `env:` comment names.
+  # `skipped`, and the run exits 0 having posted nothing — `summary: true` reachable and still
+  # DARK, one layer past the missing declaration this change fixes.
   # The branded App does NOT rescue it: the summary lane resolves the context FIRST and only then
   # swaps in the minted `binclusive[bot]` token, so with no fallback there is no context to swap
   # into and the minted token is discarded.
   # An INPUT (defaulted to `${{ github.token }}`) rather than a bare `${{ github.token }}` in
-  # `runs.env`: the defaulted-input shape is proven — `actions/checkout`'s `token` input is
-  # literally `default: ${{ github.token }}` — and `runs.env: ${{ inputs.<id> }}` is proven by
-  # `INPUT_BASE`/`INPUT_FAIL_ON` below. Neither GitHub's metadata-syntax nor its contexts
-  # reference documents the `github` context inside a Docker action's `runs.env`, and shipping the
-  # fix for a dark surface on an unverified link would reproduce the failure it exists to end.
+  # `runs.env`: both halves ship in real DOCKER actions today. `stoplightio/spectral-action` is
+  # `runs.using: docker`, declares `repo_token` with `default: ${{ github.token }}`, carries NO
+  # `env:` block at all, and reads `INPUT_REPO_TOKEN` in its source; `alstr/todo-to-issue-action`
+  # runs the same `docker://` pre-built-image shape with `TOKEN: default: ${{ github.token }}`.
+  # An input `default:` resolves before the action type matters. Settled — do not re-litigate.
   # It is still zero-config: the default fires with no `with:` line, so it cannot be forgotten.
   github-token:
     description: >
@@ -131,9 +131,23 @@ runs:
   image: "docker://ghcr.io/binclusive/binclusive:0"
   env:
     # Scope + gate: the image entrypoint marshals these INPUT_* vars into `binclusive ci` flags
-    # (INPUT_BASE → --base, INPUT_FAIL_ON → --fail-on, INPUT_SUMMARY → --summary). The mapping is
-    # EXPLICIT — nothing here rides GitHub's implicit INPUT_* convention, so an input declared
-    # above and missing from this block is a dark feature (monorepo#4430).
+    # (INPUT_BASE → --base, INPUT_FAIL_ON → --fail-on, INPUT_SUMMARY → --summary).
+    #
+    # How INPUT_* is actually set for a Docker action: the runner injects `INPUT_<NAME>` for
+    # EVERY DECLARED input before this block is merged — uppercased, spaces → `_`, and HYPHENS
+    # PRESERVED. So `fail-on` arrives as `INPUT_FAIL-ON`, not `INPUT_FAIL_ON`. This block is then
+    # merged only where a key is not already set, so it never overwrites an injected var.
+    # Which lines below are therefore load-bearing:
+    #   INPUT_FAIL_ON  — YES. The implicit name is `INPUT_FAIL-ON`; the entrypoint reads the
+    #                    underscored one, so without this line the gate level never arrives.
+    #   GITHUB_TOKEN   — YES. The implicit name is `INPUT_GITHUB-TOKEN`, and the identity seam
+    #                    reads `GITHUB_TOKEN` regardless. This is a rename, not a forward.
+    #   INPUT_BASE     — no, redundant with the injected var. Kept for rename-safety.
+    #   INPUT_SUMMARY  — no, same. Kept so renaming the input id is caught here rather than
+    #                    silently changing which var the container reads.
+    # None of that softens the defect this file fixes. `summary` was dark because the INPUT WAS
+    # NOT DECLARED AT ALL (monorepo#4430): no input, no implicit var, and `with: summary:` on an
+    # undeclared input is warned-and-dropped by the runner. The missing DECLARATION was the bug.
     INPUT_BASE: ${{ inputs.base }}
     INPUT_FAIL_ON: ${{ inputs.fail-on }}
     # Sticky PR summary: `--summary` carries no value, so the entrypoint matches this var's VALUE
@@ -152,7 +166,7 @@ runs:
     INPUT_SUMMARY: ${{ inputs.summary }}
     # The PR-comment token. A Docker action receives none automatically, and every
     # comment surface resolves its identity through one seam that reads exactly
-    # `GITHUB_TOKEN` / `BINCLUSIVE_GITHUB_TOKEN`. Absent ⇒ `resolvePrContext`
+    # `GITHUB_TOKEN` — one name, no alias (monorepo#4467). Absent ⇒ `resolvePrContext`
     # returns null ⇒ the sticky comment skips at exit 0. THIS LINE is what makes `summary: true`
     # reach the pull request at all; the `$GITHUB_STEP_SUMMARY` half needs no token and works
     # without it. Not a widening: the token's scopes are whatever the calling job's `permissions:`
