@@ -10,55 +10,16 @@ inputs:
     description: "block|warn — the enforcement level that fails the build. Default block."
     required: false
     default: "block"
-  # PR comment surface (OPTIONAL, local-first, default OFF). Independent of phone-home: the sticky
-  # summary is stateless — no key, no project id, no ingest — so on a local-first run it is the ONLY
-  # PR comment surface that exists. The inline review-comment lane is verdict-driven (no
-  # `binclusive-api-key` → no ingest → no verdicts → that lane skips), so this is not a second copy
-  # of the findings: it is one index comment beside N per-line comments.
-  # Default OFF is deliberate. `emitPrSummary` fails LOUD under present intent (throws
-  # `PrCommentError`, monorepo#2908), so switching it on against a mis-scoped `pull-requests:`
-  # permission is a RED BUILD, not a missing comment. That has to be the workflow author's choice,
-  # never a silent default. `"false"` (not `""`) because the entrypoint matches the VALUE.
+  # Job summary surface (OPTIONAL, local-first, default OFF). Stateless — no key, no project id,
+  # no ingest. Needs no token and no pull request, so it also renders on `push`, `schedule` and
+  # `workflow_dispatch` runs.
   summary:
     description: >
       OPTIONAL. `true` emits the rollup digest — finding counts by level plus the top offending
-      files — to TWO surfaces: always to `$GITHUB_STEP_SUMMARY` (the run's own summary page, no
-      token and no PR needed), and on a pull-request run ALSO as ONE sticky comment rewritten in
-      place each run rather than appended. Opt-in, default `false`. The comment half needs
-      `permissions: pull-requests: write` on the job: with the permission missing the run FAILS
-      the build rather than quietly skipping the comment, so turn both on together. Needs no
-      `binclusive-api-key` — this lane is fully local.
+      files — to `$GITHUB_STEP_SUMMARY`, the run's own summary page. Opt-in, default `false`.
+      Needs no token, no permission grant, and no `binclusive-api-key` — this lane is fully local.
     required: false
     default: "false"
-  # The token every PR-comment surface authenticates with. A Docker container action receives NO
-  # token automatically — GitHub does not pass it as an input; it must be
-  # forwarded explicitly. Without the forward the CLI's PR-context resolver
-  # reads an empty token and returns null, `upsertPrSummaryComment` short-circuits to
-  # `skipped`, and the run exits 0 having posted nothing — `summary: true` reachable and still
-  # DARK, one layer past the missing declaration this change fixes.
-  # The branded App does NOT rescue it: the summary lane resolves the context FIRST and only then
-  # swaps in the minted `binclusive[bot]` token, so with no fallback there is no context to swap
-  # into and the minted token is discarded.
-  # NO `default:` expression. An input `default:` CANNOT use the `github` context in a Docker
-  # action — the runner rejects the whole file with "Unrecognized named-value: 'github'" and every
-  # consumer's build dies at `Set up job`, before a single step runs. That shipped on v0.9.0 and
-  # was reverted within minutes; the shape is recorded here so it is never tried again.
-  # `actions/checkout` carries that same default and works, but it is a JS action —
-  # the precedent does not transfer, and reasoning from it is what broke v0.9.0.
-  # So the token is passed by the CALLER. Not zero-config, and that is the honest cost:
-  #   with:
-  #     summary: "true"
-  #     github-token: <the job's own token expression>
-  github-token:
-    description: >
-      OPTIONAL, but REQUIRED for `summary: true` — the token the PR-comment surfaces authenticate
-      with. There is no default; pass the job's own token explicitly (see the README). What it may
-      DO is governed by the calling job's `permissions:` block: `summary: true` needs
-      `pull-requests: write` there. Pass a PAT instead to post as a different actor; to post as
-      `binclusive[bot]` use `binclusive-app-*`, which overrides the identity without replacing
-      this.
-    required: false
-    default: ""
   # Phone-home surface (all OPTIONAL, local-first): the `ci` command uploads findings to the
   # dashboard ONLY when `binclusive-api-key` is set. Absent key → the scan stays fully local (stdout +
   # SARIF), exit 0 — never an error. The CLI reads these off `BINCLUSIVE_*` env directly; the Docker
@@ -99,32 +60,6 @@ inputs:
       run cannot be told apart from a staging pipeline or a developer's manual run, so the CLI
       refuses to send rather than guess. No default by design.
     required: false
-  # Branded bot identity (all OPTIONAL, local-first): with the id + private key set, the `ci`
-  # command mints a short-lived binclusive[bot] installation token so phone-home writes are
-  # attributed to the branded App instead of the default workflow bot. Any one blank → the run
-  # silently falls back to the workflow token, never an error. The CLI reads these off
-  # `BINCLUSIVE_APP_*` env directly (same pattern as `B8E_*`); the Docker runner passes this
-  # action's `env:` block into the container, so they reach the CLI unchanged.
-  binclusive-app-id:
-    description: >
-      OPTIONAL. The Binclusive GitHub App id. Present alongside the private key → phone-home writes
-      are attributed to the branded binclusive[bot]; absent → the default workflow bot. Store as a
-      repo secret.
-    required: false
-    default: ""
-  binclusive-app-private-key:
-    description: >
-      OPTIONAL. The Binclusive GitHub App private key (PEM). SECRET MATERIAL — store as a repo
-      secret; never log or echo it. Required alongside `binclusive-app-id` to mint the branded
-      token; absent → the default workflow bot.
-    required: false
-    default: ""
-  binclusive-app-installation-id:
-    description: >
-      OPTIONAL. The App installation id for this repo. Usually unnecessary — when absent it is
-      discovered from the repo, so you only install the App, never look up its id.
-    required: false
-    default: ""
 outputs:
   sarif-file:
     description: "Path to the SARIF file; feed to github/codeql-action/upload-sarif (needs security-events: write)."
@@ -143,11 +78,12 @@ runs:
     # Which lines below are therefore load-bearing:
     #   INPUT_FAIL_ON  — YES. The implicit name is `INPUT_FAIL-ON`; the entrypoint reads the
     #                    underscored one, so without this line the gate level never arrives.
-    #   GITHUB_TOKEN   — YES. The implicit name is `INPUT_GITHUB-TOKEN`, and the identity seam
-    #                    reads `GITHUB_TOKEN` regardless. This is a rename, not a forward.
     #   INPUT_BASE     — no, redundant with the injected var. Kept for rename-safety.
     #   INPUT_SUMMARY  — no, same. Kept so renaming the input id is caught here rather than
     #                    silently changing which var the container reads.
+    # The container receives no GitHub credential at all: the runner does not forward one
+    # automatically, and no input declares one (gate and summary are both local). No credential
+    # secrets need to be stored for this action to run.
     # None of that softens the defect this file fixes. `summary` was dark because the INPUT WAS
     # NOT DECLARED AT ALL (monorepo#4430): no input, no implicit var, and `with: summary:` on an
     # undeclared input is warned-and-dropped by the runner. The missing DECLARATION was the bug.
@@ -168,14 +104,6 @@ runs:
     # BINCLUSIVE_ENVIRONMENT shape below — that input has no `default:` at all, which is exactly
     # why it empty-forwards.)
     INPUT_SUMMARY: ${{ inputs.summary }}
-    # The PR-comment token. A Docker action receives none automatically, and every
-    # comment surface resolves its identity through one seam that reads exactly
-    # `GITHUB_TOKEN` — one name, no alias (monorepo#4467). Absent ⇒ `resolvePrContext`
-    # returns null ⇒ the sticky comment skips at exit 0. THIS LINE is what makes `summary: true`
-    # reach the pull request at all; the `$GITHUB_STEP_SUMMARY` half needs no token and works
-    # without it. Not a widening: the token's scopes are whatever the calling job's `permissions:`
-    # block already granted.
-    GITHUB_TOKEN: ${{ inputs.github-token }}
     # Phone-home: the `ci` command reads these off process.env directly (no entrypoint marshalling).
     # CLI 0.6.0 reads BINCLUSIVE_* only; `binclusive-api-url` maps to BINCLUSIVE_API_URL — the CLI's
     # single endpoint var (supersedes the old per-ingest ingest URL).
@@ -189,9 +117,3 @@ runs:
     # is safe by construction; `BINCLUSIVE_API_URL` needed a CLI-side fix for the same shape,
     # monorepo#3135 — do not assume it, the CLI's blank-is-absent test is the guarantee.)
     BINCLUSIVE_ENVIRONMENT: ${{ inputs.environment }}
-    # Branded bot identity: read off process.env directly (like B8E_*) to mint a short-lived
-    # binclusive[bot] token (monorepo#2854); any blank → default workflow bot. Private key is
-    # secret material — never logged.
-    BINCLUSIVE_APP_ID: ${{ inputs.binclusive-app-id }}
-    BINCLUSIVE_APP_PRIVATE_KEY: ${{ inputs.binclusive-app-private-key }}
-    BINCLUSIVE_APP_INSTALLATION_ID: ${{ inputs.binclusive-app-installation-id }}

@@ -48,96 +48,43 @@ jobs:
 |-------|---------|-------------|
 | `base` | `""` | Git ref to diff against (e.g. the PR base SHA). Empty scans the whole checkout. |
 | `fail-on` | `block` | `block` \| `warn` — the enforcement level that fails the build. |
-| `summary` | `false` | `true` emits the rollup digest (counts by level + top offending files) to the run's job summary, and on a PR run also as one sticky comment rewritten in place each run. Opt-in — the comment half needs `pull-requests: write`; see [The rollup summary](#the-rollup-summary). |
-| `github-token` | `""` | The token the PR-comment surfaces authenticate with. **No default — `summary: true` requires you to pass it.** See below. Pass a PAT instead to post as a different actor; for `binclusive[bot]` use `binclusive-app-*`. |
+| `summary` | `false` | `true` emits the rollup digest (counts by level + top offending files) to the run's job summary page. Opt-in, default `false`. Needs no token and no permission grant. |
 | `environment` | *(none — by design)* | Which deployment this run scanned: `pr` \| `staging` \| `production`. Leave unset on `on: pull_request`. **Required on any non-PR trigger that phones home** — see [Declaring the environment](#declaring-the-environment). |
 | `binclusive-api-key` | `""` | Optional Binclusive `b8e_` apiKey. Present → findings phone home to the dashboard; absent → fully local (exit 0, never an error). Store as a repo secret. |
 | `binclusive-project-id` | `""` | Optional. The project id findings belong to. Required alongside `binclusive-api-key` — selects which project; cannot be derived from the key. |
 | `binclusive-api-url` | `""` | Optional. Override the Kontrol GraphQL endpoint (default `https://kontrol.binclusive.io/graphql`). Staging / self-host only. |
-| `binclusive-app-id` | `""` | Optional. Binclusive GitHub App id — set with the private key to attribute phone-home writes to `binclusive[bot]` instead of the default workflow bot. |
-| `binclusive-app-private-key` | `""` | Optional. The App private key (PEM). Secret material — store as a repo secret. |
-| `binclusive-app-installation-id` | `""` | Optional. The App installation id for this repo. Usually unnecessary — discovered from the repo when absent. |
 
 Phone-home is opt-in and local-first: with no `binclusive-api-key` the gate behaves exactly as
 before. Org is derived server-side from the key — there is no `binclusive-org-id` input by design.
 
 ### The rollup summary
 
-`summary: true` renders one digest — counts by level plus the top offending files — to **two**
-surfaces, not one:
+`summary: true` emits one digest — counts by level plus the top offending files — to the run's
+summary page via `$GITHUB_STEP_SUMMARY`. No token, no permission grant, and no pull request needed.
+It renders on `push`, `schedule`, `workflow_dispatch`, and pull requests alike.
 
-| Surface | Where it lands | Needs a token? | Needs a PR? |
-|---------|----------------|----------------|-------------|
-| **Job summary** | The run's own summary page, via `$GITHUB_STEP_SUMMARY` | No | No |
-| **Sticky PR comment** | One comment on the PR, rewritten in place every run | Yes | Yes |
+The summary is **stateless**: no api key, no project id, no dashboard round-trip. It is what a
+fully local run gets, and it needs nothing from us.
 
-The job-summary half is the one that always works: it needs no `pull-requests:` grant, no token,
-and no pull request, so it also renders on `push`, `schedule` and `workflow_dispatch` runs. The
-comment half is the reviewer-facing one — it upserts a **single** comment and rewrites it on every
-push instead of stacking a new one per run.
+### Where the pull-request comment comes from
 
-Both are **stateless**: no api key, no project id, no dashboard round-trip. That matters because the
-other PR surface, the inline per-line review comments, is verdict-driven — no `binclusive-api-key`
-means no ingest, which means no verdicts, which means that lane skips entirely. So on a local-first
-setup (no account, no token) the summary is the **only** PR comment surface there is. The two are
-not redundant even when both run: the summary is one index comment beside N per-line comments, not
-a second copy of the findings.
+Earlier versions posted a sticky PR comment from inside the container, which is why this action
+used to ask for a `github-token`. It no longer does, and no GitHub credential reaches the container
+at all.
 
-The comment half authenticates with the `github-token` input, and **it has no default — you pass
-it.** A container action cannot reach the `github` context from its own metadata, so the token has
-to be resolved in your workflow, where that context exists, and handed in as an input.
+The comment is now written by Binclusive, from the findings a run uploads. Two things have to be
+true for it to appear:
 
-What that token may *do* is then decided by your job's `permissions:` block:
+- the run phones home — `binclusive-api-key` and `binclusive-project-id` are set, and
+- the **Binclusive GitHub App** is installed on the repository.
 
-```yaml
-permissions:
-  contents: read
-  security-events: write   # SARIF upload
-  pull-requests: write     # required by `summary: true` — the comment write
+If either is missing the run says so on stderr and stays green. The scan, the exit gate, the SARIF
+upload and the job summary are unaffected either way — they never needed a credential and still
+do not.
 
-# …
-
-      - uses: Binclusive/a11y@v0
-        with:
-          base: ${{ github.event.pull_request.base.sha }}
-          summary: "true"
-          github-token: ${{ github.token }}   # required by `summary: true`
-```
-
-Omit `github-token` and the comment lane finds no credential, reports a skip on stderr, and the
-run stays green — the digest still reaches the run's Summary page, which needs no token.
-
-It stays **default-off on purpose.** The comment write fails **loudly**: on a job whose
-`pull-requests:` scope is missing or read-only, GitHub refuses the write, the CLI raises
-`PrCommentError` rather than logging-and-continuing, and the step exits `2` — the crash pole,
-deliberately distinct from the findings gate's exit `1`. The run goes **red**; it does not silently
-omit the comment. (The job summary still renders — it needed no token to begin with.)
-
-Be precise about what those distinct codes buy you: they are **distinguishable by a consumer who
-inspects them**, not unswallowable. `continue-on-error: true` greens the job on **any** non-zero
-exit — it never reads the number. So if you set it to tolerate findings, it also greens a run whose
-`pull-requests: write` was denied, which is exactly the silent skip this feature exists to end. If
-you need both, drop `continue-on-error` and branch on the code yourself (`exit 1` → findings,
-`exit 2` → the comment write failed).
-
-A red build is the right answer for a surface you asked for and cannot get, but only if you asked.
-So enabling it and granting `pull-requests: write` is one deliberate decision, never a default that
-turns a working workflow red on an image bump.
-
-Two consequences worth knowing before you turn it on:
-
-- **Pull requests from forks.** GitHub downgrades every write permission to read for a
-  `pull_request` event from a fork ([workflow syntax →
-  `permissions`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions)),
-  so the comment write is refused and the run reds — by design, but on traffic you do not control.
-  Leave `summary` off on fork-facing workflows, or gate it on whether the head repo is *this* repo:
-  `summary: ${{ github.event.pull_request.head.repo.full_name != github.repository && 'false' || 'true' }}`.
-  Test the repo, not the `head.repo.fork` flag: that flag is true whenever the head repo is itself a
-  fork, so it also switches the summary off for same-repo pull requests inside your own downstream
-  fork — where the write would have succeeded.
-- **The value is matched exactly.** `"true"` turns it on; `"false"` and `""` (an explicitly blank
-  input) turn it off. Anything else — `yes`, `True`, a typo — is **refused** with exit `4`, the
-  "you invoked me wrong" code, rather than being quietly read as off.
+What this buys you: your workflow no longer grants `pull-requests: write`, and no token of yours is
+handed to a container. Whoever holds a key should perform the action rather than lending the key
+out.
 
 ### Declaring the environment
 
