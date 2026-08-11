@@ -185,7 +185,8 @@ patch/minor image updates, or to a commit SHA for a frozen pin.
 ### Releasing (automated)
 
 Releases are **automatic** — there is no manual tagging step. When a change to the action shell
-(`action.yml`) lands on `main`, [`.github/workflows/release.yml`](.github/workflows/release.yml)
+(`action.yml`) — or to `release.yml` itself — lands on `main`,
+[`.github/workflows/release.yml`](.github/workflows/release.yml)
 cuts the next `v0.x` tag and **moves the floating `@v0` major pin** to it, so consumers pinned to
 `Binclusive/a11y@v0` ride the new release with no human in the loop. The bump follows Conventional
 Commits: a `feat:` since the last tag is a minor bump, anything else is a patch. Each release also

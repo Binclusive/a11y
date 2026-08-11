@@ -34,5 +34,6 @@ was. Nothing about local URL scanning changed.
 the commodity tools above; for source scanning keep `Binclusive/a11y@v0`; for a live URL run
 `b8e scan --url` locally.
 
-The `:0-browser` image, the `binclusive-scan-url` entrypoint and its release lane are removed
-separately in the Binclusive monorepo.
+The `:0-browser` image **build lane**, the `binclusive-scan-url` entrypoint and its release lane are
+removed separately in the Binclusive monorepo. The already-pushed `ghcr.io/binclusive/binclusive:0-browser`
+tag still resolves — nothing new is published to it.
