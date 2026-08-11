@@ -5,6 +5,23 @@ is the complete history. It records only **removals and breaking changes to the 
 the changes a consumer cannot discover from a green build, and the ones a public-code search cannot
 warn private repositories about.
 
+## Removed: automatic image updates on `@v0` — 2026-08-10
+
+**What.** `action.yml` now pins an image **digest** instead of the moving `ghcr.io/binclusive/binclusive:0`
+tag. `@v0` no longer picks up a newly published image on its own.
+
+**Nothing breaks, and nothing you run changes.** The pinned digest is exactly what `:0` resolved to
+when this landed, so the first run after it executes the same bytes as the last run before it.
+
+**What changes is when the image can change.** Previously any prod push in the Binclusive monorepo
+re-pointed `:0`, and every workflow picked the new image up on its next run — no merge, no notice.
+Now a new image arrives as a repin PR in this repo, reviewed and released as a normal `v0.x`, and
+revertable. This is listed here because it is a **withdrawn guarantee**: the README used to offer
+"automatic patch/minor image updates" on `@v0`, and a green build will never tell you that stopped.
+
+**If you want the old behaviour,** reference the image directly — `container: ghcr.io/binclusive/binclusive:0`
+in your own job — rather than through this Action.
+
 ## Removed: `Binclusive/a11y/action-url@v0`, the URL-scan Action — 2026-08-10
 
 **What.** The `action-url/` Action is deleted. `uses: Binclusive/a11y/action-url@v0` no longer

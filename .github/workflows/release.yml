@@ -12,10 +12,11 @@ name: release
 # this tag-and-move workflow. release-please stays a monorepo-wide platform decision, not a
 # per-action-repo rider (monorepo#2553).
 #
-# Image repin is out of scope by design: the action.yml shell pins a MOVING image tag (:0) that the
-# monorepo's release-image.yml re-points to the latest digest on every prod push, so the action
-# rides new images automatically — there is nothing to repin here (mirrors the #2553 moving-tag
-# approach).
+# Image repin IS in scope, and it arrives as an ordinary PR. The action.yml shell pins an image
+# DIGEST (monorepo#4509), so an image the monorepo publishes reaches nobody until a repin PR lands
+# here and this workflow moves @v0 onto it. The monorepo's release-image.yml opens that PR after it
+# has published and smoked the new image; from here a repin is just another change to the action
+# shell, which is already what triggers this workflow. Nothing below needs to know about images.
 
 on:
   push:

@@ -1,7 +1,7 @@
 name: validate-action
 
-# The repo ships one action.yml shell; this is the single gate that keeps it consumable —
-# parse it as YAML and assert it still points at its GHCR image.
+# The repo ships one action.yml shell; this is the single gate that keeps it consumable — parse it
+# as YAML, and prove it runs an image that exists and cannot move under a customer.
 on:
   push:
     branches: [main]
@@ -25,7 +25,52 @@ jobs:
           python3 -c "import yaml; yaml.safe_load(open('action.yml'))"
           echo "ok: action.yml parses"
 
-      - name: Assert the GHCR image ref is intact
+      # This step used to assert the OPPOSITE: that the literal `:0` tag was present. That gate
+      # would have passed happily while the bytes behind the tag changed overnight, which is
+      # exactly what it was protecting nobody from (monorepo#4509).
+      #
+      # Three claims, ordered by how badly getting one wrong hurts a customer:
+      #   1. the ref is a bare digest — nothing in it can be re-pointed by anyone;
+      #   2. the digest RESOLVES to an anonymously-readable manifest — a typo'd or
+      #      garbage-collected digest is `manifest unknown` at pull time, which the customer sees
+      #      as "Invalid SARIF. Unexpected end of JSON input" from `upload-sarif`, an error that
+      #      names the wrong cause (monorepo#4131);
+      #   3. it is the RIGHT IMAGE — the `binclusive ci` entrypoint, read from the registry rather
+      #      than trusted from the comment above it. One repository's digests all look alike, so
+      #      pinning some other build of it is a plausible mistake nothing else here would catch.
+      - name: Assert the action is digest-pinned, resolvable, and the right image
         run: |
-          grep -q 'docker://ghcr.io/binclusive/binclusive:0' action.yml
-          echo "ok: image ref present"
+          set -euo pipefail
+
+          WANT_ENTRYPOINT=/usr/local/bin/binclusive-ci
+          ref="$(python3 -c "import yaml; print(yaml.safe_load(open('action.yml'))['runs']['image'])")"
+
+          if ! printf '%s' "$ref" | grep -qE '^docker://ghcr\.io/binclusive/binclusive@sha256:[0-9a-f]{64}$'; then
+            echo "::error file=action.yml::the action is not digest-pinned — it runs '$ref'. Expected docker://ghcr.io/binclusive/binclusive@sha256:<64 hex>. A tag here can be re-pointed by the monorepo's release-image.yml with nobody merging anything, which is what the pin exists to stop (monorepo#4509)."
+            exit 1
+          fi
+
+          # `imagetools inspect --format '{{json .Image}}'` yields the image config for a
+          # single-platform ref and a platform-keyed map for a multi-platform one. The image is
+          # amd64-only today; accept either shape rather than encode that as a hidden assumption.
+          if ! got="$(docker buildx imagetools inspect "${ref#docker://}" --format '{{json .Image}}' \
+              | jq -r 'if has("config") then [.] else [.[]] end | map((.config.Entrypoint // []) | join(" ")) | unique | if length == 1 then .[0] else "AMBIGUOUS \(.)" end')"; then
+            echo "::error file=action.yml::the pinned digest does not resolve in GHCR — an anonymous consumer cannot pull it, so every customer workflow on this action would fail at docker pull."
+            exit 1
+          fi
+
+          if [ "$got" != "$WANT_ENTRYPOINT" ]; then
+            echo "::error file=action.yml::the pinned digest is the WRONG IMAGE — its entrypoint is '$got', expected '$WANT_ENTRYPOINT'."
+            exit 1
+          fi
+
+          echo "ok: pinned to ${ref#docker://ghcr.io/binclusive/binclusive} (entrypoint $got)"
+
+      # Resolving a manifest is not pulling one. This pulls the pinned ref with the exact string the
+      # Actions runner hands to `docker pull` for a `docker://` action, so the ref FORM and the
+      # blobs behind it are both proven here rather than in a customer's workflow.
+      - name: Pull the pinned image the way the runner does
+        run: |
+          set -euo pipefail
+          ref="$(python3 -c "import yaml; print(yaml.safe_load(open('action.yml'))['runs']['image'])")"
+          docker pull "${ref#docker://}"
