@@ -65,8 +65,26 @@ outputs:
     description: "Path to the SARIF file; feed to github/codeql-action/upload-sarif (needs security-events: write)."
 runs:
   using: "docker"
-  # Moving major tag — tracks the latest v0 image; no exact pin (release-please deferred, monorepo#2553).
-  image: "docker://ghcr.io/binclusive/binclusive:0"
+  # DIGEST-PINNED, deliberately.
+  #
+  # This used to be the moving `:0` tag, which the monorepo's `release-image.yml` re-points on every
+  # prod push. That made an image change reach every customer's next run with nobody merging
+  # anything and nobody being told — and the way it lands is worse than a normal break: the
+  # container writes SARIF on stdout, so a run that refuses writes an EMPTY file and the customer's
+  # `upload-sarif` step reports "Invalid SARIF. Unexpected end of JSON input", naming the wrong
+  # cause (monorepo#4131, #4509).
+  #
+  # A digest cannot be re-pointed. A customer runs exactly these bytes until a repin PR lands here
+  # and `release.yml` moves `@v0` — a diff someone read and can revert with a revert button.
+  #
+  # WHO BUMPS IT: the monorepo's `release-image.yml` opens that repin PR against this repo after it
+  # has published, anonymously pulled and run-smoked the new image. No token there, or a hiccup,
+  # leaves customers on the digest below — the safe state — and prints the one-line manual bump.
+  # The `:0` tag still exists in GHCR and still tracks the newest build; nothing here follows it, so
+  # `git log` on this line is the complete history of what customers have executed.
+  #
+  # `action-validate.yml` proves this digest resolves anonymously and is the `binclusive ci` image.
+  image: "docker://ghcr.io/binclusive/binclusive@sha256:fc3365e191473a40c7e4ea06c535d0a6e9ce37dc561ca5485d6f8c6251be0a73"
   env:
     # Scope + gate: the image entrypoint marshals these INPUT_* vars into `binclusive ci` flags
     # (INPUT_BASE → --base, INPUT_FAIL_ON → --fail-on, INPUT_SUMMARY → --summary).

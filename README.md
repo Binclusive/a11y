@@ -6,8 +6,10 @@ Shopify/Liquid, SwiftUI, Jetpack Compose, Unity), fails the build on blocking fi
 [SARIF](https://sarifweb.azurewebsites.net/) for GitHub code scanning. No account, no token, no LLM
 key — the deterministic free lane needs none.
 
-It is a shell over the published GHCR image (`ghcr.io/binclusive/binclusive:0`). **The engine source
-lives in the Binclusive monorepo** (`packages/a11y`); this repo is only the published Action surface.
+It is a shell over the published GHCR image, pinned to an **image digest** — a given release runs
+one exact set of image bytes, and changing them takes a merge here (see
+[Versioning](#versioning)). **The engine source lives in the Binclusive monorepo**
+(`packages/a11y`); this repo is only the published Action surface.
 
 > **Looking for `Binclusive/a11y/action-url@v0`?** It was removed. URL scanning lives on as a local
 > command — see [Scanning a live URL](#scanning-a-live-url).
@@ -179,8 +181,14 @@ credentialed; the local command itself is untouched and fully supported. See
 
 ## Versioning
 
-`@v0` is a moving major tag that tracks the latest `:0` image. Pin to `@v0` for automatic
-patch/minor image updates, or to a commit SHA for a frozen pin.
+`@v0` is a moving major tag that tracks the latest `v0.x` release of this shell. Pin to `@v0` to
+ride releases, or to a commit SHA for a frozen pin.
+
+Each release pins an exact **image digest**, not a floating `:0` tag. That matters for what you can
+expect from a run: the engine inside the image changes only when a release of this Action changes
+it. A new image published by the monorepo does not reach your workflow on its own — it arrives as a
+repin PR here, which is reviewed, released as a normal `v0.x`, and revertable. Pinning to a commit
+SHA freezes the image bytes exactly, because the digest is part of the commit.
 
 ### Releasing (automated)
 
@@ -201,9 +209,11 @@ Two deliberate non-goals:
   [`CHANGELOG.md`](CHANGELOG.md) is not that file: it is hand-written and records **only** removals
   and breaking changes to the Action surface, which are the ones a consumer cannot discover from a
   green build.
-- **No image repin.** The shell pins a **moving** image tag (`:0`) that the monorepo's
-  `release-image.yml` re-points to the latest digest on every prod push. The action rides new images
-  automatically, so there is nothing to repin in this repo (the #2553 moving-tag approach).
+- **No hand-written image repin.** The shell pins a digest, so a repin is a real change here — but
+  not one anybody types. The monorepo's `release-image.yml` opens the repin PR after it has
+  published, anonymously pulled and run-smoked a new image; merging it releases a new `v0.x`
+  through the same path as any other shell change. If that automation is unavailable the pin simply
+  stays where it is — consumers keep running the last reviewed image, which is the safe direction.
 
 ## Engine
 
