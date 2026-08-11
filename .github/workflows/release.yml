@@ -1,6 +1,6 @@
 name: release
 
-# Self-versions the action repo: on a change to either action shell landing on main, cut the
+# Self-versions the action repo: on a change to the action shell landing on main, cut the
 # next v0.x tag and move the floating @v0 major pin to it — so consumers pinned to
 # Binclusive/a11y@v0 ride new releases with NO manual tagging step (monorepo#2668).
 #
@@ -12,17 +12,16 @@ name: release
 # this tag-and-move workflow. release-please stays a monorepo-wide platform decision, not a
 # per-action-repo rider (monorepo#2553).
 #
-# Image repin is out of scope by design: both action.yml shells pin a MOVING image tag
-# (:0 / :0-browser) that the monorepo's release-image.yml re-points to the latest digest on every
-# prod push, so the action rides new images automatically — there is nothing to repin here
-# (mirrors the #2553 moving-tag approach).
+# Image repin is out of scope by design: the action.yml shell pins a MOVING image tag (:0) that the
+# monorepo's release-image.yml re-points to the latest digest on every prod push, so the action
+# rides new images automatically — there is nothing to repin here (mirrors the #2553 moving-tag
+# approach).
 
 on:
   push:
     branches: [main]
     paths:
       - action.yml
-      - action-url/**
       - .github/workflows/release.yml
 
 permissions:
@@ -85,4 +84,4 @@ jobs:
           gh release create "${NEW}" \
             --title "${NEW}" \
             --target "${GITHUB_SHA}" \
-            --notes "Automated release of the Binclusive action shells. Consumers pinned to @v${MAJ} now ride ${NEW}. The engine + image ship from the monorepo; this release versions the action.yml surface only."
+            --notes "Automated release of the Binclusive action shell. Consumers pinned to @v${MAJ} now ride ${NEW}. The engine + image ship from the monorepo; this release versions the action.yml surface only."

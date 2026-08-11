@@ -1,18 +1,16 @@
 # Binclusive accessibility — GitHub Action
 
-Two thin [Docker container actions](https://docs.github.com/en/actions/creating-actions/creating-a-docker-container-action)
-that run the Binclusive accessibility engine in CI and emit [SARIF](https://sarifweb.azurewebsites.net/)
-for GitHub code scanning. No account, no token, no LLM key — the deterministic free lane needs none.
+**`Binclusive/a11y@v0`** — one thin [Docker container action](https://docs.github.com/en/actions/creating-actions/creating-a-docker-container-action)
+that runs the Binclusive accessibility engine over your **changed source files** (React/TSX,
+Shopify/Liquid, SwiftUI, Jetpack Compose, Unity), fails the build on blocking findings, and emits
+[SARIF](https://sarifweb.azurewebsites.net/) for GitHub code scanning. No account, no token, no LLM
+key — the deterministic free lane needs none.
 
-- **`Binclusive/a11y@v0`** — the **static** CI gate. Runs the engine over your changed files
-  (React/TSX, Shopify/Liquid, SwiftUI, Jetpack Compose, Unity), fails the build on blocking
-  findings, writes SARIF.
-- **`Binclusive/a11y/action-url@v0`** — the **URL** scan. Renders a live URL in real Chromium
-  (the `:0-browser` image) and audits the rendered DOM.
+It is a shell over the published GHCR image (`ghcr.io/binclusive/binclusive:0`). **The engine source
+lives in the Binclusive monorepo** (`packages/a11y`); this repo is only the published Action surface.
 
-Both are pinned-image shells over the published GHCR images
-(`ghcr.io/binclusive/binclusive:0` and `:0-browser`). **The engine source lives in the Binclusive
-monorepo** (`packages/a11y`); this repo is only the published Action surface.
+> **Looking for `Binclusive/a11y/action-url@v0`?** It was removed. URL scanning lives on as a local
+> command — see [Scanning a live URL](#scanning-a-live-url).
 
 ## Static CI gate
 
@@ -135,10 +133,10 @@ Findings phoned home from a PR scan are **ephemeral** — scoped to that PR (Sen
 PR closes (merged or abandoned) they should be retired. The close signal rides your own CI, because
 only your repo ever learns that its PR closed.
 
-This is **not** an Action. The scan is heavy — it needs the Binclusive Docker image and a real
-browser, so it runs as the `Binclusive/a11y@v0` Action. The close is the opposite: a lightweight
+This is **not** an Action. The scan is heavy — it needs the Binclusive Docker image, so it runs as
+the `Binclusive/a11y@v0` Action. The close is the opposite: a lightweight
 `ci close` CLI call that reads the closed PR's ref from the workflow event and POSTs it home. No
-scan, no browser, no image — so it's a plain `npx @binclusive/cli` step, nothing to configure.
+scan, no image — so it's a plain `npx @binclusive/cli` step, nothing to configure.
 
 Add this job (its own workflow file, or a `closed`-typed trigger alongside an existing one):
 
@@ -165,35 +163,30 @@ This step is for **prompt** cleanup. Findings also auto-expire via a server-side
 close event you never wire up still gets swept eventually — the `ci close` step just retires them
 immediately instead of waiting out the TTL.
 
-## URL scan
+## Scanning a live URL
 
-```yaml
-      - id: scan
-        uses: Binclusive/a11y/action-url@v0
-        with:
-          url: https://example.com
-          timeout-ms: "30000"   # optional; engine default 30000
+There is no Action for this, and that is deliberate. URL scanning is a **local** command:
 
-      - uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: ${{ steps.scan.outputs.sarif-file }}
+```bash
+b8e scan --url https://example.com
 ```
 
-| Input | Default | Description |
-|-------|---------|-------------|
-| `url` | *(required)* | The URL to render and scan. |
-| `timeout-ms` | `""` | Max ms to wait for navigation + load. Engine default 30000. |
+`scan` is the human lane — it runs against your `b8e login` session on your machine. `ci` is the
+machine lane, and the Action above is its wrapper. A GitHub Action that ran `scan` was a machine
+surface invoking the human command, which is why the `action-url` wrapper was removed rather than
+credentialed; the local command itself is untouched and fully supported. See
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Versioning
 
-`@v0` is a moving major tag that tracks the latest `:0` (and `:0-browser`) image. Pin to `@v0`
-for automatic patch/minor image updates, or to a commit SHA for a frozen pin.
+`@v0` is a moving major tag that tracks the latest `:0` image. Pin to `@v0` for automatic
+patch/minor image updates, or to a commit SHA for a frozen pin.
 
 ### Releasing (automated)
 
-Releases are **automatic** — there is no manual tagging step. When a change to either action shell
-(`action.yml` or `action-url/**`) lands on `main`, [`.github/workflows/release.yml`](.github/workflows/release.yml)
+Releases are **automatic** — there is no manual tagging step. When a change to the action shell
+(`action.yml`) — or to `release.yml` itself — lands on `main`,
+[`.github/workflows/release.yml`](.github/workflows/release.yml)
 cuts the next `v0.x` tag and **moves the floating `@v0` major pin** to it, so consumers pinned to
 `Binclusive/a11y@v0` ride the new release with no human in the loop. The bump follows Conventional
 Commits: a `feat:` since the last tag is a minor bump, anything else is a patch. Each release also
@@ -202,10 +195,13 @@ cuts a matching GitHub Release.
 Two deliberate non-goals:
 
 - **No release-please.** The only release artifact here is a git tag plus the moving `@v0` pin —
-  there is no package to publish and no changelog to build, so release-please's release-PR machinery
-  is overkill (and its bot release-PR is org-gated in this org). release-please stays a monorepo-wide
-  platform decision, not a per-action-repo rider (monorepo#2553).
-- **No image repin.** Both shells pin a **moving** image tag (`:0` / `:0-browser`) that the monorepo's
+  there is no package to publish and no per-release changelog to build, so release-please's
+  release-PR machinery is overkill (and its bot release-PR is org-gated in this org). release-please
+  stays a monorepo-wide platform decision, not a per-action-repo rider (monorepo#2553).
+  [`CHANGELOG.md`](CHANGELOG.md) is not that file: it is hand-written and records **only** removals
+  and breaking changes to the Action surface, which are the ones a consumer cannot discover from a
+  green build.
+- **No image repin.** The shell pins a **moving** image tag (`:0`) that the monorepo's
   `release-image.yml` re-points to the latest digest on every prod push. The action rides new images
   automatically, so there is nothing to repin in this repo (the #2553 moving-tag approach).
 
@@ -213,4 +209,4 @@ Two deliberate non-goals:
 
 The accessibility engine, its rule packs, the native SwiftUI/Compose collectors, and the corpus
 regression matrix all live in the Binclusive monorepo under `packages/a11y`. Report engine
-issues there; this repo tracks only the two `action.yml` shells.
+issues there; this repo tracks only the `action.yml` shell.
