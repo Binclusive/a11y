@@ -5,7 +5,7 @@ is the complete history. It records only **removals and breaking changes to the 
 the changes a consumer cannot discover from a green build, and the ones a public-code search cannot
 warn private repositories about.
 
-## Removed: `Binclusive/a11y/action-url@v0` — the URL-scan Action
+## Removed: `Binclusive/a11y/action-url@v0`, the URL-scan Action — 2026-08-10
 
 **What.** The `action-url/` Action is deleted. `uses: Binclusive/a11y/action-url@v0` no longer
 resolves. Tags cut before this change still contain it, so a workflow pinned to a commit SHA keeps
