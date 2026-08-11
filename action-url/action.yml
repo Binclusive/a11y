@@ -6,13 +6,40 @@ author: "Binclusive"
 # + Chromium so `binclusive scan --url` can render a live page (engine decision 0001). KEEP-SPLIT
 # from the static image (monorepo#290): a separate tag, so this heavy variant is an explicit opt-in.
 # Same R2/R3 discipline as the static action: NO github-token, NO llm-api-key — the deterministic
-# free lane needs neither.
+# free lane needs neither, and no GitHub credential reaches the container.
 inputs:
   url:
     description: "The URL to render and scan (e.g. https://example.com)."
     required: true
   timeout-ms:
     description: "Max ms to wait for navigation + the page load event. Engine default 30000."
+    required: false
+    default: ""
+  # Binclusive credential surface (all OPTIONAL, local-first) — the SAME three input ids the static
+  # lane declares (../action.yml), forwarded to the SAME three BINCLUSIVE_* env names. Identical
+  # strings on both lanes is the contract: a near-miss here is a credential that silently never
+  # arrives. Declared AHEAD of any consumer (monorepo#4508) because customers pick up Action changes
+  # on their own schedule, so the input has the longest lead time of anything in that chain. Today
+  # `scan --url` reads none of them — an unset optional input forwards `""`, which the CLI reads as
+  # absent, so every existing workflow behaves exactly as it did.
+  # `binclusive-org-id` is DELIBERATELY absent: org is derived server-side from the key's own
+  # membership; re-adding it re-opens the monorepo#2100/#2160 confused-deputy surface.
+  binclusive-api-key:
+    description: >
+      OPTIONAL. A Binclusive `b8e_` apiKey. Mint it in the dashboard and store it as a repo secret.
+      NOT an LLM key. Absent → the scan stays fully local (SARIF only), exit 0 — never an error.
+    required: false
+    default: ""
+  binclusive-project-id:
+    description: >
+      OPTIONAL. The Binclusive project id this scan belongs to. Goes alongside `binclusive-api-key`
+      — it selects WHICH project and cannot be derived from the key (one key spans many projects).
+    required: false
+    default: ""
+  binclusive-api-url:
+    description: >
+      OPTIONAL. Override the Kontrol GraphQL endpoint (default https://kontrol.binclusive.io/graphql).
+      For staging / self-host only. The ONE endpoint var.
     required: false
     default: ""
 outputs:
@@ -25,6 +52,13 @@ runs:
   env:
     INPUT_URL: ${{ inputs.url }}
     INPUT_TIMEOUT_MS: ${{ inputs.timeout-ms }}
-    # No BINCLUSIVE_APP_* branded-bot env here (unlike ../action.yml): `scan --url` emits SARIF only
-    # and never reaches the posting/mint path (that lives solely in `binclusive ci`), so those creds
-    # would be inert on this lane — a dead credential-contract surface (a11y#336).
+    # The credential trio, forwarded under the SAME env names the static lane uses — the CLI reads
+    # BINCLUSIVE_* straight off process.env (no entrypoint flag marshalling, unlike the INPUT_* pair
+    # above). An `env:` key cannot be conditionally omitted, so an undeclared input arrives as `""`;
+    # the CLI treats blank as absent, which is what makes shipping this ahead of its reader a no-op.
+    BINCLUSIVE_API_KEY: ${{ inputs.binclusive-api-key }}
+    BINCLUSIVE_PROJECT_ID: ${{ inputs.binclusive-project-id }}
+    BINCLUSIVE_API_URL: ${{ inputs.binclusive-api-url }}
+    # Still NO BINCLUSIVE_APP_* branded-bot env here (unlike ../action.yml): `scan --url` emits SARIF
+    # only and never reaches the posting/mint path (that lives solely in `binclusive ci`), so those
+    # creds would be inert on this lane — a dead credential-contract surface (a11y#336).

@@ -2,7 +2,9 @@
 
 Two thin [Docker container actions](https://docs.github.com/en/actions/creating-actions/creating-a-docker-container-action)
 that run the Binclusive accessibility engine in CI and emit [SARIF](https://sarifweb.azurewebsites.net/)
-for GitHub code scanning. No account, no token, no LLM key — the deterministic free lane needs none.
+for GitHub code scanning. No GitHub token and no LLM key — neither action ever takes one. A
+Binclusive account is **optional**: leave the key out and both actions run fully local (scan, gate,
+SARIF, exit 0). Supply one and the run also phones its findings home to the dashboard.
 
 - **`Binclusive/a11y@v0`** — the **static** CI gate. Runs the engine over your changed files
   (React/TSX, Shopify/Liquid, SwiftUI, Jetpack Compose, Unity), fails the build on blocking
@@ -184,6 +186,15 @@ immediately instead of waiting out the TTL.
 |-------|---------|-------------|
 | `url` | *(required)* | The URL to render and scan. |
 | `timeout-ms` | `""` | Max ms to wait for navigation + load. Engine default 30000. |
+| `binclusive-api-key` | `""` | Optional Binclusive `b8e_` apiKey. Store as a repo secret. Absent → fully local, exit 0. Not an LLM key. |
+| `binclusive-project-id` | `""` | Optional. The project id findings belong to. Goes alongside `binclusive-api-key` — one key spans many projects. |
+| `binclusive-api-url` | `""` | Optional. Override the Kontrol GraphQL endpoint (default `https://kontrol.binclusive.io/graphql`). Staging / self-host only. |
+
+The three `binclusive-*` inputs are the **same input ids the static gate takes**, so one set of repo
+secrets wires both lanes. They are declared ahead of the URL lane consuming them: today `scan --url`
+emits SARIF and nothing else, and an unset input forwards an empty value the CLI reads as absent, so
+a workflow that sets none of them behaves exactly as it does now. As with the static gate there is no
+`binclusive-org-id` — org is derived server-side from the key.
 
 ## Versioning
 
