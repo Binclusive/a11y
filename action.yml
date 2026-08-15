@@ -84,7 +84,7 @@ runs:
   # `git log` on this line is the complete history of what customers have executed.
   #
   # `action-validate.yml` proves this digest resolves anonymously and is the `binclusive ci` image.
-  image: "docker://ghcr.io/binclusive/binclusive@sha256:fc3365e191473a40c7e4ea06c535d0a6e9ce37dc561ca5485d6f8c6251be0a73"
+  image: "docker://ghcr.io/binclusive/binclusive@sha256:ac80d7a79cc9b6ed813472cc7969ceac62faafceff7fa20d52e1f2470d0e0d34"
   env:
     # Scope + gate: the image entrypoint marshals these INPUT_* vars into `binclusive ci` flags
     # (INPUT_BASE → --base, INPUT_FAIL_ON → --fail-on, INPUT_SUMMARY → --summary).
