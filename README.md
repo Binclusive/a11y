@@ -25,7 +25,6 @@ name: accessibility
 on: pull_request
 permissions:
   contents: read
-  security-events: write   # required to upload SARIF to code scanning
 jobs:
   a11y:
     runs-on: ubuntu-latest
@@ -34,18 +33,33 @@ jobs:
         with:
           fetch-depth: 0    # need history so the action can diff against the base
 
-      - id: scan
-        uses: Binclusive/a11y@v0
+      - uses: Binclusive/a11y@v0
         with:
           base: ${{ github.event.pull_request.base.sha }}
-          fail-on: block     # block | warn — the level that fails the build
+          enforce: block     # block | warn — whether a finding fails the build
+          summary: true      # the rollup digest on the run's own summary page
           # Required. `ci` authenticates before it scans; without these it exits 7
           # (`Not authenticated`) and writes no SARIF.
           binclusive-api-key: ${{ secrets.BINCLUSIVE_API_KEY }}
           binclusive-project-id: ${{ secrets.BINCLUSIVE_PROJECT_ID }}
+```
+
+That is the whole thing. `summary: true` puts the findings on the run's own summary page, which
+needs no extra permission and works on every repo.
+
+### Also want them in the Security tab?
+
+Add the step below. It needs `security-events: write` and `actions: read` in `permissions`, **and
+GitHub Advanced Security enabled on the repository**. Without GHAS the upload fails with
+`Advanced Security must be enabled for this repository` — on a private repo that turns a working
+scan into a red build, which is why it is not in the quickstart.
+
+```yaml
+      - id: scan          # add an id to the Binclusive step above
+      # ...
 
       - uses: github/codeql-action/upload-sarif@v3
-        if: always()         # upload findings even when the gate fails the build
+        if: always()      # upload findings even when the gate fails the build
         with:
           sarif_file: ${{ steps.scan.outputs.sarif-file }}
 ```
@@ -57,7 +71,7 @@ jobs:
 | `base` | `""` | Git ref to diff against (e.g. the PR base SHA). Empty scans the whole checkout. |
 | `enforce` | *(none — `fail-on` applies)* | `block` \| `warn` — whether a finding fails the build. The current spelling; prefer it. Unset leaves `fail-on` in charge, so existing workflows are unchanged. |
 | `fail-on` | `block` | **Deprecated as the enforcement axis** — use `enforce`. Still accepted. CLI 0.21.0 reads it as a severity filter (`critical` \| `serious` \| `moderate` \| `minor`) and maps the two legacy values back through a shim that warns on stderr. |
-| `summary` | `false` | `true` emits the rollup digest (counts by level + top offending files) to the run's job summary page. Opt-in, default `false`. Needs no GitHub token and no permission grant — but it rides the same authenticated `ci` run as everything else. |
+| `summary` | `false` | `true` emits the rollup digest (counts by level + top offending files) to the run's job summary page. Needs no GitHub token and no permission grant — but it rides the same authenticated `ci` run as everything else. **The quickstart sets it**: without it the container writes SARIF to stdout and nothing else, so a tripped gate has nowhere to report. |
 | `environment` | *(none — by design)* | Which deployment this run scanned: `pr` \| `staging` \| `production`. Leave unset on `on: pull_request`. **Required on any non-PR trigger** (push / schedule / workflow_dispatch) — see [Declaring the environment](#declaring-the-environment). |
 | `binclusive-api-key` | *(none — required)* | **Required.** Binclusive `b8e_` apiKey — the run's identity. Authenticates the run and uploads findings. Absent → the action exits `7` (`Not authenticated`) without scanning. Store as a repo secret. |
 | `binclusive-project-id` | *(none — required)* | **Required.** The project id findings belong to — selects which project; cannot be derived from the key. |
