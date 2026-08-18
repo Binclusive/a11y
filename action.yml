@@ -41,17 +41,19 @@ inputs:
       `binclusive-api-key`.
     required: false
     default: "false"
-  # THE PROOF that the input pipeline collapsed (monorepo#4947, #4948).
+  # `max-violations` was never reachable from a workflow until monorepo#4947/#4948 moved the
+  # input→flag translation into the CLI. Exposing it now costs no image build, no digest repin and
+  # no release — but it is NOT free of `runs.env`, and that was worth finding out the hard way.
   #
-  # `max-violations` has been a CLI flag for a long time and was never reachable from a workflow,
-  # because exposing one used to mean editing the image entrypoint's shell marshal, publishing a
-  # new image, and repinning the digest below. This input shipped with NONE of that: the CLI now
-  # derives `INPUT_<NAME>` from its own option table, so declaring the input here IS the wiring.
+  # WHAT THE SMOKE PROVED (a11y-v0-smoke#5). This input shipped deliberately WITHOUT the forward
+  # below, to test the claim that a declared input reaches the container on the runner's implicit
+  # `INPUT_<NAME>` injection alone. It does NOT. Three independent observations on one run: a
+  # generous cap passed, `max-violations: 0` did not gate a 1-finding scan, and a deliberate
+  # `not-a-number` was ACCEPTED and exited 0 — where the CLI's own arg parser refuses it with 4.
+  # A flag the CLI never saw. The var is named on the `docker run` line and arrives empty.
   #
-  # Note what is deliberately ABSENT: no matching line in `runs.env` below. The runner injects
-  # `INPUT_MAX-VIOLATIONS` for every declared input on its own; the hand-written forwards down
-  # there exist only because the OLD shell reader could not read a name with a hyphen in it. This
-  # input is the live test of that claim — if it works, those forwards are vestigial and can go.
+  # So EVERY input that carries a value needs its line in `runs.env`. That is one more line here,
+  # in this same file — not a new image. Do not delete those forwards.
   max-violations:
     description: >
       OPTIONAL. Fail the run when the number of non-baselined findings exceeds this count — a
@@ -126,8 +128,13 @@ runs:
   env:
     # Scope + gate. THE ENTRYPOINT NO LONGER MARSHALS ANYTHING (monorepo#4948): it runs a fixed
     # `ci --github-action-inputs --format sarif`, and the CLI derives each input's env name from
-    # its own commander option table. So the lines below are no longer the wiring — the DECLARATION
-    # above is.
+    # its own commander option table — so adding an input costs no image build, no digest repin
+    # and no release.
+    #
+    # It still costs a LINE HERE, and that is not decoration. The runner's implicit
+    # `INPUT_<NAME>` injection does not reach the container for a hyphenated name, so an input
+    # without its forward below is DARK: declared, accepted, warned about by nothing, ignored.
+    # a11y-v0-smoke#5 proved that against a live `@v0`. Add the input above AND the forward here.
     #
     # How INPUT_* is actually set for a Docker action: the runner injects `INPUT_<NAME>` for
     # EVERY DECLARED input before this block is merged — uppercased, spaces → `_`, and HYPHENS
@@ -167,6 +174,12 @@ runs:
     # BINCLUSIVE_ENVIRONMENT shape below — that input has no `default:` at all, which is exactly
     # why it empty-forwards.)
     INPUT_SUMMARY: ${{ inputs.summary }}
+    # Underscored, like INPUT_FAIL_ON above and for the same reason: the implicit injection is
+    # `INPUT_MAX-VIOLATIONS`, and that name does not survive the trip into the container. The CLI
+    # reads the hyphenated spelling FIRST and falls back to this one, so this line is what makes
+    # the input live. Without it the input is DARK — declared, accepted by the runner, warned
+    # about by nothing, and silently ignored (a11y-v0-smoke#5).
+    INPUT_MAX_VIOLATIONS: ${{ inputs.max-violations }}
     # Phone-home: the `ci` command reads these off process.env directly (no entrypoint marshalling).
     # CLI 0.6.0 reads BINCLUSIVE_* only; `binclusive-api-url` maps to BINCLUSIVE_API_URL — the CLI's
     # single endpoint var (supersedes the old per-ingest ingest URL).
