@@ -5,6 +5,48 @@ is the complete history. It records only **removals and breaking changes to the 
 the changes a consumer cannot discover from a green build, and the ones a public-code search cannot
 warn private repositories about.
 
+## Removed: the keyless local lane — `ci` now requires an API key — 2026-08-17
+
+**What.** `binclusive ci` authenticates before it scans. A run with no `binclusive-api-key` exits
+`7` (`Not authenticated`) **before the scanner starts**, writes no SARIF, and produces no summary.
+The key is now the run's identity, not just the ingestion bearer.
+
+**This is deliberate.** It is not a regression to be worked around — there is no flag that restores
+a credential-free scan. `--no-upload` does not: it suppresses the upload, not the identity check.
+
+**Who this breaks.** Any workflow that omits `binclusive-api-key`. Until now that was the
+documented default — the README's quickstart passed no key and this repo advertised a "free lane".
+Both were accurate when written and are now withdrawn.
+
+**How it looks when it breaks, which is the reason this entry exists.** The container writes SARIF
+to stdout, so a refusal leaves `results.sarif` **empty**. Your `upload-sarif` step then fails with:
+
+```
+Invalid SARIF. Unexpected end of JSON input
+```
+
+That error names the wrong step, the wrong tool and the wrong cause. The real cause is on stderr of
+the step above it: `Not authenticated. Run: b8e auth login`. Read that line first.
+
+**The fix.** Mint a `b8e_` key in the dashboard, store it and your project id as repo secrets, and
+pass both:
+
+```yaml
+- uses: Binclusive/a11y@v0
+  with:
+    base: ${{ github.event.pull_request.base.sha }}
+    binclusive-api-key: ${{ secrets.BINCLUSIVE_API_KEY }}
+    binclusive-project-id: ${{ secrets.BINCLUSIVE_PROJECT_ID }}
+```
+
+**When it reaches you.** With the image repin in #353. Runs on `sha256:fc3365…` and earlier predate
+the gate and are unaffected; every release from the repin forward enforces it.
+
+**One more thing 0.21.0 changed, so the warning is not a mystery.** `--fail-on` is now a *severity*;
+the enforcement axis moved to `--enforce`. This Action's `fail-on` input still works — it maps
+through a compatibility shim — but the shim prints a deprecation notice to **stderr** on every run.
+That notice is expected and does not affect the gate, the exit code, or the SARIF on stdout.
+
 ## Removed: automatic image updates on `@v0` — 2026-08-10
 
 **What.** `action.yml` now pins an image **digest** instead of the moving `ghcr.io/binclusive/binclusive:0`

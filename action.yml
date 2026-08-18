@@ -1,5 +1,5 @@
 name: "Binclusive accessibility (CI gate)"
-description: "Run the Binclusive accessibility engine on changed files, gate the PR, emit SARIF, and (with a token) phone findings home to the dashboard."
+description: "Run the Binclusive accessibility engine on changed files, gate the PR, emit SARIF, and phone findings home to the dashboard. Requires a Binclusive API key."
 author: "Binclusive"
 inputs:
   base:
@@ -10,44 +10,45 @@ inputs:
     description: "block|warn — the enforcement level that fails the build. Default block."
     required: false
     default: "block"
-  # Job summary surface (OPTIONAL, local-first, default OFF). Stateless — no key, no project id,
-  # no ingest. Needs no token and no pull request, so it also renders on `push`, `schedule` and
+  # Job summary surface (OPTIONAL input, default OFF). Rendered from the run's own findings with
+  # no dashboard round-trip — but it rides an authenticated `ci` run like everything else. Needs no
+  # GitHub token and no pull request, so it also renders on `push`, `schedule` and
   # `workflow_dispatch` runs.
   summary:
     description: >
       OPTIONAL. `true` emits the rollup digest — finding counts by level plus the top offending
       files — to `$GITHUB_STEP_SUMMARY`, the run's own summary page. Opt-in, default `false`.
-      Needs no token, no permission grant, and no `binclusive-api-key` — this lane is fully local.
+      Needs no GitHub token and no permission grant. Like every `ci` run it still requires
+      `binclusive-api-key`.
     required: false
     default: "false"
-  # Phone-home surface (all OPTIONAL, local-first): the `ci` command uploads findings to the
-  # dashboard ONLY when `binclusive-api-key` is set. Absent key → the scan stays fully local (stdout +
-  # SARIF), exit 0 — never an error. The CLI reads these off `BINCLUSIVE_*` env directly; the Docker
-  # runner passes this action's `env:` block into the container, so they reach the CLI unchanged.
+  # Identity + ingest surface. `binclusive-api-key` and `binclusive-project-id` are REQUIRED: since
+  # CLI 0.21.0 `ci` authenticates BEFORE it scans (monorepo#4845), so an absent key is exit 7
+  # with no SARIF written — not a local run. The CLI reads these off `BINCLUSIVE_*` env directly; the
+  # Docker runner passes this action's `env:` block into the container, so they reach the CLI unchanged.
   # `binclusive-org-id` is DELIBERATELY absent: org is derived server-side from the key's own membership
   # (ADR 0038); re-adding it re-opens the #2100/#2160 confused-deputy surface.
   binclusive-api-key:
     description: >
-      OPTIONAL. A Binclusive `b8e_` apiKey (the ingestion bearer). Present → the run phones its
-      findings home to the dashboard; absent → fully local, exit 0 (never an error). Mint it in the
-      dashboard and store it as a repo secret. NOT an LLM key.
-    required: false
-    default: ""
+      REQUIRED. A Binclusive `b8e_` apiKey — the run's identity, not merely the ingestion bearer.
+      Absent → `ci` exits 7 (`Not authenticated`) before scanning and writes no SARIF. Mint it in
+      the dashboard and store it as a repo secret. NOT an LLM key.
+    required: true
   binclusive-project-id:
     description: >
-      OPTIONAL. The Binclusive project id the findings belong to. Required alongside `binclusive-api-key`
-      for phone-home — it selects WHICH project and cannot be derived from the key (one key spans
-      many projects). Absent (with a key set) is a loud error from the CLI.
-    required: false
-    default: ""
+      REQUIRED. The Binclusive project id the findings belong to — it selects WHICH project and
+      cannot be derived from the key (one key spans many projects). Absent is a loud error from
+      the CLI.
+    required: true
   binclusive-api-url:
     description: >
       OPTIONAL. Override the Kontrol GraphQL endpoint the findings are sent to (default
       https://kontrol.binclusive.io/graphql). For staging / self-host only. The ONE endpoint var.
     required: false
     default: ""
-  # WHICH deployment this run scanned (monorepo#3679). Read only on the phone-home path, so it is
-  # inert on a local-first run. DELIBERATELY has NO `default:` — the rule the CLI deleted was
+  # WHICH deployment this run scanned (monorepo#3679). Every run is authenticated and phones home,
+  # so this is ALWAYS live — there is no local-first run for it to be inert on. DELIBERATELY has NO
+  # `default:` — the rule the CLI deleted was
   # "no PR ref ⇒ production", and `production` is the dashboard's DEFAULT filter, so a guess here
   # silently lands a staging scan in the customer's most-trusted view. A default would reproduce
   # that guess one layer out; the safe state must be visibly broken, not quietly production.
@@ -56,9 +57,9 @@ inputs:
     description: >
       Which deployment this run scanned — `pr`, `staging` or `production`. NOT needed on an
       `on: pull_request` workflow: the run's own PR ref stamps `pr`. REQUIRED on any non-PR
-      trigger (push / schedule / workflow_dispatch) that also sets `binclusive-api-key` — such a
-      run cannot be told apart from a staging pipeline or a developer's manual run, so the CLI
-      refuses to send rather than guess. No default by design.
+      trigger (push / schedule / workflow_dispatch) — such a run cannot be told apart from a
+      staging pipeline or a developer's manual run, so the CLI refuses to send rather than guess.
+      No default by design.
     required: false
 outputs:
   sarif-file:
@@ -99,9 +100,10 @@ runs:
     #   INPUT_BASE     — no, redundant with the injected var. Kept for rename-safety.
     #   INPUT_SUMMARY  — no, same. Kept so renaming the input id is caught here rather than
     #                    silently changing which var the container reads.
-    # The container receives no GitHub credential at all: the runner does not forward one
-    # automatically, and no input declares one (gate and summary are both local). No credential
-    # secrets need to be stored for this action to run.
+    # The container receives no GITHUB credential at all: the runner does not forward one
+    # automatically, and no input declares one. It DOES receive your Binclusive key, which is
+    # required — store BINCLUSIVE_API_KEY and BINCLUSIVE_PROJECT_ID as repo secrets before this
+    # action can run.
     # None of that softens the defect this file fixes. `summary` was dark because the INPUT WAS
     # NOT DECLARED AT ALL (monorepo#4430): no input, no implicit var, and `with: summary:` on an
     # undeclared input is warned-and-dropped by the runner. The missing DECLARATION was the bug.
