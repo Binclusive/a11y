@@ -49,7 +49,8 @@ inputs:
     required: false
     default: ""
   # WHICH deployment this run scanned (monorepo#3679). Every run is authenticated and phones home,
-  # so this is ALWAYS live — there is no local-first run for it to be inert on. DELIBERATELY has NO `default:` — the rule the CLI deleted was
+  # so this is ALWAYS live — there is no local-first run for it to be inert on. DELIBERATELY has
+  # NO `default:` — the rule the CLI deleted was
   # "no PR ref ⇒ production", and `production` is the dashboard's DEFAULT filter, so a guess here
   # silently lands a staging scan in the customer's most-trusted view. A default would reproduce
   # that guess one layer out; the safe state must be visibly broken, not quietly production.

@@ -3,8 +3,9 @@
 **`Binclusive/a11y@v0`** — one thin [Docker container action](https://docs.github.com/en/actions/creating-actions/creating-a-docker-container-action)
 that runs the Binclusive accessibility engine over your **changed source files** (React/TSX,
 Shopify/Liquid, SwiftUI, Jetpack Compose, Unity), fails the build on blocking findings, and emits
-[SARIF](https://sarifweb.azurewebsites.net/) for GitHub code scanning. No account, no token, no LLM
-key — the deterministic free lane needs none.
+[SARIF](https://sarifweb.azurewebsites.net/) for GitHub code scanning. Requires a Binclusive
+`b8e_` API key — mint one in the dashboard and store it as a repo secret. No LLM key is needed;
+the engine is deterministic.
 
 It is a shell over the published GHCR image, pinned to an **image digest** — a given release runs
 one exact set of image bytes, and changing them takes a merge here (see
@@ -15,6 +16,9 @@ one exact set of image bytes, and changing them takes a merge here (see
 > command — see [Scanning a live URL](#scanning-a-live-url).
 
 ## Static CI gate
+
+**Before your first run**, mint a `b8e_` key in the dashboard and store it — plus your project id —
+as repo secrets. `ci` authenticates before it scans.
 
 ```yaml
 name: accessibility
@@ -35,6 +39,10 @@ jobs:
         with:
           base: ${{ github.event.pull_request.base.sha }}
           fail-on: block     # block | warn — the level that fails the build
+          # Required. `ci` authenticates before it scans; without these it exits 7
+          # (`Not authenticated`) and writes no SARIF.
+          binclusive-api-key: ${{ secrets.BINCLUSIVE_API_KEY }}
+          binclusive-project-id: ${{ secrets.BINCLUSIVE_PROJECT_ID }}
 
       - uses: github/codeql-action/upload-sarif@v3
         if: always()         # upload findings even when the gate fails the build
@@ -48,14 +56,14 @@ jobs:
 |-------|---------|-------------|
 | `base` | `""` | Git ref to diff against (e.g. the PR base SHA). Empty scans the whole checkout. |
 | `fail-on` | `block` | `block` \| `warn` — the enforcement level that fails the build. |
-| `summary` | `false` | `true` emits the rollup digest (counts by level + top offending files) to the run's job summary page. Opt-in, default `false`. Needs no token and no permission grant. |
-| `environment` | *(none — by design)* | Which deployment this run scanned: `pr` \| `staging` \| `production`. Leave unset on `on: pull_request`. **Required on any non-PR trigger that phones home** — see [Declaring the environment](#declaring-the-environment). |
-| `binclusive-api-key` | `""` | Optional Binclusive `b8e_` apiKey. Present → findings phone home to the dashboard; absent → fully local (exit 0, never an error). Store as a repo secret. |
-| `binclusive-project-id` | `""` | Optional. The project id findings belong to. Required alongside `binclusive-api-key` — selects which project; cannot be derived from the key. |
+| `summary` | `false` | `true` emits the rollup digest (counts by level + top offending files) to the run's job summary page. Opt-in, default `false`. Needs no GitHub token and no permission grant — but it rides the same authenticated `ci` run as everything else. |
+| `environment` | *(none — by design)* | Which deployment this run scanned: `pr` \| `staging` \| `production`. Leave unset on `on: pull_request`. **Required on any non-PR trigger** (push / schedule / workflow_dispatch) — see [Declaring the environment](#declaring-the-environment). |
+| `binclusive-api-key` | `""` | **Required.** Binclusive `b8e_` apiKey — the run's identity. Authenticates the run and uploads findings. Absent → the action exits `7` (`Not authenticated`) without scanning. Store as a repo secret. |
+| `binclusive-project-id` | `""` | **Required.** The project id findings belong to — selects which project; cannot be derived from the key. |
 | `binclusive-api-url` | `""` | Optional. Override the Kontrol GraphQL endpoint (default `https://kontrol.binclusive.io/graphql`). Staging / self-host only. |
 
-Phone-home is opt-in and local-first: with no `binclusive-api-key` the gate behaves exactly as
-before. Org is derived server-side from the key — there is no `binclusive-org-id` input by design.
+The run authenticates with your key and uploads its findings. Org is derived server-side from the
+key — there is no `binclusive-org-id` input by design.
 
 ### The rollup summary
 
@@ -63,8 +71,8 @@ before. Org is derived server-side from the key — there is no `binclusive-org-
 summary page via `$GITHUB_STEP_SUMMARY`. No token, no permission grant, and no pull request needed.
 It renders on `push`, `schedule`, `workflow_dispatch`, and pull requests alike.
 
-The summary is **stateless**: no api key, no project id, no dashboard round-trip. It is what a
-fully local run gets, and it needs nothing from us.
+The summary itself does no dashboard round-trip — it is rendered from the run's own findings. It
+still requires the authenticated `ci` run that produced them.
 
 ### Where the pull-request comment comes from
 
@@ -78,12 +86,12 @@ true for it to appear:
 - the run phones home — `binclusive-api-key` and `binclusive-project-id` are set, and
 - the **Binclusive GitHub App** is installed on the repository.
 
-If either is missing the run says so on stderr and stays green. The scan, the exit gate, the SARIF
-upload and the job summary are unaffected either way — they never needed a credential and still
-do not.
+If the App is not installed the run says so on stderr and stays green — the scan, the exit gate,
+the SARIF upload and the job summary are unaffected. They need no *GitHub* credential; they do
+need your Binclusive key, like every `ci` run.
 
-What this buys you: your workflow no longer grants `pull-requests: write`, and no token of yours is
-handed to a container. Whoever holds a key should perform the action rather than lending the key
+What this buys you: your workflow no longer grants `pull-requests: write`, and no *GitHub* token of
+yours is handed to a container — only your Binclusive key, which is scoped to your org. Whoever holds a key should perform the action rather than lending the key
 out.
 
 ### Declaring the environment
