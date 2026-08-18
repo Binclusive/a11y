@@ -41,6 +41,24 @@ inputs:
       `binclusive-api-key`.
     required: false
     default: "false"
+  # THE PROOF that the input pipeline collapsed (monorepo#4947, #4948).
+  #
+  # `max-violations` has been a CLI flag for a long time and was never reachable from a workflow,
+  # because exposing one used to mean editing the image entrypoint's shell marshal, publishing a
+  # new image, and repinning the digest below. This input shipped with NONE of that: the CLI now
+  # derives `INPUT_<NAME>` from its own option table, so declaring the input here IS the wiring.
+  #
+  # Note what is deliberately ABSENT: no matching line in `runs.env` below. The runner injects
+  # `INPUT_MAX-VIOLATIONS` for every declared input on its own; the hand-written forwards down
+  # there exist only because the OLD shell reader could not read a name with a hyphen in it. This
+  # input is the live test of that claim — if it works, those forwards are vestigial and can go.
+  max-violations:
+    description: >
+      OPTIONAL. Fail the run when the number of non-baselined findings exceeds this count — a
+      VOLUME cap, independent of `enforce` and of `fail-on`. Useful as a ratchet on a repo with a
+      known backlog: set it to today's count and the build reds only when the total grows. Unset
+      means no volume gate.
+    required: false
   # Identity + ingest surface. `binclusive-api-key` and `binclusive-project-id` are REQUIRED: since
   # CLI 0.21.0 `ci` authenticates BEFORE it scans (monorepo#4845), so an absent key is exit 7
   # with no SARIF written — not a local run. The CLI reads these off `BINCLUSIVE_*` env directly; the
@@ -106,8 +124,10 @@ runs:
   # `action-validate.yml` proves this digest resolves anonymously and is the `binclusive ci` image.
   image: "docker://ghcr.io/binclusive/binclusive@sha256:880271a0d3a09bf7310c6d612cf23e0cf323c49a235e96cd3e1c4d68d3cc9376"
   env:
-    # Scope + gate: the image entrypoint marshals these INPUT_* vars into `binclusive ci` flags
-    # (INPUT_BASE → --base, INPUT_FAIL_ON → --fail-on, INPUT_SUMMARY → --summary).
+    # Scope + gate. THE ENTRYPOINT NO LONGER MARSHALS ANYTHING (monorepo#4948): it runs a fixed
+    # `ci --github-action-inputs --format sarif`, and the CLI derives each input's env name from
+    # its own commander option table. So the lines below are no longer the wiring — the DECLARATION
+    # above is.
     #
     # How INPUT_* is actually set for a Docker action: the runner injects `INPUT_<NAME>` for
     # EVERY DECLARED input before this block is merged — uppercased, spaces → `_`, and HYPHENS
