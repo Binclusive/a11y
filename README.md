@@ -55,7 +55,8 @@ jobs:
 | Input | Default | Description |
 |-------|---------|-------------|
 | `base` | `""` | Git ref to diff against (e.g. the PR base SHA). Empty scans the whole checkout. |
-| `fail-on` | `block` | `block` \| `warn` — the enforcement level that fails the build. |
+| `enforce` | *(none — `fail-on` applies)* | `block` \| `warn` — whether a finding fails the build. The current spelling; prefer it. Unset leaves `fail-on` in charge, so existing workflows are unchanged. |
+| `fail-on` | `block` | **Deprecated as the enforcement axis** — use `enforce`. Still accepted. CLI 0.21.0 reads it as a severity filter (`critical` \| `serious` \| `moderate` \| `minor`) and maps the two legacy values back through a shim that warns on stderr. |
 | `summary` | `false` | `true` emits the rollup digest (counts by level + top offending files) to the run's job summary page. Opt-in, default `false`. Needs no GitHub token and no permission grant — but it rides the same authenticated `ci` run as everything else. |
 | `environment` | *(none — by design)* | Which deployment this run scanned: `pr` \| `staging` \| `production`. Leave unset on `on: pull_request`. **Required on any non-PR trigger** (push / schedule / workflow_dispatch) — see [Declaring the environment](#declaring-the-environment). |
 | `binclusive-api-key` | *(none — required)* | **Required.** Binclusive `b8e_` apiKey — the run's identity. Authenticates the run and uploads findings. Absent → the action exits `7` (`Not authenticated`) without scanning. Store as a repo secret. |
