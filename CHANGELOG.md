@@ -39,8 +39,13 @@ pass both:
     binclusive-project-id: ${{ secrets.BINCLUSIVE_PROJECT_ID }}
 ```
 
-**When it reaches you.** Not until `@v0` moves to an image carrying CLI 0.21.0 or later. The digest
-pinned today predates the gate, so a keyless workflow keeps working until that repin is released.
+**When it reaches you.** With the image repin in #353. Runs on `sha256:fc3365…` and earlier predate
+the gate and are unaffected; every release from the repin forward enforces it.
+
+**One more thing 0.21.0 changed, so the warning is not a mystery.** `--fail-on` is now a *severity*;
+the enforcement axis moved to `--enforce`. This Action's `fail-on` input still works — it maps
+through a compatibility shim — but the shim prints a deprecation notice to **stderr** on every run.
+That notice is expected and does not affect the gate, the exit code, or the SARIF on stdout.
 
 ## Removed: automatic image updates on `@v0` — 2026-08-10
 

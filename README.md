@@ -58,8 +58,8 @@ jobs:
 | `fail-on` | `block` | `block` \| `warn` — the enforcement level that fails the build. |
 | `summary` | `false` | `true` emits the rollup digest (counts by level + top offending files) to the run's job summary page. Opt-in, default `false`. Needs no GitHub token and no permission grant — but it rides the same authenticated `ci` run as everything else. |
 | `environment` | *(none — by design)* | Which deployment this run scanned: `pr` \| `staging` \| `production`. Leave unset on `on: pull_request`. **Required on any non-PR trigger** (push / schedule / workflow_dispatch) — see [Declaring the environment](#declaring-the-environment). |
-| `binclusive-api-key` | `""` | **Required.** Binclusive `b8e_` apiKey — the run's identity. Authenticates the run and uploads findings. Absent → the action exits `7` (`Not authenticated`) without scanning. Store as a repo secret. |
-| `binclusive-project-id` | `""` | **Required.** The project id findings belong to — selects which project; cannot be derived from the key. |
+| `binclusive-api-key` | *(none — required)* | **Required.** Binclusive `b8e_` apiKey — the run's identity. Authenticates the run and uploads findings. Absent → the action exits `7` (`Not authenticated`) without scanning. Store as a repo secret. |
+| `binclusive-project-id` | *(none — required)* | **Required.** The project id findings belong to — selects which project; cannot be derived from the key. |
 | `binclusive-api-url` | `""` | Optional. Override the Kontrol GraphQL endpoint (default `https://kontrol.binclusive.io/graphql`). Staging / self-host only. |
 
 The run authenticates with your key and uploads its findings. Org is derived server-side from the
@@ -68,7 +68,8 @@ key — there is no `binclusive-org-id` input by design.
 ### The rollup summary
 
 `summary: true` emits one digest — counts by level plus the top offending files — to the run's
-summary page via `$GITHUB_STEP_SUMMARY`. No token, no permission grant, and no pull request needed.
+summary page via `$GITHUB_STEP_SUMMARY`. No GitHub token, no permission grant, and no pull request
+needed.
 It renders on `push`, `schedule`, `workflow_dispatch`, and pull requests alike.
 
 The summary itself does no dashboard round-trip — it is rendered from the run's own findings. It
@@ -80,19 +81,17 @@ Earlier versions posted a sticky PR comment from inside the container, which is 
 used to ask for a `github-token`. It no longer does, and no GitHub credential reaches the container
 at all.
 
-The comment is now written by Binclusive, from the findings a run uploads. Two things have to be
-true for it to appear:
-
-- the run phones home — `binclusive-api-key` and `binclusive-project-id` are set, and
-- the **Binclusive GitHub App** is installed on the repository.
+The comment is now written by Binclusive, from the findings a run uploads. Every run is
+authenticated, so one thing has to be true for it to appear: the **Binclusive GitHub App** is
+installed on the repository.
 
 If the App is not installed the run says so on stderr and stays green — the scan, the exit gate,
 the SARIF upload and the job summary are unaffected. They need no *GitHub* credential; they do
 need your Binclusive key, like every `ci` run.
 
 What this buys you: your workflow no longer grants `pull-requests: write`, and no *GitHub* token of
-yours is handed to a container — only your Binclusive key, which is scoped to your org. Whoever holds a key should perform the action rather than lending the key
-out.
+yours is handed to a container — only your Binclusive key, which is scoped to your org. Whoever
+holds a key should perform the action rather than lending the key out.
 
 ### Declaring the environment
 

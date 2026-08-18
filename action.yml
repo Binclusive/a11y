@@ -23,7 +23,7 @@ inputs:
     required: false
     default: "false"
   # Identity + ingest surface. `binclusive-api-key` and `binclusive-project-id` are REQUIRED: since
-  # CLI 0.21.0 `ci` authenticates BEFORE it scans, so an absent key is exit 7 (`Not authenticated`)
+  # CLI 0.21.0 `ci` authenticates BEFORE it scans (monorepo#4845), so an absent key is exit 7
   # with no SARIF written — not a local run. The CLI reads these off `BINCLUSIVE_*` env directly; the
   # Docker runner passes this action's `env:` block into the container, so they reach the CLI unchanged.
   # `binclusive-org-id` is DELIBERATELY absent: org is derived server-side from the key's own membership
@@ -33,15 +33,13 @@ inputs:
       REQUIRED. A Binclusive `b8e_` apiKey — the run's identity, not merely the ingestion bearer.
       Absent → `ci` exits 7 (`Not authenticated`) before scanning and writes no SARIF. Mint it in
       the dashboard and store it as a repo secret. NOT an LLM key.
-    required: false
-    default: ""
+    required: true
   binclusive-project-id:
     description: >
       REQUIRED. The Binclusive project id the findings belong to — it selects WHICH project and
       cannot be derived from the key (one key spans many projects). Absent is a loud error from
       the CLI.
-    required: false
-    default: ""
+    required: true
   binclusive-api-url:
     description: >
       OPTIONAL. Override the Kontrol GraphQL endpoint the findings are sent to (default
@@ -49,8 +47,8 @@ inputs:
     required: false
     default: ""
   # WHICH deployment this run scanned (monorepo#3679). Every run is authenticated and phones home,
-  # so this is ALWAYS live — there is no local-first run for it to be inert on. DELIBERATELY has
-  # NO `default:` — the rule the CLI deleted was
+  # so this is ALWAYS live — there is no local-first run for it to be inert on. DELIBERATELY has NO
+  # `default:` — the rule the CLI deleted was
   # "no PR ref ⇒ production", and `production` is the dashboard's DEFAULT filter, so a guess here
   # silently lands a staging scan in the customer's most-trusted view. A default would reproduce
   # that guess one layer out; the safe state must be visibly broken, not quietly production.
