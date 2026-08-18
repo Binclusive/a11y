@@ -6,8 +6,27 @@ inputs:
     description: "Git ref to diff against (e.g. the PR base). Empty scans the whole checkout."
     required: false
     default: ""
+  # THE ENFORCEMENT AXIS. `enforce` is the current spelling; `fail-on` is what it used to be.
+  #
+  # `enforce` DELIBERATELY has no `default:`. An action `env:` key cannot be conditionally omitted,
+  # so a default here would forward INPUT_ENFORCE on EVERY run — and the entrypoint drops a
+  # block|warn `fail-on` whenever INPUT_ENFORCE is set. A consumer who wrote `fail-on: warn` and
+  # never touched their workflow would silently switch to `block`: same green build, a gate that
+  # no longer fires on the level they chose. No default means the old path is bit-for-bit unchanged
+  # until someone opts in.
+  enforce:
+    description: >
+      `block` | `warn` — whether a finding fails the build. The current spelling of what `fail-on`
+      used to mean; prefer this one. Unset leaves `fail-on` in charge, so existing workflows are
+      untouched. Setting BOTH to an axis value ignores `fail-on` (it is the deprecated alias for
+      this input) — but a `fail-on` naming a SEVERITY is a different axis and still applies.
+    required: false
   fail-on:
-    description: "block|warn — the enforcement level that fails the build. Default block."
+    description: >
+      DEPRECATED as the enforcement axis — use `enforce`. Still accepted, and still `block|warn`
+      by default, but CLI 0.21.0 reads this as a SEVERITY filter (`critical|serious|moderate|minor`)
+      and maps the two legacy values back to `enforce` through a shim that warns on stderr. Leaving
+      it alone keeps today's behaviour exactly.
     required: false
     default: "block"
   # Job summary surface (OPTIONAL input, default OFF). Rendered from the run's own findings with
@@ -109,6 +128,10 @@ runs:
     # undeclared input is warned-and-dropped by the runner. The missing DECLARATION was the bug.
     INPUT_BASE: ${{ inputs.base }}
     INPUT_FAIL_ON: ${{ inputs.fail-on }}
+    # Empty unless the consumer set it — see the `enforce` input's comment for why that matters.
+    # The container reads the VALUE: non-empty selects `--enforce` and demotes a block|warn
+    # `fail-on`; empty leaves the legacy path untouched.
+    INPUT_ENFORCE: ${{ inputs.enforce }}
     # Sticky PR summary: `--summary` carries no value, so the entrypoint matches this var's VALUE
     # (`true` on; `false` and `""` off; anything else REFUSES with exit 4) instead of testing
     # presence — the `-n` guard the two value-carrying vars use would read the string "false" as ON.
