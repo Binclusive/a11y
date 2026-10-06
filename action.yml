@@ -124,7 +124,7 @@ runs:
   # `git log` on this line is the complete history of what customers have executed.
   #
   # `action-validate.yml` proves this digest resolves anonymously and is the `binclusive ci` image.
-  image: "docker://ghcr.io/binclusive/binclusive@sha256:1db279f63be78bac29a4d5cb1e45d0d208ce2b528218eb722577ee60749158ba"
+  image: "docker://ghcr.io/binclusive/binclusive@sha256:a6f091fd748080867b6b16191ffb88a8b6280c17862ac1b5771cda2b60eb0bbb"
   env:
     # Scope + gate. THE ENTRYPOINT NO LONGER MARSHALS ANYTHING (monorepo#4948): it runs a fixed
     # `ci --github-action-inputs --format sarif`, and the CLI derives each input's env name from
